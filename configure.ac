@@ -175,6 +175,16 @@ fi
 AC_CANONICAL_HOST
 AC_CANONICAL_BUILD
 
+# Detect HarmonyOS NEXT, whose C library is musl based but whose
+# headers advertise a few POSIX.1-2024 facilities that the library
+# does not actually provide.
+case $host in
+  *-ohos*)
+    AC_DEFINE([HAVE_OHOS], [1],
+      [Define to 1 if compiling for HarmonyOS NEXT.])
+    ;;
+esac
+
 AS_IF([test "$XCONFIGURE" = "android"],[
   # Initialize the Android NDK build system.  Make sure to use the
   # passed through NDK path.

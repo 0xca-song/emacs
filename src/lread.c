@@ -5422,8 +5422,14 @@ init_lread (void)
 {
   /* First, set Vload_path.  */
 
-  /* Ignore EMACSLOADPATH when dumping.  */
+  /* Ignore EMACSLOADPATH when dumping, except on HarmonyOS, where
+     the dump is generated on the device itself and must therefore
+     record the device's load path.  */
+#ifdef HAVE_OHOS
+  bool use_loadpath = true;
+#else
   bool use_loadpath = !will_dump_p ();
+#endif
 
   if (use_loadpath && egetenv ("EMACSLOADPATH"))
     {

@@ -20,6 +20,7 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 #include <config.h>
 
 #include <execinfo.h>
+#include <ucontext.h>
 #include "sysstdio.h"
 #ifdef HAVE_PWD_H
 #include <pwd.h>
@@ -1954,6 +1955,19 @@ static struct sigaction old_sigsegv_handler;
 static void
 handle_sigsegv (int sig, siginfo_t *siginfo, void *arg)
 {
+#ifdef HAVE_OHOS
+  /* HarmonyOS has no equivalent of a tombstone, so print the faulting
+     address and program counter for debugging.  */
+  {
+    ucontext_t *uc = (ucontext_t *) arg;
+    fprintf (stderr, "\n[SIGSEGV addr=%p pc=%p sp=%p]\n",
+	     siginfo ? siginfo->si_addr : NULL,
+	     uc ? (void *) uc->uc_mcontext.pc : NULL,
+	     uc ? (void *) uc->uc_mcontext.sp : NULL);
+    fflush (stderr);
+  }
+#endif
+
   /* Hard GC error may lead to stack overflow caused by
      too nested calls to mark_object.  No way to survive.  */
   bool fatal = gc_in_progress;
@@ -2616,7 +2630,8 @@ emacs_pipe (int fd[2])
 
 #if !(defined HAVE_ANDROID && !defined ANDROID_STUBIFY)
 
-#ifndef POSIX_CLOSE_RESTART
+#if !defined POSIX_CLOSE_RESTART || defined HAVE_OHOS
+# undef POSIX_CLOSE_RESTART
 # define POSIX_CLOSE_RESTART 1
 static int
 posix_close (int fd, int flag)

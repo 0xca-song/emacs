@@ -937,7 +937,7 @@ dump_error_to_string (int result)
 static char *
 load_pdump (int argc, char **argv, char *dump_file)
 {
-#if defined HAVE_ANDROID && !defined ANDROID_STUBIFY
+#if (defined HAVE_ANDROID && !defined ANDROID_STUBIFY) || defined HAVE_OHOS
   int skip_args = 0, result;
 
   while (skip_args < argc - 1)
@@ -2161,9 +2161,15 @@ Using an Emacs configured with --with-x-toolkit=lucid does not have this problem
     syms_of_callproc ();
   /* egetenv is a pretty low-level facility, which may get called in
      many circumstances; it seems flimsy to put off initializing it
-     until calling init_callproc.  Do not do it when dumping.  */
+     until calling init_callproc.  Do not do it when dumping, except on
+     HarmonyOS, where the dump is produced on the target device and must
+     therefore use that device's environment to find its Lisp files.  */
+#ifdef HAVE_OHOS
+  set_initial_environment ();
+#else
   if (!will_dump_p ())
     set_initial_environment ();
+#endif
 
   /* Has to run after the environment is set up. */
   init_atimer ();
