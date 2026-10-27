@@ -1950,6 +1950,15 @@ get_homedir (void)
 {
   char const *home = egetenv ("HOME");
 
+#ifdef HAVE_OHOS
+  /* The HarmonyOS application starts Emacs with HOME set, but the
+     Lisp environment list may not have been populated when this is
+     first called (in particular when a pdump is in use).  Fall back to
+     the real process environment.  */
+  if (!home)
+    home = getenv ("HOME");
+#endif
+
 #ifdef WINDOWSNT
   /* getpw* functions return UTF-8 encoded file names, whereas egetenv
      returns strings in locale encoding, so we need to convert for
