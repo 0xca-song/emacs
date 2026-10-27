@@ -1426,6 +1426,13 @@ the root directory.  */)
       else			/* ~user/filename */
 	{
 	  char *nmhome = user_homedir (nm + 1);
+#ifdef HAVE_OHOS
+	  /* HarmonyOS applications have no /etc/passwd entry, so the
+	     login name (derived from the uid) cannot be looked up.
+	     Expand such ~USER names to the process' home directory.  */
+	  if (!nmhome)
+	    nmhome = (char *) get_homedir ();
+#endif
 	  if (nmhome)
 	    {
 	      ptrdiff_t nmhomelen = strlen (nmhome);
