@@ -2641,6 +2641,13 @@ Using an Emacs configured with --with-x-toolkit=lucid does not have this problem
   /* Enter editor command loop.  This never returns.  */
   fprintf (stderr, "[ohos] main before set_initial_minibuffer_mode\n");
   set_initial_minibuffer_mode ();
+#ifdef HAVE_OHOS_GUI
+  /* The OHOS terminal/frame are already created by ohos_term_init; skip
+     the tty-oriented normal-top-level bootstrap for the first display.
+     Keep Vtop_level during dump generation.  */
+  if (initialized)
+    Vtop_level = Qnil;
+#endif
   fprintf (stderr, "[ohos] main before Frecursive_edit\n");
   Frecursive_edit ();
   fprintf (stderr, "[ohos] main after Frecursive_edit\n");
