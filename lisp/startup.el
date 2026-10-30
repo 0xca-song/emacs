@@ -1304,6 +1304,7 @@ unconditionally."
   "A subroutine of `normal-top-level'.
 Amongst another things, it parses the command-line arguments."
  (let (xdg-dir startup-init-directory)
+  (ohos-trace "command-line start")
   (setq before-init-time (current-time)
 	after-init-time nil
         command-line-default-directory default-directory)
@@ -1756,7 +1757,9 @@ please check its value")
   (custom-reevaluate-setting 'user-emacs-directory-warning)
 
   ;; Process the remaining args.
+  (ohos-trace "command-line before command-line-1")
   (command-line-1 (cdr command-line-args))
+  (ohos-trace "command-line after command-line-1")
 
   ;; If -batch, terminate after processing the command options.
   (if noninteractive (kill-emacs t))
