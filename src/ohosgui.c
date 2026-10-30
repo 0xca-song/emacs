@@ -1,0 +1,164 @@
+/* OHOS native GUI redisplay skeleton.
+   This is the display-engine side of the native window backend: the
+   redisplay_interface consumes Emacs glyph rows and forwards cells to
+   the OHOS frame sink.  Frame/terminal creation is added in the next
+   patch; this file deliberately has no tty/pty dependency.  */
+
+#include <config.h>
+#include "lisp.h"
+#include "frame.h"
+#include "window.h"
+#include "dispextern.h"
+#include "font.h"
+#include "termhooks.h"
+#include "ohosgui.h"
+
+static void
+ohos_draw_glyph_string (struct glyph_string *s)
+{
+  if (!s || !s->first_glyph || s->nchars <= 0)
+    return;
+  for (int i = 0; i < s->nchars; i++)
+    {
+      struct glyph *g = s->first_glyph + i;
+      if (g->type != CHAR_GLYPH)
+        continue;
+      int w = ((g->u.ch >= 0x1100 && g->u.ch <= 0x115f)
+               || (g->u.ch >= 0x2e80 && g->u.ch <= 0xa4cf)) ? 18 : 9;
+      ohos_frame_text (s->x, s->y, w, g->u.ch,
+                       (uint32_t) s->face->foreground,
+                       (uint32_t) s->face->background,
+                       s->face->background != s->face->foreground);
+    }
+}
+
+static void
+ohos_clear_frame_area (struct frame *f, int x, int y, int width, int height)
+{
+  (void) f; (void) x; (void) y; (void) width; (void) height;
+}
+
+static void
+ohos_clear_frame (struct frame *f)
+{
+  (void) f;
+}
+
+static void
+ohos_flush (struct frame *f)
+{
+  (void) f;
+}
+
+static void
+ohos_after_update_window_line (struct window *w, struct glyph_row *row)
+{
+  (void) w; (void) row;
+}
+
+static void
+ohos_scroll_run (struct window *w, struct run *run)
+{
+  (void) w; (void) run;
+}
+
+static void
+ohos_draw_window_cursor (struct window *w, struct glyph_row *row,
+                         int x, int y, enum text_cursor_kinds type,
+                         int width, bool on_p, bool active_p)
+{
+  (void) w; (void) row; (void) x; (void) y; (void) type;
+  (void) width; (void) on_p; (void) active_p;
+}
+
+static void
+ohos_draw_vertical_window_border (struct window *w, int x, int y0, int y1)
+{
+  (void) w; (void) x; (void) y0; (void) y1;
+}
+
+static void
+ohos_draw_window_divider (struct window *w, int x0, int x1, int y0, int y1)
+{
+  (void) w; (void) x0; (void) x1; (void) y0; (void) y1;
+}
+
+static void
+ohos_clear_under_internal_border (struct frame *f)
+{
+  (void) f;
+}
+
+static void
+ohos_define_frame_cursor (struct frame *f, Emacs_Cursor cursor)
+{
+  (void) f; (void) cursor;
+}
+
+static void
+ohos_compute_glyph_string_overhangs (struct glyph_string *s)
+{
+  (void) s;
+}
+
+static void
+ohos_define_fringe_bitmap (int which, unsigned short *bits, int h, int wd)
+{
+  (void) which; (void) bits; (void) h; (void) wd;
+}
+
+static void
+ohos_destroy_fringe_bitmap (int which)
+{
+  (void) which;
+}
+
+static void
+ohos_draw_fringe_bitmap (struct window *w, struct glyph_row *row,
+                         struct draw_fringe_bitmap_params *p)
+{
+  (void) w; (void) row; (void) p;
+}
+
+static struct redisplay_interface ohos_redisplay_interface =
+  {
+    NULL, /* frame_parm_handlers */
+    gui_produce_glyphs,
+    gui_write_glyphs,
+    gui_insert_glyphs,
+    gui_clear_end_of_line,
+    ohos_scroll_run,
+    ohos_after_update_window_line,
+    NULL,
+    NULL,
+    ohos_flush,
+    gui_clear_window_mouse_face,
+    gui_get_glyph_overhangs,
+    gui_fix_overlapping_area,
+    ohos_draw_fringe_bitmap,
+    ohos_define_fringe_bitmap,
+    ohos_destroy_fringe_bitmap,
+    ohos_compute_glyph_string_overhangs,
+    ohos_draw_glyph_string,
+    ohos_define_frame_cursor,
+    ohos_clear_frame_area,
+    ohos_clear_under_internal_border,
+    ohos_draw_window_cursor,
+    ohos_draw_vertical_window_border,
+    ohos_draw_window_divider,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+  };
+
+struct redisplay_interface *
+ohos_get_redisplay_interface (void)
+{
+  return &ohos_redisplay_interface;
+}
+
+void
+syms_of_ohosgui (void)
+{
+}
