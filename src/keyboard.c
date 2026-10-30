@@ -1445,6 +1445,7 @@ command_loop_1 (void)
       if (EQ (KVAR (current_kboard, Vwindow_system), Qohos))
         {
           fprintf (stderr, "[ohos] command_loop_1 force redisplay\n");
+          ohos_log ("force redisplay");
           redisplay ();
           fprintf (stderr, "[ohos] command_loop_1 force redisplay done\n");
           for (;;)

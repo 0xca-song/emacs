@@ -17084,7 +17084,9 @@ void
 redisplay (void)
 {
   fprintf (stderr, "[ohos] redisplay enter\n");
+  ohos_log ("redisplay enter");
   redisplay_internal ();
+  ohos_log ("redisplay leave");
   fprintf (stderr, "[ohos] redisplay leave\n");
 }
 

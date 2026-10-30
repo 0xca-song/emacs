@@ -24,6 +24,7 @@ typedef struct ohos_display_info Display_Info;
 static void
 ohos_draw_glyph_string (struct glyph_string *s)
 {
+  ohos_log ("draw_glyph_string");
   if (!s || !s->first_glyph || s->nchars <= 0)
     return;
   for (int i = 0; i < s->nchars; i++)
