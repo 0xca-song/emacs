@@ -1737,7 +1737,8 @@ please check its value")
         (deactivate-mark)))
 
     ;; If the user has a file of abbrevs, read it (unless -batch).
-    (when (and (not noninteractive)
+    (when (and (not (eq window-system 'ohos))
+               (not noninteractive)
                (file-exists-p abbrev-file-name)
                (file-readable-p abbrev-file-name))
       (quietly-read-abbrev-file abbrev-file-name))
@@ -1772,7 +1773,9 @@ please check its value")
   ;; Display any accumulated warnings after all functions in
   ;; `after-init-hook' like `desktop-read' have finalized possible
   ;; changes in the window configuration.
-  (run-hooks 'after-init-hook 'delayed-warnings-hook)
+  (unless (eq window-system 'ohos)
+    (run-hooks 'after-init-hook 'delayed-warnings-hook))
+  (ohos-trace "command-line after after-init-hook")
 
   ;; If *scratch* exists and init file didn't change its mode, initialize it.
   (if (get-buffer "*scratch*")
@@ -1798,6 +1801,7 @@ please check its value")
   ;; value in the '--eval' forms.
   (custom-reevaluate-setting 'user-emacs-directory-warning)
 
+  (ohos-trace "command-line after scratch/memory")
   ;; Process the remaining args.
   (ohos-trace "command-line before command-line-1")
   (command-line-1 (cdr command-line-args))
@@ -2790,7 +2794,10 @@ A fancy display is used on graphic displays, normal otherwise."
 
 (defun command-line-1 (args-left)
   "A subroutine of `command-line'."
-  (display-startup-echo-area-message)
+  (ohos-trace "command-line-1 start")
+  (unless (eq window-system 'ohos)
+    (display-startup-echo-area-message))
+  (ohos-trace "command-line-1 after echo")
 
   ;; `displayable-buffers' is a list of buffers that may be displayed,
   ;; which includes files parsed from the command line arguments and
