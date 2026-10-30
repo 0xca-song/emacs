@@ -1693,7 +1693,10 @@ please check its value")
 	(old-face-ignored-fonts face-ignored-fonts))
 
     ;; Load the user's init file, or the default one, or none.
-    (startup--load-user-init-file
+    (ohos-trace "command-line before user init file")
+    (if (eq window-system 'ohos)
+        nil
+      (startup--load-user-init-file
      (lambda ()
        (cond
 	((eq startup-init-directory xdg-dir) nil)
@@ -1718,15 +1721,18 @@ please check its value")
        (expand-file-name
         "init.el"
         startup-init-directory))
-     t)
+     t))
+    (ohos-trace "command-line after user init file")
 
     ;; Amend `native-comp-eln-load-path' again, since the early-init
     ;; file may have altered `user-emacs-directory' and/or changed the
     ;; eln-cache directory.
     (when (featurep 'native-compile)
       (startup--update-eln-cache))
+    (ohos-trace "command-line after native comp update")
 
-    (when (and deactivate-mark transient-mark-mode)
+    (when (and (not (eq window-system 'ohos))
+               deactivate-mark transient-mark-mode)
       (with-current-buffer (window-buffer)
         (deactivate-mark)))
 
@@ -1739,6 +1745,7 @@ please check its value")
     ;; If the abbrevs came entirely from the init file or the
     ;; abbrevs file, they do not need saving.
     (setq abbrevs-changed nil)
+    (ohos-trace "command-line after abbrev file")
 
     ;; Do this here in case the init file sets mail-host-address.
     (and mail-host-address
@@ -1758,7 +1765,8 @@ please check its value")
     ;; be realized.
     (unless (and (eq scalable-fonts-allowed old-scalable-fonts-allowed)
 		 (eq face-ignored-fonts old-face-ignored-fonts))
-      (clear-face-cache)))
+      (clear-face-cache))
+    (ohos-trace "command-line after clear-face-cache"))
 
   (setq after-init-time (current-time))
   ;; Display any accumulated warnings after all functions in

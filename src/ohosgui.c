@@ -171,7 +171,8 @@ ohos_crash_handler (int sig)
   int n = backtrace (frames, 64);
   dprintf (2, "\n--- ohos crash signal %d ---\n", sig);
   backtrace_symbols_fd (frames, n, 2);
-  _exit (128 + sig);
+  signal (sig, SIG_DFL);
+  raise (sig);
 }
 
 struct ohos_display_info *
@@ -288,8 +289,18 @@ DEFUN ("ohos-create-frame", Fohos_create_frame, Sohos_create_frame, 0, 1, 0,
   return frame;
 }
 
+DEFUN ("ohos-trace", Fohos_trace, Sohos_trace, 1, 1, 0,
+       doc: /* Write a trace line to stderr.  */)
+  (Lisp_Object msg)
+{
+  CHECK_STRING (msg);
+  fprintf (stderr, "[ohos] %s\n", SDATA (msg));
+  return Qnil;
+}
+
 void
 syms_of_ohosgui (void)
 {
   DEFSYM (Qohos, "ohos");
+  defsubr (&Sohos_trace);
 }
