@@ -65,6 +65,7 @@ enum output_method
   output_pgtk,
   output_haiku,
   output_android,
+  output_ohos,
 };
 
 /* Input queue declarations and hooks.  */
@@ -539,6 +540,7 @@ struct terminal
     struct pgtk_display_info *pgtk;		/* pgtkterm.h */
     struct haiku_display_info *haiku;		/* haikuterm.h */
     struct android_display_info *android;	/* androidterm.h */
+    struct ohos_display_info *ohos;	/* ohosgui.h */
   } display_info;
 
 

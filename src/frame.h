@@ -659,6 +659,7 @@ struct frame
     struct pgtk_output *pgtk;		/* From pgtkterm.h. */
     struct haiku_output *haiku;		/* From haikuterm.h. */
     struct android_output *android;	/* From androidterm.h.  */
+    struct ohos_output *ohos;		/* From ohosgui.h.  */
   }
   output_data;
 
@@ -956,6 +957,7 @@ default_pixels_per_inch_y (void)
 #define FRAME_HAIKU_P(f) false
 #else
 #define FRAME_HAIKU_P(f) ((f)->output_method == output_haiku)
+#define FRAME_OHOS_P(f) ((f)->output_method == output_ohos)
 #endif
 #ifndef HAVE_ANDROID
 #define FRAME_ANDROID_P(f) false
@@ -982,6 +984,9 @@ default_pixels_per_inch_y (void)
 #endif
 #ifdef HAVE_ANDROID
 #define FRAME_WINDOW_P(f) FRAME_ANDROID_P (f)
+#endif
+#ifdef HAVE_OHOS_GUI
+#define FRAME_WINDOW_P(f) FRAME_OHOS_P (f)
 #endif
 #ifndef FRAME_WINDOW_P
 #define FRAME_WINDOW_P(f) ((void) (f), false)

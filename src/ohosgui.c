@@ -11,6 +11,7 @@
 #include "dispextern.h"
 #include "font.h"
 #include "termhooks.h"
+#include "keyboard.h"
 #include "ohosgui.h"
 
 static void
@@ -120,6 +121,71 @@ ohos_draw_fringe_bitmap (struct window *w, struct glyph_row *row,
   (void) w; (void) row; (void) p;
 }
 
+Lisp_Object Qohos;
+static struct redisplay_interface ohos_redisplay_interface;
+
+static int
+ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
+{
+  (void) terminal; (void) hold_quit;
+  return 0;
+}
+
+static void
+ohos_delete_frame (struct frame *f)
+{
+  (void) f;
+}
+
+struct terminal *
+ohos_create_terminal (struct ohos_display_info *dpyinfo)
+{
+  struct terminal *terminal = create_terminal (output_ohos,
+                                                &ohos_redisplay_interface);
+  terminal->display_info.ohos = dpyinfo;
+  dpyinfo->terminal = terminal;
+  terminal->kboard = allocate_kboard (Qohos);
+  terminal->read_socket_hook = ohos_read_socket;
+  terminal->delete_frame_hook = ohos_delete_frame;
+  terminal->get_focus_frame = NULL;
+  return terminal;
+}
+
+struct ohos_display_info *
+ohos_term_init (void)
+{
+  struct ohos_display_info *dpyinfo = xzalloc (sizeof *dpyinfo);
+  dpyinfo->resx = 96.0;
+  dpyinfo->resy = 96.0;
+  dpyinfo->n_planes = 24;
+  dpyinfo->color_p = 1;
+  dpyinfo->smallest_font_height = 18;
+  dpyinfo->smallest_char_width = 9;
+  dpyinfo->next = NULL;
+  struct terminal *terminal = ohos_create_terminal (dpyinfo);
+  if (current_kboard == initial_kboard)
+    current_kboard = terminal->kboard;
+  terminal->kboard->reference_count++;
+  terminal->reference_count++;
+  terminal->name = xstrdup ("ohos");
+  dpyinfo->name_list_element = Fcons (build_string ("ohos"), Qnil);
+  return dpyinfo;
+}
+
+struct frame *
+ohos_create_frame (struct terminal *terminal)
+{
+  struct frame *f = make_frame (true);
+  f->terminal = terminal;
+  f->output_method = output_ohos;
+  f->output_data.ohos = xzalloc (sizeof *f->output_data.ohos);
+  f->output_data.ohos->display_info = terminal->display_info.ohos;
+  f->output_data.ohos->width = 800;
+  f->output_data.ohos->height = 600;
+  f->output_data.ohos->fontset = -1;
+  return f;
+}
+
 static struct redisplay_interface ohos_redisplay_interface =
   {
     NULL, /* frame_parm_handlers */
@@ -161,4 +227,5 @@ ohos_get_redisplay_interface (void)
 void
 syms_of_ohosgui (void)
 {
+  DEFSYM (Qohos, "ohos");
 }
