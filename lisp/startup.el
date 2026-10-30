@@ -1615,7 +1615,8 @@ please check its value")
   ;; using a window system.
   ;; Initialize the window-system only after processing the command-line
   ;; args so that -Q can influence this initialization.
-  (condition-case error
+  (unless (eq initial-window-system 'ohos)
+   (condition-case error
     (unless noninteractive
       (if (and initial-window-system
 	       (not (featurep
@@ -1639,7 +1640,8 @@ please check its value")
       'external-debugging-output)
      (terpri 'external-debugging-output)
      (setq initial-window-system nil)
-     (kill-emacs)))
+     (kill-emacs))))
+  (ohos-trace "command-line after window-system block")
 
   (ohos-trace "command-line before before-init-hook")
   (run-hooks 'before-init-hook)
