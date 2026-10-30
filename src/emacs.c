@@ -1321,6 +1321,7 @@ int
 android_emacs_init (int argc, char **argv, char *dump_file)
 #endif
 {
+  ohos_log ("emacs main enter");
   /* Variable near the bottom of the stack, and aligned appropriately
      for pointers.  */
   void *stack_bottom_variable;

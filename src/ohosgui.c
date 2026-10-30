@@ -195,8 +195,6 @@ ohos_term_init (void)
   terminal->name = xstrdup ("ohos");
   dpyinfo->name_list_element = Fcons (build_string ("ohos"), Qnil);
   Fohos_create_frame (Qnil);
-  signal (SIGSEGV, ohos_crash_handler);
-  signal (SIGABRT, ohos_crash_handler);
   fprintf (stderr, "[ohos] term_init end\n");
   return dpyinfo;
 }
@@ -266,12 +264,34 @@ ohos_get_redisplay_interface (void)
   return &ohos_redisplay_interface;
 }
 
+static ohos_frame_sink_fn ohos_frame_sink;
+static ohos_log_fn ohos_log_sink;
+
+void
+ohos_set_log_sink (ohos_log_fn fn)
+{
+  ohos_log_sink = fn;
+}
+
+void
+ohos_log (const char *s)
+{
+  if (ohos_log_sink)
+    ohos_log_sink (s);
+}
+
+void
+ohos_set_frame_sink (ohos_frame_sink_fn fn)
+{
+  ohos_frame_sink = fn;
+}
+
 void
 ohos_frame_text (int x, int y, int width, unsigned code, uint32_t fg,
                  uint32_t bg, int with_background)
 {
-  (void) x; (void) y; (void) width; (void) code;
-  (void) fg; (void) bg; (void) with_background;
+  if (ohos_frame_sink)
+    ohos_frame_sink (x, y, width, code, fg, bg, with_background);
 }
 
 DEFUN ("ohos-create-frame", Fohos_create_frame, Sohos_create_frame, 0, 1, 0,

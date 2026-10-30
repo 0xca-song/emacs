@@ -131,6 +131,13 @@ extern void syms_of_ohosgui (void);
 extern void syms_of_ohosfont (void);
 extern struct font *ohosfont_make_default (struct frame *);
 
+typedef void (*ohos_frame_sink_fn) (int x, int y, int width, unsigned code,
+                                    uint32_t fg, uint32_t bg,
+                                    int with_background);
+typedef void (*ohos_log_fn) (const char *);
+void ohos_set_log_sink (ohos_log_fn fn);
+void ohos_log (const char *s);
+void ohos_set_frame_sink (ohos_frame_sink_fn fn);
 void ohos_frame_text (int x, int y, int width, unsigned code,
                       uint32_t fg, uint32_t bg, int with_background);
 
