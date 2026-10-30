@@ -7307,7 +7307,7 @@ init_display_interactive (void)
 #endif
 
 #ifdef HAVE_HAIKU
-  if (!inhibit_window_system && !will_dump_p ())
+  if (!inhibit_window_system)
     {
       Vinitial_window_system = Qhaiku;
       return;
