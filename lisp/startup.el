@@ -789,11 +789,12 @@ It is the default value of the variable `top-level'."
           (ohos-trace "ohos skip term hooks"))
 
 	;; Do this again, in case .emacs defined more abbreviations.
-	(if default-directory
+	(if (and (not (eq window-system 'ohos)) default-directory)
 	    (setq default-directory (abbreviate-file-name default-directory)))
 	;; Specify the file for recording all the auto save files of this session.
 	;; This is used by recover-session.
-	(or auto-save-list-file-name
+	(unless (eq window-system 'ohos)
+	 (or auto-save-list-file-name
 	    (and auto-save-list-file-prefix
 		 (setq auto-save-list-file-name
 		       ;; Under MS-DOS our PID is almost always reused between
@@ -814,18 +815,19 @@ It is the default value of the variable `top-level'."
 			       (format "%s%d-%s~"
 				       auto-save-list-file-prefix
 				       (emacs-pid)
-				       (system-name))))))))
+				       (system-name)))))))))
 	(unless (or inhibit-startup-hooks
                     (eq window-system 'ohos))
 	  (run-hooks 'emacs-startup-hook 'term-setup-hook))
 
 	;; Don't do this if we failed to create the initial frame,
 	;; for instance due to a dense colormap.
-	(when (or frame-initial-frame
+	(when (and (not (eq window-system 'ohos))
+                   (or frame-initial-frame
 		  ;; If frame-initial-frame has no meaning, do this anyway.
 		  (not (and initial-window-system
 			    (not noninteractive)
-			    (not (eq initial-window-system 'pc)))))
+			    (not (eq initial-window-system 'pc))))))
 
 	  ;; FIXME: The user's init file may change
 	  ;; face-font-rescale-alist.  However, the default face
