@@ -1583,11 +1583,13 @@ please check its value")
   ;; Amend `native-comp-eln-load-path', since the early-init file may
   ;; have altered `user-emacs-directory' and/or changed the eln-cache
   ;; directory.
-  (when (featurep 'native-compile)
+  (when (and (featurep 'native-compile)
+             (not (eq window-system 'ohos)))
     (startup--update-eln-cache))
 
   ;; If any package directory exists, initialize the package system.
-  (and user-init-file
+  (unless (eq window-system 'ohos)
+   (and user-init-file
        package-enable-at-startup
        (not (bound-and-true-p package--activated))
        (catch 'package-dir-found
@@ -1602,11 +1604,12 @@ please check its value")
                                 (package--description-file subdir)
                                 subdir))))
 		   (throw 'package-dir-found t)))))))
-       (package-activate-all))
+       (package-activate-all)))
 
   ;; If it enabled and the directory exists, process the contents of the
   ;; user-lisp/ directory.
-  (when (and init-file-user
+  (when (and (not (eq window-system 'ohos))
+             init-file-user
              (file-directory-p user-lisp-directory))
     (prepare-user-lisp (not user-lisp-auto-scrape)))
 
@@ -1657,17 +1660,20 @@ please check its value")
     (frame-initialize)
     (ohos-trace "command-line after frame-initialize"))
 
-  (when (fboundp 'x-create-frame)
+  (when (and (fboundp 'x-create-frame)
+             (not (eq window-system 'ohos)))
     ;; Set up the tool-bar (even in tty frames, since Emacs might open a
     ;; graphical frame later).
     (unless noninteractive
       (tool-bar-setup)))
 
-  (unless noninteractive
+  (unless (or noninteractive (eq window-system 'ohos))
     (startup--setup-quote-display)
     (setq internal--text-quoting-flag t))
+  (ohos-trace "command-line after quote display")
 
-  (normal-erase-is-backspace-setup-frame)
+  (unless (eq window-system 'ohos)
+    (normal-erase-is-backspace-setup-frame))
 
   ;; Register default TTY colors for the case the terminal hasn't a
   ;; terminal init file.  We do this regardless of whether the terminal
@@ -1678,8 +1684,10 @@ please check its value")
   ;; Exception: the `pc' ``window system'' has only 16 fixed colors,
   ;; and they are already set at this point by a suitable method of
   ;; window-system-initialization.
-  (or (eq initial-window-system 'pc)
-      (tty-register-default-colors))
+  (unless (eq initial-window-system 'ohos)
+    (or (eq initial-window-system 'pc)
+        (tty-register-default-colors)))
+  (ohos-trace "command-line after tty colors")
 
   (let ((old-scalable-fonts-allowed scalable-fonts-allowed)
 	(old-face-ignored-fonts face-ignored-fonts))
