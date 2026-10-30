@@ -579,6 +579,7 @@ It is the default value of the variable `top-level'."
     (funcall 'android-enumerate-fonts)
     (setq android-fonts-enumerated t))
 
+  (ohos-trace "normal-top-level start")
   (if command-line-processed
       (message internal--top-level-message)
     (setq command-line-processed t)
@@ -609,6 +610,7 @@ It is the default value of the variable `top-level'."
       (push (expand-file-name "eln-cache/" user-emacs-directory)
             native-comp-eln-load-path))
 
+    (ohos-trace "before subdirs")
     ;; Look in each dir in load-path for a subdirs.el file.  If we
     ;; find one, load it, which will add the appropriate subdirs of
     ;; that dir into load-path.  This needs to be done before setting
@@ -636,6 +638,7 @@ It is the default value of the variable `top-level'."
         ;; of load-path and we want to take it into account.
         (setq tail (cdr tail))))
 
+    (ohos-trace "before eol/set-locale")
     ;; Set the default strings to display in mode line for end-of-line
     ;; formats that aren't native to this platform.  This should be
     ;; done before calling set-locale-environment, as the latter might
@@ -666,6 +669,7 @@ It is the default value of the variable `top-level'."
         (set-locale-environment
          (funcall 'android-locale-for-system-language))
       (set-locale-environment nil))
+    (ohos-trace "after set-locale")
     ;; Decode all default-directory's (probably, only *scratch* exists
     ;; at this point).  default-directory of *scratch* is the basis
     ;; for many other file-name variables and directory lists, so it
@@ -770,9 +774,12 @@ It is the default value of the variable `top-level'."
     (if default-directory
 	(setq default-directory (abbreviate-file-name default-directory))
       (display-warning 'initialization "Error setting default-directory"))
+    (ohos-trace "before old-face-font-rescale")
     (let ((old-face-font-rescale-alist face-font-rescale-alist))
       (unwind-protect
-	  (command-line)
+	  (progn (ohos-trace "before command-line")
+		 (command-line)
+		 (ohos-trace "after command-line"))
 
         (when (featurep 'native-compile)
           (startup--update-eln-cache))
@@ -1609,7 +1616,9 @@ please check its value")
      (setq initial-window-system nil)
      (kill-emacs)))
 
+  (ohos-trace "command-line before before-init-hook")
   (run-hooks 'before-init-hook)
+  (ohos-trace "command-line after before-init-hook")
 
   ;; Under X, create the X frame and delete the terminal frame.
   (unless (daemonp)
@@ -1617,7 +1626,9 @@ please check its value")
 	(setq menu-bar-mode nil
 	      tab-bar-mode nil
 	      tool-bar-mode nil))
-    (frame-initialize))
+    (ohos-trace "command-line before frame-initialize")
+    (frame-initialize)
+    (ohos-trace "command-line after frame-initialize"))
 
   (when (fboundp 'x-create-frame)
     ;; Set up the tool-bar (even in tty frames, since Emacs might open a
