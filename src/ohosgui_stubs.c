@@ -12,22 +12,9 @@ check_x_display_info (Lisp_Object frame)
 }
 
 void
-set_frame_menubar (struct frame *f, bool deep_p)
-{
-  (void) f; (void) deep_p;
-}
-
-void
 frame_set_mouse_pixel_position (struct frame *f, int x, int y)
 {
   (void) f; (void) x; (void) y;
-}
-
-Lisp_Object
-Fx_hide_tip (Lisp_Object tip)
-{
-  (void) tip;
-  return Qnil;
 }
 
 Lisp_Object
