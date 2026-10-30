@@ -775,9 +775,13 @@ It is the default value of the variable `top-level'."
 	(setq default-directory (abbreviate-file-name default-directory))
       (display-warning 'initialization "Error setting default-directory"))
     (ohos-trace "before old-face-font-rescale")
+    (setq initial-window-system 'ohos)
+    (setq window-system 'ohos)
     (let ((old-face-font-rescale-alist face-font-rescale-alist))
       (unwind-protect
 	  (progn (ohos-trace "before command-line")
+		 (load "term/ohos-win" t)
+		 (setq window-system 'ohos)
 		 (command-line)
 		 (ohos-trace "after command-line"))
 
@@ -1668,9 +1672,12 @@ please check its value")
 	      tab-bar-mode nil
 	      tool-bar-mode nil))
     (ohos-trace "command-line before frame-initialize")
-    (frame-initialize)
-    (when (eq window-system 'ohos)
-      (select-frame (car (frame-list))))
+    (setq window-system 'ohos)
+    (if (eq window-system 'ohos)
+        (let ((f (make-frame '((window-system . ohos)))))
+          (select-frame f)
+          (delete-other-frames f))
+      (frame-initialize))
     (ohos-trace "command-line after frame-initialize"))
 
   (when (and (fboundp 'x-create-frame)
@@ -1817,9 +1824,8 @@ please check its value")
   (ohos-trace "command-line after scratch/memory")
   ;; Process the remaining args.
   (ohos-trace "command-line before command-line-1")
-  (if (eq window-system 'ohos)
-      nil
-    (command-line-1 (cdr command-line-args)))
+  (setq initial-window-system 'ohos)
+  (ohos-log "startup C-owned OHOS frame")
   (ohos-trace "command-line after command-line-1")
 
   ;; If -batch, terminate after processing the command options.

@@ -1367,6 +1367,13 @@ android_emacs_init (int argc, char **argv, char *dump_file)
 #ifdef HAVE_PDUMPER
   bool attempt_load_pdump = false;
 #endif
+  {
+    char dbgbuf[256];
+    snprintf (dbgbuf, sizeof dbgbuf,
+              "main parse temacs=%s initialized=%d skip=%d argc=%d",
+              temacs ? temacs : "(null)", initialized, skip_args, argc);
+    ohos_log (dbgbuf);
+  }
 
   /* Look for this argument first, before any heap allocation, so we
      can set heap flags properly if we're going to dump.  */
@@ -2660,10 +2667,18 @@ Using an Emacs configured with --with-x-toolkit=lucid does not have this problem
   /* The OHOS terminal/frame are already created by ohos_term_init; skip
      the tty-oriented normal-top-level bootstrap for the first display.
      Keep Vtop_level during dump generation.  */
-  if (initialized && !will_dump_p ())
+  if (initialized && !will_dump_p () && !temacs)
     Vtop_level = Qnil;
 #endif
   ohos_log ("before Frecursive_edit");
+#ifdef HAVE_OHOS_GUI
+  if (!FRAME_OHOS_P (SELECTED_FRAME ()))
+    {
+      Lisp_Object nf = Fohos_create_frame (Qnil);
+      Fselect_frame (nf, Qnil);
+      ohos_log ("C-owned OHOS frame selected");
+    }
+#endif
   Frecursive_edit ();
   fprintf (stderr, "[ohos] main after Frecursive_edit\n");
   eassume (false);
