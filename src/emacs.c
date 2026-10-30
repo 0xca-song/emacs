@@ -2645,7 +2645,7 @@ Using an Emacs configured with --with-x-toolkit=lucid does not have this problem
   /* The OHOS terminal/frame are already created by ohos_term_init; skip
      the tty-oriented normal-top-level bootstrap for the first display.
      Keep Vtop_level during dump generation.  */
-  if (initialized)
+  if (initialized && !will_dump_p ())
     Vtop_level = Qnil;
 #endif
   fprintf (stderr, "[ohos] main before Frecursive_edit\n");

@@ -17083,7 +17083,9 @@ text_outside_line_unchanged_p (struct window *w,
 void
 redisplay (void)
 {
+  fprintf (stderr, "[ohos] redisplay enter\n");
   redisplay_internal ();
+  fprintf (stderr, "[ohos] redisplay leave\n");
 }
 
 
