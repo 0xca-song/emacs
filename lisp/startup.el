@@ -1305,13 +1305,17 @@ unconditionally."
 Amongst another things, it parses the command-line arguments."
  (let (xdg-dir startup-init-directory)
   (ohos-trace "command-line start")
+  (ohos-trace "command-line before setq")
   (setq before-init-time (current-time)
 	after-init-time nil
         command-line-default-directory default-directory)
+  (ohos-trace "command-line after setq")
 
   ;; Force recomputation, in case it was computed during the dump.
   (setq abbreviated-home-dir nil)
+  (ohos-trace "command-line after abbreviated-home-dir")
 
+  (ohos-trace "command-line before vc")
   ;; See if we should import version-control from the environment variable.
   (let ((vc (getenv "VERSION_CONTROL")))
     (cond ((eq vc nil))			;don't do anything if not set
@@ -1328,7 +1332,9 @@ Amongst another things, it parses the command-line arguments."
   ;;! ;; Choose a good default value for split-window-keep-point.
   ;;! (setq split-window-keep-point (> baud-rate 2400))
 
+  (ohos-trace "command-line after vc")
   ;; Convert preloaded file names in load-history to absolute.
+  (ohos-trace "command-line before locate simple")
   (let ((simple-file-name
 	 ;; Look for simple.el or simple.elc and use their directory
 	 ;; as the place where all Lisp files live.
@@ -1359,6 +1365,8 @@ please check its value")
 			elt))
 		    load-history))))
 
+  (ohos-trace "command-line after load-history")
+  (ohos-trace "command-line before args decode")
   ;; Convert the arguments to Emacs internal representation.
   (let ((args command-line-args))
     (while args
@@ -1366,6 +1374,7 @@ please check its value")
 	      (decode-coding-string (car args) locale-coding-system t))
       (pop args)))
 
+  (ohos-trace "command-line after args decode")
   (let ((done nil)
 	(args (cdr command-line-args))
 	display-arg)
