@@ -195,39 +195,9 @@ ohos_term_init (void)
   terminal->reference_count++;
   terminal->name = xstrdup ("ohos");
   dpyinfo->name_list_element = Fcons (build_string ("ohos"), Qnil);
+  KVAR (current_kboard, Vwindow_system) = Qohos;
   fprintf (stderr, "[ohos] term_init end\n");
   return dpyinfo;
-}
-
-struct frame *
-ohos_create_frame (struct terminal *terminal)
-{
-  struct frame *f = make_frame (true);
-  Lisp_Object frame;
-  XSETFRAME (frame, f);
-  Vframe_list = Fcons (frame, Vframe_list);
-  f->terminal = terminal;
-  f->output_method = output_ohos;
-  f->output_data.ohos = xzalloc (sizeof *f->output_data.ohos);
-  f->output_data.ohos->display_info = terminal->display_info.ohos;
-  f->output_data.ohos->width = 800;
-  f->output_data.ohos->height = 600;
-  f->output_data.ohos->fontset = -1;
-  f->column_width = 9;
-  f->line_height = 18;
-  f->text_cols = f->total_cols = 80;
-  f->text_lines = f->total_lines = 24;
-  fprintf (stderr, "[ohos] frame before font\n");
-  f->output_data.ohos->font = ohosfont_make_default (f);
-  fprintf (stderr, "[ohos] frame font=%p\n", (void *) f->output_data.ohos->font);
-  f->output_data.ohos->parent_desc = 0;
-  f->output_data.ohos->root_window = 0;
-  fprintf (stderr, "[ohos] frame created\n");
-  ohos_log (FRAME_WINDOW_P (f) ? "frame window_p=1" : "frame window_p=0");
-  init_frame_faces (f);
-  adjust_frame_glyphs (f);
-  ohos_log ("frame faces/glyphs initialized");
-  return f;
 }
 
 static struct redisplay_interface ohos_redisplay_interface =
@@ -268,6 +238,14 @@ ohos_get_redisplay_interface (void)
   return &ohos_redisplay_interface;
 }
 
+extern bool noninteractive;
+
+void
+ohos_set_interactive (void)
+{
+  noninteractive = false;
+}
+
 static ohos_frame_sink_fn ohos_frame_sink;
 static ohos_log_fn ohos_log_sink;
 
@@ -298,21 +276,6 @@ ohos_frame_text (int x, int y, int width, unsigned code, uint32_t fg,
     ohos_frame_sink (x, y, width, code, fg, bg, with_background);
 }
 
-DEFUN ("ohos-create-frame", Fohos_create_frame, Sohos_create_frame, 0, 1, 0,
-       doc: /* Create a native OHOS frame.  */)
-  (Lisp_Object parms)
-{
-  (void) parms;
-  fprintf (stderr, "[ohos] create_frame enter\n");
-  struct frame *f = ohos_create_frame (terminal_list);
-  Lisp_Object frame;
-  XSETFRAME (frame, f);
-  fprintf (stderr, "[ohos] create_frame done\n");
-  Fselect_frame (frame, Qnil);
-  fprintf (stderr, "[ohos] select_frame done\n");
-  return frame;
-}
-
 DEFUN ("ohos-trace", Fohos_trace, Sohos_trace, 1, 1, 0,
        doc: /* Write a trace line to stderr.  */)
   (Lisp_Object msg)
@@ -327,4 +290,5 @@ syms_of_ohosgui (void)
 {
   DEFSYM (Qohos, "ohos");
   defsubr (&Sohos_trace);
+  syms_of_ohosfns ();
 }
