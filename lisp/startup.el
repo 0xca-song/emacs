@@ -869,6 +869,7 @@ It is the default value of the variable `top-level'."
     ;; We are careful to do it late (after term-setup-hook), although the
     ;; new multi-tty code does not use $TERM any more there anyway.
     (setenv "TERM" "dumb")
+    (ohos-trace "normal-top-level after TERM=dumb")
     ;; Remove DISPLAY from the process-environment as well.  This allows
     ;; `callproc.c' to give it a useful adaptive default which is either
     ;; the value of the `display' frame-parameter or the DISPLAY value
@@ -885,7 +886,8 @@ It is the default value of the variable `top-level'."
                                 nil)))
             (setq env (cdr env)))))
       (when display
-        (setq process-environment (delete display process-environment))))))
+        (setq process-environment (delete display process-environment))))
+    (ohos-trace "normal-top-level after display cleanup")))
 
 ;; Precompute the keyboard equivalents in the menu bar items.
 ;; Command-line options supported by tty's:
