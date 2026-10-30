@@ -176,62 +176,6 @@ ohos_crash_handler (int sig)
   raise (sig);
 }
 
-struct ohos_display_info *
-ohos_term_init (void)
-{
-  fprintf (stderr, "[ohos] term_init begin\n");
-  struct ohos_display_info *dpyinfo = xzalloc (sizeof *dpyinfo);
-  dpyinfo->resx = 96.0;
-  dpyinfo->resy = 96.0;
-  dpyinfo->n_planes = 24;
-  dpyinfo->color_p = 1;
-  dpyinfo->smallest_font_height = 18;
-  dpyinfo->smallest_char_width = 9;
-  dpyinfo->next = NULL;
-  struct terminal *terminal = ohos_create_terminal (dpyinfo);
-  if (current_kboard == initial_kboard)
-    current_kboard = terminal->kboard;
-  terminal->kboard->reference_count++;
-  terminal->reference_count++;
-  terminal->name = xstrdup ("ohos");
-  dpyinfo->name_list_element = Fcons (build_string ("ohos"), Qnil);
-  KVAR (current_kboard, Vwindow_system) = Qohos;
-  fprintf (stderr, "[ohos] term_init end\n");
-  return dpyinfo;
-}
-
-static struct redisplay_interface ohos_redisplay_interface =
-  {
-    NULL, /* frame_parm_handlers */
-    gui_produce_glyphs,
-    gui_write_glyphs,
-    gui_insert_glyphs,
-    gui_clear_end_of_line,
-    ohos_scroll_run,
-    ohos_after_update_window_line,
-    NULL,
-    NULL,
-    ohos_flush,
-    gui_clear_window_mouse_face,
-    gui_get_glyph_overhangs,
-    gui_fix_overlapping_area,
-    ohos_draw_fringe_bitmap,
-    ohos_define_fringe_bitmap,
-    ohos_destroy_fringe_bitmap,
-    ohos_compute_glyph_string_overhangs,
-    ohos_draw_glyph_string,
-    ohos_define_frame_cursor,
-    ohos_clear_frame_area,
-    ohos_clear_under_internal_border,
-    ohos_draw_window_cursor,
-    ohos_draw_vertical_window_border,
-    ohos_draw_window_divider,
-    NULL,
-    NULL,
-    NULL,
-    NULL,
-  };
-
 struct redisplay_interface *
 ohos_get_redisplay_interface (void)
 {
@@ -284,6 +228,39 @@ DEFUN ("ohos-trace", Fohos_trace, Sohos_trace, 1, 1, 0,
   fprintf (stderr, "[ohos] %s\n", SDATA (msg));
   return Qnil;
 }
+
+static struct redisplay_interface ohos_redisplay_interface =
+  {
+    NULL, /* frame_parm_handlers */
+    gui_produce_glyphs,
+    gui_write_glyphs,
+    gui_insert_glyphs,
+    gui_clear_end_of_line,
+    ohos_scroll_run,
+    ohos_after_update_window_line,
+    NULL,
+    NULL,
+    ohos_flush,
+    gui_clear_window_mouse_face,
+    gui_get_glyph_overhangs,
+    gui_fix_overlapping_area,
+    ohos_draw_fringe_bitmap,
+    ohos_define_fringe_bitmap,
+    ohos_destroy_fringe_bitmap,
+    ohos_compute_glyph_string_overhangs,
+    ohos_draw_glyph_string,
+    ohos_define_frame_cursor,
+    ohos_clear_frame_area,
+    ohos_clear_under_internal_border,
+    ohos_draw_window_cursor,
+    ohos_draw_vertical_window_border,
+    ohos_draw_window_divider,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+  };
+
 
 void
 syms_of_ohosgui (void)
