@@ -1389,6 +1389,7 @@ please check its value")
     (and init-file-user
          (equal init-file-user (user-real-login-name))
 	 (setq init-file-user ""))
+    (ohos-trace "command-line after init-file-user")
 
     ;; Process the command-line args, and delete the arguments
     ;; processed.  This is consistent with the way main in emacs.c
@@ -1482,6 +1483,7 @@ please check its value")
 	;; Was argval set but not used?
 	(and argval
 	     (error "Option `%s' doesn't allow an argument" argi))))
+    (ohos-trace "command-line after arg loop")
 
     ;; Re-attach the --display arg.
     (and display-arg (setq args (append display-arg args)))
@@ -1489,6 +1491,7 @@ please check its value")
     ;; Re-attach the program name to the front of the arg list.
     (and command-line-args
          (setcdr command-line-args args)))
+  (ohos-trace "command-line after reattach")
 
   ;; Re-evaluate predefined variables whose initial value depends on
   ;; the runtime context.  But delay the warning about
@@ -1496,12 +1499,14 @@ please check its value")
   ;; the init file and the command-line arguments, in case the user
   ;; customized `user-emacs-directory-warning' to nil via those.
   (let ((user-emacs-directory-warning nil))
-    (when (listp custom-delayed-init-variables)
+    (when (and (not (eq window-system 'ohos))
+               (listp custom-delayed-init-variables))
       (mapc #'custom-reevaluate-setting
             ;; Initialize them in the same order they were loaded, in
             ;; case there are dependencies between them.
             (reverse custom-delayed-init-variables))))
   (setq custom-delayed-init-variables t)
+  (ohos-trace "command-line after custom re-eval")
 
   ;; Warn for invalid user name.
   (when init-file-user
@@ -1530,6 +1535,7 @@ please check its value")
                                    init-file-user))
                          :error))))
 
+  (ohos-trace "command-line after init-file-user check")
   ;; Calculate the name of the Emacs init directory.
   ;; This is typically ~INIT-FILE-USER/.config/emacs unless the user
   ;; is following the ~INIT-FILE-USER/.emacs.d convention.
@@ -1544,6 +1550,7 @@ please check its value")
 	  (setq xdg-dir (concat "~" init-file-user "/.config/emacs/"))
 	  (startup--xdg-or-homedot xdg-dir init-file-user)))
 
+  (ohos-trace "command-line after startup-init-directory")
   ;; Run the site-start library if it exists.
   ;; This used to come after the early init file, but was moved here to
   ;; make it possible for sites to do early init things on behalf of
@@ -1559,6 +1566,7 @@ please check its value")
     (let ((inhibit-startup-screen inhibit-startup-screen))
       (load site-run-file t t)))
 
+  (ohos-trace "command-line after site-run")
   ;; Load the early init file, if found.
   (startup--load-user-init-file
    (lambda ()
@@ -1570,6 +1578,7 @@ please check its value")
       "early-init.el"
       startup-init-directory)))
   (setq early-init-file user-init-file)
+  (ohos-trace "command-line after early-init")
 
   ;; Amend `native-comp-eln-load-path', since the early-init file may
   ;; have altered `user-emacs-directory' and/or changed the eln-cache
@@ -1601,6 +1610,7 @@ please check its value")
              (file-directory-p user-lisp-directory))
     (prepare-user-lisp (not user-lisp-auto-scrape)))
 
+  (ohos-trace "command-line after user-lisp")
   ;; Make sure window system's init file was loaded in loadup.el if
   ;; using a window system.
   ;; Initialize the window-system only after processing the command-line
@@ -1617,8 +1627,10 @@ please check its value")
             (let ((window-system initial-window-system)) ;Hack attack!
               (handle-args-function command-line-args)))
       ;; Initialize the window system. (Open connection, etc.)
+      (ohos-trace "command-line before window-system-initialization")
       (let ((window-system initial-window-system)) ;Hack attack!
         (window-system-initialization))
+      (ohos-trace "command-line after window-system-initialization")
       (put initial-window-system 'window-system-initialized t))
     ;; If there was an error, print the error message and exit.
     (error
