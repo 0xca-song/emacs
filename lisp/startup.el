@@ -781,8 +781,12 @@ It is the default value of the variable `top-level'."
 		 (command-line)
 		 (ohos-trace "after command-line"))
 
-        (when (featurep 'native-compile)
+        (when (and (featurep 'native-compile)
+                   (not (eq window-system 'ohos)))
           (startup--update-eln-cache))
+        (ohos-trace "after command-line cleanup native")
+        (when (eq window-system 'ohos)
+          (ohos-trace "ohos skip term hooks"))
 
 	;; Do this again, in case .emacs defined more abbreviations.
 	(if default-directory
@@ -811,7 +815,8 @@ It is the default value of the variable `top-level'."
 				       auto-save-list-file-prefix
 				       (emacs-pid)
 				       (system-name))))))))
-	(unless inhibit-startup-hooks
+	(unless (or inhibit-startup-hooks
+                    (eq window-system 'ohos))
 	  (run-hooks 'emacs-startup-hook 'term-setup-hook))
 
 	;; Don't do this if we failed to create the initial frame,
@@ -840,8 +845,9 @@ It is the default value of the variable `top-level'."
 
 	  ;; Modify the initial frame based on what .emacs puts into
 	  ;; ...-frame-alist.
-	  (if (fboundp 'frame-notice-user-settings)
-	      (frame-notice-user-settings))
+	  (unless (eq window-system 'ohos)
+	    (if (fboundp 'frame-notice-user-settings)
+		(frame-notice-user-settings)))
 	  ;; Set the faces for the initial background mode even if
 	  ;; frame-notice-user-settings didn't (such as on a tty).
 	  ;; frame-set-background-mode is idempotent, so it won't
@@ -850,9 +856,10 @@ It is the default value of the variable `top-level'."
 	      (frame-set-background-mode (selected-frame))))
 
 	;; Now we know the user's default font, so add it to the menu.
-	(if (fboundp 'font-menu-add-default)
-	    (font-menu-add-default))
-	(unless inhibit-startup-hooks
+	(unless (eq window-system 'ohos)
+	  (if (fboundp 'font-menu-add-default)
+	      (font-menu-add-default)))
+	(unless (or inhibit-startup-hooks (eq window-system 'ohos))
 	  (run-hooks 'window-setup-hook))))
 
     ;; Subprocesses of Emacs do not have direct access to the terminal, so
