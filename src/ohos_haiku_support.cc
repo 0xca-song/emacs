@@ -15,6 +15,8 @@
 #include <cerrno>
 #include <cmath>
 #include <poll.h>
+#include <execinfo.h>
+#include <signal.h>
 #include <unistd.h>
 #include <algorithm>
 #include <string>
@@ -28,9 +30,9 @@ ssize_t read_port (port_id, int32_t *, void *, size_t) { return B_ERROR; }
 ssize_t port_buffer_size (port_id) { return B_ERROR; }
 ssize_t port_buffer_size_etc (port_id, uint32_t, bigtime_t) { return B_ERROR; }
 bigtime_t system_time (void) { struct timespec ts; clock_gettime (CLOCK_MONOTONIC, &ts); return (bigtime_t) ts.tv_sec * 1000000 + ts.tv_nsec / 1000; }
-port_id port_application_to_emacs = -1;
-port_id port_popup_menu_to_emacs = -1;
-port_id port_emacs_to_session_manager = -2;
+port_id port_application_to_emacs = 0;
+port_id port_popup_menu_to_emacs = 0;
+port_id port_emacs_to_session_manager = 1;
 
 struct ohos_font { int size; };
 struct ohos_view;
