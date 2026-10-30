@@ -5,6 +5,8 @@
    patch; this file deliberately has no tty/pty dependency.  */
 
 #include <config.h>
+#include <execinfo.h>
+#include <signal.h>
 typedef void *Emacs_Pix_Container;
 typedef void *Emacs_Cursor;
 typedef void *Emacs_Pixmap;
@@ -162,6 +164,16 @@ ohos_create_terminal (struct ohos_display_info *dpyinfo)
   return terminal;
 }
 
+static void
+ohos_crash_handler (int sig)
+{
+  void *frames[64];
+  int n = backtrace (frames, 64);
+  dprintf (2, "\n--- ohos crash signal %d ---\n", sig);
+  backtrace_symbols_fd (frames, n, 2);
+  _exit (128 + sig);
+}
+
 struct ohos_display_info *
 ohos_term_init (void)
 {
@@ -182,6 +194,8 @@ ohos_term_init (void)
   terminal->name = xstrdup ("ohos");
   dpyinfo->name_list_element = Fcons (build_string ("ohos"), Qnil);
   Fohos_create_frame (Qnil);
+  signal (SIGSEGV, ohos_crash_handler);
+  signal (SIGABRT, ohos_crash_handler);
   fprintf (stderr, "[ohos] term_init end\n");
   return dpyinfo;
 }
@@ -190,6 +204,9 @@ struct frame *
 ohos_create_frame (struct terminal *terminal)
 {
   struct frame *f = make_frame (true);
+  Lisp_Object frame;
+  XSETFRAME (frame, f);
+  Vframe_list = Fcons (frame, Vframe_list);
   f->terminal = terminal;
   f->output_method = output_ohos;
   f->output_data.ohos = xzalloc (sizeof *f->output_data.ohos);
@@ -265,7 +282,6 @@ DEFUN ("ohos-create-frame", Fohos_create_frame, Sohos_create_frame, 0, 1, 0,
   struct frame *f = ohos_create_frame (terminal_list);
   Lisp_Object frame;
   XSETFRAME (frame, f);
-  Vframe_list = Fcons (frame, Vframe_list);
   fprintf (stderr, "[ohos] create_frame done\n");
   Fselect_frame (frame, Qnil);
   fprintf (stderr, "[ohos] select_frame done\n");
