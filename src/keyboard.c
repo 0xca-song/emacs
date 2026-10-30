@@ -1345,7 +1345,7 @@ command_loop_1 (void)
   this_command_key_count = 0;
   this_single_command_key_start = 0;
 
-  if (NILP (Vmemory_full))
+  if (NILP (Vmemory_full) && !EQ (Vwindow_system, Qohos))
     {
       /* Make sure this hook runs after commands that get errors and
 	 throw to top level.  */
@@ -1365,6 +1365,7 @@ command_loop_1 (void)
         safe_run_hooks (Qdelayed_warnings_hook);
     }
 
+  fprintf (stderr, "[ohos] command_loop_1 after initial hooks\n");
   /* Do this after running Vpost_command_hook, for consistency.  */
   kset_last_command (current_kboard, Vthis_command);
   kset_real_last_command (current_kboard, Vreal_this_command);
@@ -1435,15 +1436,19 @@ command_loop_1 (void)
       Vthis_command_keys_shift_translated = Qnil;
 
       /* Read next key sequence; i gets its length.  */
+      fprintf (stderr, "[ohos] command_loop_1 before read_key_sequence\n");
       raw_keybuf_count = 0;
       Lisp_Object keybuf[READ_KEY_ELTS];
       int i = read_key_sequence (keybuf, Qnil, false, true, true, false,
 				 false);
+      fprintf (stderr, "[ohos] command_loop_1 after read_key_sequence i=%d\n", i);
 
       /* A filter may have run while we were reading the input.  */
       if (! FRAME_LIVE_P (XFRAME (selected_frame)))
 	Fkill_emacs (Qnil, Qnil);
+      fprintf (stderr, "[ohos] command_loop_1 before set_buffer\n");
       set_buffer_internal (XBUFFER (XWINDOW (selected_window)->contents));
+      fprintf (stderr, "[ohos] command_loop_1 after set_buffer\n");
 
       ++num_input_keys;
 
