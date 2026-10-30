@@ -112,7 +112,11 @@ decode_any_frame (register Lisp_Object frame)
 bool
 display_available (void)
 {
+#ifdef HAVE_OHOS_GUI
+  return true;
+#else
   return x_display_list != NULL;
+#endif
 }
 #endif
 

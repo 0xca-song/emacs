@@ -160,6 +160,14 @@ typedef struct haiku_display_info Display_Info;
 typedef Emacs_Pixmap Emacs_Pix_Container;
 #endif
 
+#ifdef HAVE_OHOS_GUI
+typedef struct ohos_display_info Display_Info;
+typedef void *Emacs_Pixmap;
+typedef void *Emacs_Cursor;
+typedef void *Emacs_Pix_Container;
+typedef unsigned long RGB_PIXEL_COLOR;
+#endif
+
 #ifdef HAVE_ANDROID
 #include "androidgui.h"
 typedef struct android_display_info Display_Info;

@@ -4,6 +4,11 @@
    be validated before a full FreeType/HarfBuzz backend is added.  */
 
 #include <config.h>
+typedef void *Emacs_Pix_Container;
+typedef void *Emacs_Cursor;
+typedef void *Emacs_Pixmap;
+typedef unsigned long RGB_PIXEL_COLOR;
+typedef struct ohos_display_info Display_Info;
 #include "lisp.h"
 #include "frame.h"
 #include "dispextern.h"

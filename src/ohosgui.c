@@ -5,6 +5,11 @@
    patch; this file deliberately has no tty/pty dependency.  */
 
 #include <config.h>
+typedef void *Emacs_Pix_Container;
+typedef void *Emacs_Cursor;
+typedef void *Emacs_Pixmap;
+typedef unsigned long RGB_PIXEL_COLOR;
+typedef struct ohos_display_info Display_Info;
 #include "lisp.h"
 #include "frame.h"
 #include "window.h"
@@ -122,6 +127,14 @@ ohos_draw_fringe_bitmap (struct window *w, struct glyph_row *row,
 }
 
 Lisp_Object Qohos;
+
+int
+XParseGeometry (const char *string, int *x, int *y, unsigned int *width,
+                unsigned int *height)
+{
+  (void) string; (void) x; (void) y; (void) width; (void) height;
+  return 0;
+}
 static struct redisplay_interface ohos_redisplay_interface;
 
 static int
@@ -183,6 +196,8 @@ ohos_create_frame (struct terminal *terminal)
   f->output_data.ohos->width = 800;
   f->output_data.ohos->height = 600;
   f->output_data.ohos->fontset = -1;
+  f->output_data.ohos->parent_desc = 0;
+  f->output_data.ohos->root_window = 0;
   return f;
 }
 

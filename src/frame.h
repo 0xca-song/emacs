@@ -957,8 +957,8 @@ default_pixels_per_inch_y (void)
 #define FRAME_HAIKU_P(f) false
 #else
 #define FRAME_HAIKU_P(f) ((f)->output_method == output_haiku)
-#define FRAME_OHOS_P(f) ((f)->output_method == output_ohos)
 #endif
+#define FRAME_OHOS_P(f) ((f)->output_method == output_ohos)
 #ifndef HAVE_ANDROID
 #define FRAME_ANDROID_P(f) false
 #else

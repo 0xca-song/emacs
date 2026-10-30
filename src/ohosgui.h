@@ -1,6 +1,16 @@
 #ifndef OHOS_GUI_H
 #define OHOS_GUI_H
 #include <stdint.h>
+#include "lisp.h"
+#include "frame.h"
+#include "termhooks.h"
+#include "dispextern.h"
+
+typedef void *Emacs_Pix_Container;
+typedef void *Emacs_Cursor;
+typedef void *Emacs_Pixmap;
+typedef unsigned long RGB_PIXEL_COLOR;
+typedef struct ohos_display_info Display_Info;
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -13,13 +23,23 @@ struct ohos_display_info
   struct terminal *terminal;
   Lisp_Object name_list_element;
   struct frame *focused_frame;
+  struct frame *focus_event_frame;
   Mouse_HLInfo mouse_highlight;
   struct frame *last_mouse_frame;
+  struct frame *last_mouse_motion_frame;
+  struct frame *last_mouse_glyph_frame;
+  struct frame *highlight_frame;
+  int last_mouse_motion_x, last_mouse_motion_y;
+  NativeRectangle last_mouse_glyph;
+  Lisp_Object rdb;
+  Lisp_Object default_name;
+  int grabbed;
   double resx, resy;
   int n_planes;
   int color_p;
   int smallest_font_height;
   int smallest_char_width;
+  uintptr_t root_window;
   Lisp_Object color_map;
   struct ohos_display_info *next;
 };
@@ -30,13 +50,43 @@ struct ohos_output
   struct font *font;
   int fontset;
   int width, height;
+  void *parent_desc;
+  uintptr_t root_window;
   Emacs_Cursor current_cursor;
 };
 
+#ifndef XNegative
+#define XNegative (1 << 4)
+#define YNegative (1 << 5)
+#define XValue (1 << 0)
+#define YValue (1 << 1)
+#define WidthValue (1 << 2)
+#define HeightValue (1 << 3)
+#define NorthWestGravity 1
+#define NorthGravity 2
+#define NorthEastGravity 3
+#define WestGravity 4
+#define CenterGravity 5
+#define EastGravity 6
+#define SouthWestGravity 7
+#define SouthGravity 8
+#define SouthEastGravity 9
+#define StaticGravity 10
+#define USPosition (1 << 0)
+#define USSize (1 << 1)
+#define PPosition (1 << 2)
+#define PSize (1 << 3)
+#define PWinGravity (1 << 9)
+#endif
+extern int XParseGeometry (const char *, int *, int *, unsigned int *, unsigned int *);
+
+#define WINDOW_HANDLE_UINTPTR(h) ((uintptr_t) (h))
+#define FRAME_OUTPUT_DATA(f) ((f)->output_data.ohos)
 #define FRAME_DISPLAY_INFO(f) ((f)->output_data.ohos->display_info)
 #define FRAME_FONT(f) ((f)->output_data.ohos->font)
 #define FRAME_FONTSET(f) ((f)->output_data.ohos->fontset)
 
+extern Lisp_Object Qohos;
 extern struct ohos_display_info *ohos_term_init (void);
 extern struct frame *ohos_create_frame (struct terminal *);
 extern struct redisplay_interface *ohos_get_redisplay_interface (void);
