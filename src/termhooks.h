@@ -958,6 +958,9 @@ extern struct terminal *terminal_list;
 #elif defined (HAVE_ANDROID)
 #define TERMINAL_FONT_CACHE(t)						\
   (t->type == output_android ? t->display_info.android->name_list_element : Qnil)
+#elif defined (HAVE_OHOS_GUI)
+#define TERMINAL_FONT_CACHE(t)						\
+  (t->type == output_ohos ? t->display_info.ohos->name_list_element : Qnil)
 #endif
 
 extern struct terminal *decode_live_terminal (Lisp_Object);

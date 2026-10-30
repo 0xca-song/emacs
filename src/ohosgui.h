@@ -18,6 +18,16 @@ extern "C" {
 /* Native OHOS frame output.  The first implementation is cell based:
    the redisplay interface emits glyphs into a shared command buffer and
    ArkTS/OH_Drawing presents them.  */
+struct ohos_bitmap_record
+{
+  void *img;
+  char *file;
+  int refcount;
+  int height, width, depth;
+  uint32_t stipple_foreground, stipple_background;
+  void *stipple_bits;
+};
+
 struct ohos_display_info
 {
   struct terminal *terminal;
@@ -35,6 +45,10 @@ struct ohos_display_info
   Lisp_Object default_name;
   int grabbed;
   double resx, resy;
+  int n_fonts;
+  struct ohos_bitmap_record *bitmaps;
+  ptrdiff_t bitmaps_size;
+  ptrdiff_t bitmaps_last;
   int n_planes;
   int color_p;
   int smallest_font_height;
@@ -78,6 +92,7 @@ struct ohos_output
 #define YValue (1 << 1)
 #define WidthValue (1 << 2)
 #define HeightValue (1 << 3)
+#define GCGraphicsExposures 0
 #define NorthWestGravity 1
 #define NorthGravity 2
 #define NorthEastGravity 3
