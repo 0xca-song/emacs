@@ -184,42 +184,6 @@ ohos_get_redisplay_interface (void)
 
 extern bool noninteractive;
 
-void
-ohos_set_interactive (void)
-{
-  noninteractive = false;
-}
-
-static ohos_frame_sink_fn ohos_frame_sink;
-static ohos_log_fn ohos_log_sink;
-
-void
-ohos_set_log_sink (ohos_log_fn fn)
-{
-  ohos_log_sink = fn;
-}
-
-void
-ohos_log (const char *s)
-{
-  if (ohos_log_sink)
-    ohos_log_sink (s);
-}
-
-void
-ohos_set_frame_sink (ohos_frame_sink_fn fn)
-{
-  ohos_frame_sink = fn;
-}
-
-void
-ohos_frame_text (int x, int y, int width, unsigned code, uint32_t fg,
-                 uint32_t bg, int with_background)
-{
-  if (ohos_frame_sink)
-    ohos_frame_sink (x, y, width, code, fg, bg, with_background);
-}
-
 DEFUN ("ohos-trace", Fohos_trace, Sohos_trace, 1, 1, 0,
        doc: /* Write a trace line to stderr.  */)
   (Lisp_Object msg)
