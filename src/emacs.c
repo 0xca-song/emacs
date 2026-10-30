@@ -2676,7 +2676,16 @@ Using an Emacs configured with --with-x-toolkit=lucid does not have this problem
     {
       Lisp_Object nf = Fohos_create_frame (Qnil);
       Fselect_frame (nf, Qnil);
-      ohos_log ("C-owned OHOS frame selected");
+      {
+        Lisp_Object tail, next;
+        for (tail = Vframe_list; CONSP (tail); tail = next)
+          {
+            next = XCDR (tail);
+            if (!FRAME_OHOS_P (XFRAME (XCAR (tail))))
+              Fdelete_frame (XCAR (tail), Qnil);
+          }
+      }
+      ohos_log ("C-owned OHOS frame selected; tty frames removed");
     }
 #endif
   Frecursive_edit ();
