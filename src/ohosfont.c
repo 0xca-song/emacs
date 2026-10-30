@@ -23,7 +23,6 @@ struct ohosfont_info
   struct font font;
 };
 
-static Lisp_Object Qohosfont;
 static struct font_driver ohosfont_driver;
 
 static Lisp_Object
@@ -85,6 +84,22 @@ ohosfont_open (struct frame *f, Lisp_Object entity, int pixel_size)
   font->props[FONT_FAMILY_INDEX] = intern ("Noto Sans Mono");
   font->props[FONT_REGISTRY_INDEX] = Qiso10646_1;
   return obj;
+}
+
+struct font *
+ohosfont_make_default (struct frame *f)
+{
+  Lisp_Object entity = font_make_entity ();
+  ASET (entity, FONT_TYPE_INDEX, Qohosfont);
+  ASET (entity, FONT_FOUNDRY_INDEX, Qohosfont);
+  ASET (entity, FONT_FAMILY_INDEX, intern ("Noto Sans Mono"));
+  ASET (entity, FONT_ADSTYLE_INDEX, Qnil);
+  ASET (entity, FONT_REGISTRY_INDEX, Qiso10646_1);
+  ASET (entity, FONT_SIZE_INDEX, make_fixnum (12));
+  ASET (entity, FONT_AVGWIDTH_INDEX, make_fixnum (0));
+  ASET (entity, FONT_SPACING_INDEX, make_fixnum (FONT_SPACING_MONO));
+  Lisp_Object obj = ohosfont_open (f, entity, 12);
+  return NILP (obj) ? NULL : XFONT_OBJECT (obj);
 }
 
 static void

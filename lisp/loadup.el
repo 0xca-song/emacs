@@ -312,6 +312,7 @@
     (progn
       (load "term/common-win")
       (load "term/haiku-win")))
+(load "term/ohos-win")
 
 (if (featurep 'android)
     (progn

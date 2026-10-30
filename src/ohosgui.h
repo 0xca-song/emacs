@@ -122,7 +122,6 @@ extern int XParseGeometry (const char *, int *, int *, unsigned int *, unsigned 
 #define FRAME_FONT(f) ((f)->output_data.ohos->font)
 #define FRAME_FONTSET(f) ((f)->output_data.ohos->fontset)
 
-extern Lisp_Object Qohos;
 extern Lisp_Object Fxw_display_color_p (Lisp_Object);
 extern Lisp_Object Fx_display_grayscale_p (Lisp_Object);
 extern struct ohos_display_info *ohos_term_init (void);
@@ -130,6 +129,7 @@ extern struct frame *ohos_create_frame (struct terminal *);
 extern struct redisplay_interface *ohos_get_redisplay_interface (void);
 extern void syms_of_ohosgui (void);
 extern void syms_of_ohosfont (void);
+extern struct font *ohosfont_make_default (struct frame *);
 
 void ohos_frame_text (int x, int y, int width, unsigned code,
                       uint32_t fg, uint32_t bg, int with_background);

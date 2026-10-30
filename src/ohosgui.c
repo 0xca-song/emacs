@@ -126,8 +126,6 @@ ohos_draw_fringe_bitmap (struct window *w, struct glyph_row *row,
   (void) w; (void) row; (void) p;
 }
 
-Lisp_Object Qohos;
-
 int
 XParseGeometry (const char *string, int *x, int *y, unsigned int *width,
                 unsigned int *height)
@@ -198,6 +196,11 @@ ohos_create_frame (struct terminal *terminal)
   f->output_data.ohos->width = 800;
   f->output_data.ohos->height = 600;
   f->output_data.ohos->fontset = -1;
+  f->column_width = 9;
+  f->line_height = 18;
+  f->text_cols = f->total_cols = 80;
+  f->text_lines = f->total_lines = 24;
+  f->output_data.ohos->font = ohosfont_make_default (f);
   f->output_data.ohos->parent_desc = 0;
   f->output_data.ohos->root_window = 0;
   return f;
@@ -247,6 +250,18 @@ ohos_frame_text (int x, int y, int width, unsigned code, uint32_t fg,
 {
   (void) x; (void) y; (void) width; (void) code;
   (void) fg; (void) bg; (void) with_background;
+}
+
+DEFUN ("ohos-create-frame", Fohos_create_frame, Sohos_create_frame, 0, 1, 0,
+       doc: /* Create a native OHOS frame.  */)
+  (Lisp_Object parms)
+{
+  (void) parms;
+  struct frame *f = ohos_create_frame (terminal_list);
+  Lisp_Object frame;
+  XSETFRAME (frame, f);
+  Vframe_list = Fcons (frame, Vframe_list);
+  return frame;
 }
 
 void
