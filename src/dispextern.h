@@ -67,6 +67,9 @@ typedef struct
 {
   int x, y;
   unsigned width, height;
+#ifdef HAVE_OHOS_GUI
+  int gx, gy;
+#endif
 } Emacs_Rectangle;
 
 /* XGCValues-like struct used by non-X GUI code.  */

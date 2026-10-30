@@ -112,12 +112,19 @@ struct ohos_output
 extern int XParseGeometry (const char *, int *, int *, unsigned int *, unsigned int *);
 
 #define WINDOW_HANDLE_UINTPTR(h) ((uintptr_t) (h))
+#define FRAME_NATIVE_WINDOW(f) 0
+#define FRAME_BASELINE_OFFSET(f) 0
+#define BLACK_PIX_DEFAULT(f) 0x000000
+#define WHITE_PIX_DEFAULT(f) 0xffffff
+#define STORE_NATIVE_RECT(nr, px, py, pw, ph) do { (nr).x = (px); (nr).y = (py); (nr).width = (pw); (nr).height = (ph); (nr).gx = (px); (nr).gy = (py); } while (0)
 #define FRAME_OUTPUT_DATA(f) ((f)->output_data.ohos)
 #define FRAME_DISPLAY_INFO(f) ((f)->output_data.ohos->display_info)
 #define FRAME_FONT(f) ((f)->output_data.ohos->font)
 #define FRAME_FONTSET(f) ((f)->output_data.ohos->fontset)
 
 extern Lisp_Object Qohos;
+extern Lisp_Object Fxw_display_color_p (Lisp_Object);
+extern Lisp_Object Fx_display_grayscale_p (Lisp_Object);
 extern struct ohos_display_info *ohos_term_init (void);
 extern struct frame *ohos_create_frame (struct terminal *);
 extern struct redisplay_interface *ohos_get_redisplay_interface (void);

@@ -501,6 +501,17 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 #include TERM_HEADER
 #endif /* HAVE_WINDOW_SYSTEM */
 
+#ifdef HAVE_OHOS_GUI
+#undef FRAME_COL_TO_PIXEL_X
+#undef FRAME_LINE_TO_PIXEL_Y
+#undef STORE_NATIVE_RECT
+#define FRAME_COL_TO_PIXEL_X(f, col) ((col) * FRAME_COLUMN_WIDTH (f) + (f)->internal_border_width)
+#define FRAME_LINE_TO_PIXEL_Y(f, row) ((row) * FRAME_LINE_HEIGHT (f) + (f)->internal_border_width)
+#define STORE_NATIVE_RECT(nr, px, py, pw, ph) \
+  do { (nr).x = (px); (nr).y = (py); (nr).width = (pw); (nr).height = (ph); \
+       (nr).gx = (px); (nr).gy = (py); } while (0)
+#endif
+
 #ifndef FRAME_OUTPUT_DATA
 #define FRAME_OUTPUT_DATA(f) (NULL)
 #endif

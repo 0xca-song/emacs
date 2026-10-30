@@ -20,6 +20,7 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 
 #define INLINE EXTERN_INLINE
 #include <config.h>
+#include <execinfo.h>
 
 #include <errno.h>
 #include <fcntl.h>
@@ -2430,6 +2431,14 @@ Using an Emacs configured with --with-x-toolkit=lucid does not have this problem
       syms_of_fontset ();
       syms_of_xsettings ();
 #endif /* HAVE_PGTK */
+#ifdef HAVE_OHOS_GUI
+      syms_of_ohosgui ();
+      syms_of_ohosfont ();
+      syms_of_fontset ();
+      syms_of_xfaces ();
+      syms_of_fringe ();
+      syms_of_image ();
+#endif /* HAVE_OHOS_GUI */
 #ifdef HAVE_HAIKU
       syms_of_haikuterm ();
       syms_of_haikufns ();
@@ -2969,6 +2978,21 @@ killed.  */
        attributes: noreturn)
   (Lisp_Object arg, Lisp_Object restart)
 {
+  fprintf (stderr, "[ohos-haiku] Fkill_emacs called\n");
+  {
+    void *frames[64];
+    int n = backtrace (frames, 64);
+    backtrace_symbols_fd (frames, n, 2);
+    void **fp = (void **) __builtin_frame_address (0);
+    for (int i = 0; i < 24 && fp; i++)
+      {
+        dprintf (2, "fk#%d %p\n", i, fp[1]);
+        void **next = (void **) fp[0];
+        if (next <= fp)
+          break;
+        fp = next;
+      }
+  }
   int exit_code;
 
 #ifndef WINDOWSNT

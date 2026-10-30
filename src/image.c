@@ -172,6 +172,22 @@ typedef struct pgtk_bitmap_record Bitmap_Record;
 # define COLOR_TABLE_SUPPORT 1
 #endif
 
+#ifdef HAVE_OHOS_GUI
+typedef struct ohos_bitmap_record Bitmap_Record;
+#define GET_PIXEL(img, x, y) 0
+#define PUT_PIXEL(img, x, y, pixel) ((void) 0)
+#define NO_PIXMAP 0
+#define PIX_MASK_RETAIN 0
+#define PIX_MASK_DRAW 1
+#define RGB_TO_ULONG(r, g, b) (((r) << 16) | ((g) << 8) | (b))
+#define RED_FROM_ULONG(color) (((color) >> 16) & 0xff)
+#define GREEN_FROM_ULONG(color) (((color) >> 8) & 0xff)
+#define BLUE_FROM_ULONG(color) ((color) & 0xff)
+#define RED16_FROM_ULONG(color) (RED_FROM_ULONG (color) * 0x101)
+#define GREEN16_FROM_ULONG(color) (GREEN_FROM_ULONG (color) * 0x101)
+#define BLUE16_FROM_ULONG(color) (BLUE_FROM_ULONG (color) * 0x101)
+#endif
+
 #ifdef HAVE_HAIKU
 #include "haiku_support.h"
 typedef struct haiku_bitmap_record Bitmap_Record;

@@ -240,6 +240,14 @@ ohos_get_redisplay_interface (void)
 }
 
 void
+ohos_frame_text (int x, int y, int width, unsigned code, uint32_t fg,
+                 uint32_t bg, int with_background)
+{
+  (void) x; (void) y; (void) width; (void) code;
+  (void) fg; (void) bg; (void) with_background;
+}
+
+void
 syms_of_ohosgui (void)
 {
   DEFSYM (Qohos, "ohos");
