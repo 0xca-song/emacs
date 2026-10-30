@@ -183,6 +183,9 @@ typedef struct android_image *Emacs_Pix_Container;
 typedef void *Emacs_Cursor;
 #endif
 
+#ifdef HAVE_OHOS_GUI
+#define NativeRectangle Emacs_Rectangle
+#endif
 #ifndef NativeRectangle
 #define NativeRectangle int
 #endif
