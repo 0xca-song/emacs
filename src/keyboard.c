@@ -745,8 +745,11 @@ recursive_edit_1 (void)
      See Bug #23632.
   */
   specbind (Qundo_auto__undoably_changed_buffers, Qnil);
+  fprintf (stderr, "[ohos] recursive_edit_1 before command_loop\n");
 
+  fprintf (stderr, "[ohos] recursive_edit_1 before command_loop\n");
   val = command_loop ();
+  fprintf (stderr, "[ohos] recursive_edit_1 after command_loop\n");
   if (EQ (val, Qt))
     quit ();
   /* Handle throw from read_minibuf when using minibuffer
@@ -803,6 +806,8 @@ This function is called by the editor initialization to begin editing.  */)
 {
   specpdl_ref count = SPECPDL_INDEX ();
   Lisp_Object buffer;
+  fprintf (stderr, "[ohos] recursive begin selected_window=%p frame=%p\n",
+           (void *) selected_window, (void *) selected_frame);
 
   /* If we enter while input is blocked, don't lock up here.
      This may happen through the debugger during redisplay.  */
@@ -829,7 +834,9 @@ This function is called by the editor initialization to begin editing.  */)
   if (command_loop_level > 0 && !multiple_terminals_merge_keyboards)
     temporarily_switch_to_single_kboard (SELECTED_FRAME ());
 
+  fprintf (stderr, "[ohos] recursive before edit_1\n");
   recursive_edit_1 ();
+  fprintf (stderr, "[ohos] recursive after edit_1\n");
   return unbind_to (count, Qnil);
 }
 
@@ -1176,7 +1183,9 @@ top_level_2 (void)
     /* FIXME: Should we (re)use `list_of_error` from `xdisp.c`? */
     push_handler_bind (list1 (Qerror), Qdebug_early__handler, 0);
 
+  fprintf (stderr, "[ohos] top_level_2 before Feval\n");
   Lisp_Object res = Feval (Vtop_level, Qt);
+  fprintf (stderr, "[ohos] top_level_2 after Feval\n");
 
   if (setup_handler)
     pop_handler ();
