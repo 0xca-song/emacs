@@ -7311,6 +7311,7 @@ init_display_interactive (void)
     {
       Vinitial_window_system = Qohos;
       ohos_term_init ();
+      fprintf (stderr, "[ohos] init_display after term_init\n");
       return;
     }
 #endif

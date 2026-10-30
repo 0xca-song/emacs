@@ -267,6 +267,8 @@ DEFUN ("ohos-create-frame", Fohos_create_frame, Sohos_create_frame, 0, 1, 0,
   XSETFRAME (frame, f);
   Vframe_list = Fcons (frame, Vframe_list);
   fprintf (stderr, "[ohos] create_frame done\n");
+  Fselect_frame (frame, Qnil);
+  fprintf (stderr, "[ohos] select_frame done\n");
   return frame;
 }
 
