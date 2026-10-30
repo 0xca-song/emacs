@@ -195,7 +195,6 @@ ohos_term_init (void)
   terminal->reference_count++;
   terminal->name = xstrdup ("ohos");
   dpyinfo->name_list_element = Fcons (build_string ("ohos"), Qnil);
-  Fohos_create_frame (Qnil);
   fprintf (stderr, "[ohos] term_init end\n");
   return dpyinfo;
 }
@@ -225,6 +224,9 @@ ohos_create_frame (struct terminal *terminal)
   f->output_data.ohos->root_window = 0;
   fprintf (stderr, "[ohos] frame created\n");
   ohos_log (FRAME_WINDOW_P (f) ? "frame window_p=1" : "frame window_p=0");
+  init_frame_faces (f);
+  adjust_frame_glyphs (f);
+  ohos_log ("frame faces/glyphs initialized");
   return f;
 }
 
