@@ -35,6 +35,7 @@ port_id port_popup_menu_to_emacs = 0;
 port_id port_emacs_to_session_manager = 1;
 
 struct ohos_font { int size; };
+struct ohos_bitmap { int w, h; std::vector<uint32_t> data; };
 struct ohos_view;
 struct ohos_window {
   int cols = 80, rows = 24;
@@ -179,7 +180,24 @@ void BFont_nchar_bounds (void *, const char *s, int *w, int *h, int *advance,
     }
   *h = 18; *advance = *w;
 }
-struct haiku_font_pattern *BFont_find (struct haiku_font_pattern *p) { return p; }
+struct haiku_font_pattern *BFont_find (struct haiku_font_pattern *)
+{
+  struct haiku_font_pattern *p = (struct haiku_font_pattern *)
+    calloc (1, sizeof *p);
+  if (!p)
+    return nullptr;
+  p->specified = FSPEC_FAMILY | FSPEC_STYLE | FSPEC_SPACING
+    | FSPEC_WEIGHT | FSPEC_SLANT | FSPEC_WIDTH | FSPEC_INDICES;
+  strcpy (p->family, "Noto Sans Mono");
+  strcpy (p->style, "Regular");
+  p->mono_spacing_p = 1;
+  p->weight = HAIKU_REGULAR;
+  p->slant = SLANT_REGULAR;
+  p->width = NORMAL_WIDTH;
+  p->family_index = 0;
+  p->style_index = 0;
+  return p;
+}
 int BFont_open_pattern (struct haiku_font_pattern *, void **font, float) { *font = new ohos_font; return 0; }
 void BFont_populate_fixed_family (struct haiku_font_pattern *) {}
 void BFont_populate_plain_family (struct haiku_font_pattern *) {}
@@ -263,12 +281,21 @@ void BView_cr_dump_clipping (void *, void *) {}
 int BScrollBar_default_size (int) { return 12; }
 void BScrollBar_delete (void *) {}
 
-void *BBitmap_new (int, int, int) { return nullptr; }
-void *BBitmap_data (void *) { return nullptr; }
-int BBitmap_convert (void *, void **) { return -1; }
-void BBitmap_free (void *) {}
-void BBitmap_dimensions (void *, int *w, int *h, int *a, int *b, int32_t *c, int *d)
-{ *w = *h = 0; *a = *b = *c = *d = 0; }
+void *BBitmap_new (int w, int h, int)
+{
+  ohos_bitmap *b = new ohos_bitmap;
+  b->w = w; b->h = h; b->data.assign ((size_t) w * h, 0xffffffffu);
+  return b;
+}
+void *BBitmap_data (void *bitmap) { return ((ohos_bitmap *) bitmap)->data.data (); }
+int BBitmap_convert (void *, void **out) { if (out) *out = nullptr; return -1; }
+void BBitmap_free (void *bitmap) { delete (ohos_bitmap *) bitmap; }
+size_t BBitmap_bytes_length (void *bitmap) { return ((ohos_bitmap *) bitmap)->data.size () * 4; }
+void BBitmap_dimensions (void *bitmap, int *w, int *h, int *a, int *b, int32_t *c, int *d)
+{
+  ohos_bitmap *bm = (ohos_bitmap *) bitmap;
+  *w = bm->w; *h = bm->h; *a = 0; *b = 0; *c = 0; *d = 0;
+}
 void BBitmap_import_fringe_bitmap (void *, unsigned short *, int, int) {}
 void be_draw_cross_on_pixmap (void *, int, int, int, int, uint32_t) {}
 
@@ -316,7 +343,6 @@ void EmacsView_flip_and_blit (void *) {}
 int EmacsView_double_buffered_p (void *) { return 0; }
 char *be_popup_file_dialog (int, const char *, int, int, void *, const char *,
                             const char *, void (*) (void)) { return nullptr; }
-size_t BBitmap_bytes_length (void *) { return 0; }
 
 void *BMessage_new (void) { return nullptr; }
 void BMessage_delete (void *) {}
