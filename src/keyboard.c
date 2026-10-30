@@ -1005,8 +1005,10 @@ cmd_error (Lisp_Object data)
 
   specbind (Qstandard_output, Qt);
   specbind (Qstandard_input, Qt);
+  fprintf (stderr, "[ohos] cl1 before kset prefix\n");
   kset_prefix_arg (current_kboard, Qnil);
   kset_last_prefix_arg (current_kboard, Qnil);
+  fprintf (stderr, "[ohos] cl1 after kset prefix\n");
   cancel_echoing ();
 
   /* Avoid unquittable loop if data contains a circular list.  */
@@ -1336,16 +1338,20 @@ command_loop_1 (void)
   modiff_count prev_modiff = 0;
   struct buffer *prev_buffer = NULL;
 
+  fprintf (stderr, "[ohos] cl1 before kset prefix\n");
   kset_prefix_arg (current_kboard, Qnil);
   kset_last_prefix_arg (current_kboard, Qnil);
+  fprintf (stderr, "[ohos] cl1 after kset prefix\n");
   Vdeactivate_mark = Qnil;
   waiting_for_input = false;
+  fprintf (stderr, "[ohos] cl1 before cancel_echoing\n");
   cancel_echoing ();
+  fprintf (stderr, "[ohos] cl1 after cancel_echoing\n");
 
   this_command_key_count = 0;
   this_single_command_key_start = 0;
 
-  if (NILP (Vmemory_full) && !EQ (Vwindow_system, Qohos))
+  if (NILP (Vmemory_full) && !EQ (KVAR (current_kboard, Vwindow_system), Qohos))
     {
       /* Make sure this hook runs after commands that get errors and
 	 throw to top level.  */
@@ -1436,6 +1442,14 @@ command_loop_1 (void)
       Vthis_command_keys_shift_translated = Qnil;
 
       /* Read next key sequence; i gets its length.  */
+      if (EQ (KVAR (current_kboard, Vwindow_system), Qohos))
+        {
+          fprintf (stderr, "[ohos] command_loop_1 force redisplay\n");
+          redisplay ();
+          fprintf (stderr, "[ohos] command_loop_1 force redisplay done\n");
+          for (;;)
+            pause ();
+        }
       fprintf (stderr, "[ohos] command_loop_1 before read_key_sequence\n");
       raw_keybuf_count = 0;
       Lisp_Object keybuf[READ_KEY_ELTS];
