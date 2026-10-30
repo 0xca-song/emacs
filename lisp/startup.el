@@ -1669,6 +1669,8 @@ please check its value")
 	      tool-bar-mode nil))
     (ohos-trace "command-line before frame-initialize")
     (frame-initialize)
+    (when (eq window-system 'ohos)
+      (select-frame (car (frame-list))))
     (ohos-trace "command-line after frame-initialize"))
 
   (when (and (fboundp 'x-create-frame)

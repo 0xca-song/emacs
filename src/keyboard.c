@@ -1448,8 +1448,16 @@ command_loop_1 (void)
           ohos_log ("force redisplay");
           if (!FRAME_OHOS_P (SELECTED_FRAME ()))
             {
-              Lisp_Object nf = Fohos_create_frame (Qnil);
-              Fselect_frame (nf, Qnil);
+              Lisp_Object tail;
+              for (tail = Vframe_list; CONSP (tail); tail = XCDR (tail))
+                {
+                  struct frame *rf = XFRAME (XCAR (tail));
+                  if (FRAME_OHOS_P (rf))
+                    {
+                      Fselect_frame (XCAR (tail), Qnil);
+                      break;
+                    }
+                }
             }
           {
             struct frame *rf = SELECTED_FRAME ();
