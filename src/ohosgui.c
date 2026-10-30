@@ -181,6 +181,7 @@ ohos_term_init (void)
   terminal->reference_count++;
   terminal->name = xstrdup ("ohos");
   dpyinfo->name_list_element = Fcons (build_string ("ohos"), Qnil);
+  Fohos_create_frame (Qnil);
   fprintf (stderr, "[ohos] term_init end\n");
   return dpyinfo;
 }
@@ -200,9 +201,12 @@ ohos_create_frame (struct terminal *terminal)
   f->line_height = 18;
   f->text_cols = f->total_cols = 80;
   f->text_lines = f->total_lines = 24;
+  fprintf (stderr, "[ohos] frame before font\n");
   f->output_data.ohos->font = ohosfont_make_default (f);
+  fprintf (stderr, "[ohos] frame font=%p\n", (void *) f->output_data.ohos->font);
   f->output_data.ohos->parent_desc = 0;
   f->output_data.ohos->root_window = 0;
+  fprintf (stderr, "[ohos] frame created\n");
   return f;
 }
 
@@ -257,10 +261,12 @@ DEFUN ("ohos-create-frame", Fohos_create_frame, Sohos_create_frame, 0, 1, 0,
   (Lisp_Object parms)
 {
   (void) parms;
+  fprintf (stderr, "[ohos] create_frame enter\n");
   struct frame *f = ohos_create_frame (terminal_list);
   Lisp_Object frame;
   XSETFRAME (frame, f);
   Vframe_list = Fcons (frame, Vframe_list);
+  fprintf (stderr, "[ohos] create_frame done\n");
   return frame;
 }
 
