@@ -167,6 +167,7 @@ ohos_create_terminal (struct ohos_display_info *dpyinfo)
 struct ohos_display_info *
 ohos_term_init (void)
 {
+  fprintf (stderr, "[ohos] term_init begin\n");
   struct ohos_display_info *dpyinfo = xzalloc (sizeof *dpyinfo);
   dpyinfo->resx = 96.0;
   dpyinfo->resy = 96.0;
@@ -182,6 +183,7 @@ ohos_term_init (void)
   terminal->reference_count++;
   terminal->name = xstrdup ("ohos");
   dpyinfo->name_list_element = Fcons (build_string ("ohos"), Qnil);
+  fprintf (stderr, "[ohos] term_init end\n");
   return dpyinfo;
 }
 
