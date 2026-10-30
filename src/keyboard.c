@@ -1446,6 +1446,11 @@ command_loop_1 (void)
         {
           fprintf (stderr, "[ohos] command_loop_1 force redisplay\n");
           ohos_log ("force redisplay");
+          {
+            struct frame *rf = SELECTED_FRAME ();
+            rf->garbaged = 1;
+            rf->redisplay = 1;
+          }
           redisplay ();
           fprintf (stderr, "[ohos] command_loop_1 force redisplay done\n");
           for (;;)

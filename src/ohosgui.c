@@ -224,6 +224,7 @@ ohos_create_frame (struct terminal *terminal)
   f->output_data.ohos->parent_desc = 0;
   f->output_data.ohos->root_window = 0;
   fprintf (stderr, "[ohos] frame created\n");
+  ohos_log (FRAME_WINDOW_P (f) ? "frame window_p=1" : "frame window_p=0");
   return f;
 }
 

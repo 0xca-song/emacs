@@ -17085,6 +17085,11 @@ redisplay (void)
 {
   fprintf (stderr, "[ohos] redisplay enter\n");
   ohos_log ("redisplay enter");
+  {
+    struct frame *rf = SELECTED_FRAME ();
+    ohos_log (FRAME_WINDOW_P (rf) ? "redisplay selected window_p=1"
+                                  : "redisplay selected window_p=0");
+  }
   redisplay_internal ();
   ohos_log ("redisplay leave");
   fprintf (stderr, "[ohos] redisplay leave\n");
