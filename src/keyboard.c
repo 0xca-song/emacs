@@ -1164,6 +1164,7 @@ command_loop (void)
 Lisp_Object
 command_loop_2 (Lisp_Object handlers)
 {
+  fprintf (stderr, "[ohos] command_loop_2 enter\n");
   register Lisp_Object val;
 
   do
@@ -1183,6 +1184,10 @@ top_level_2 (void)
     /* FIXME: Should we (re)use `list_of_error` from `xdisp.c`? */
     push_handler_bind (list1 (Qerror), Qdebug_early__handler, 0);
 
+  {
+    Lisp_Object top = Fprin1_to_string (Vtop_level, Qnil, Qnil);
+    fprintf (stderr, "[ohos] top_level=%s\n", SDATA (top));
+  }
   fprintf (stderr, "[ohos] top_level_2 before Feval\n");
   Lisp_Object res = Feval (Vtop_level, Qt);
   fprintf (stderr, "[ohos] top_level_2 after Feval\n");
@@ -1195,6 +1200,7 @@ top_level_2 (void)
 static Lisp_Object
 top_level_1 (Lisp_Object ignore)
 {
+  fprintf (stderr, "[ohos] top_level_1 enter\n");
   /* On entry to the outer level, run the startup file.  */
   if (!NILP (Vtop_level))
     internal_condition_case (top_level_2, Qerror, cmd_error);
@@ -1326,6 +1332,7 @@ static void adjust_point_for_property (ptrdiff_t, bool);
 static Lisp_Object
 command_loop_1 (void)
 {
+  fprintf (stderr, "[ohos] command_loop_1 enter\n");
   modiff_count prev_modiff = 0;
   struct buffer *prev_buffer = NULL;
 
