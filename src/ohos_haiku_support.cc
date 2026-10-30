@@ -433,3 +433,7 @@ void be_start_watching_selection (enum haiku_clipboard) {}
 void be_update_clipboard_count (enum haiku_clipboard) {}
 status_t be_write_node_message (const char *, const char *, void *) { return B_ERROR; }
 }
+
+extern "C" intmax_t
+be_display_notification (const char *, const char *, intmax_t, int, const char *)
+{ return 0; }
