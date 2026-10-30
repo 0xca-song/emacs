@@ -1804,7 +1804,9 @@ please check its value")
   (ohos-trace "command-line after scratch/memory")
   ;; Process the remaining args.
   (ohos-trace "command-line before command-line-1")
-  (command-line-1 (cdr command-line-args))
+  (if (eq window-system 'ohos)
+      nil
+    (command-line-1 (cdr command-line-args)))
   (ohos-trace "command-line after command-line-1")
 
   ;; If -batch, terminate after processing the command options.
@@ -3186,7 +3188,10 @@ nil default-directory" name)
         ;; (with-no-warnings
         ;; 	(setq menubar-bindings-done t))
 
-        (display-startup-screen (> displayable-buffers-len 0))))))
+        (ohos-trace "command-line-1 before startup screen")
+        (unless (eq window-system 'ohos)
+          (display-startup-screen (> displayable-buffers-len 0)))
+        (ohos-trace "command-line-1 after startup screen")))))
 
 (defun command-line--load-script (file)
   (load-with-code-conversion
