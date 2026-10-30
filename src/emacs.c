@@ -2553,12 +2553,15 @@ Using an Emacs configured with --with-x-toolkit=lucid does not have this problem
     init_crit ();	/* w32notify.c needs this in batch mode.  */
 #endif	/* HAVE_W32NOTIFY */
   init_xdisp ();
+  fprintf (stderr, "[ohos] main after init_xdisp\n");
 #ifdef HAVE_WINDOW_SYSTEM
   init_fringe ();
 #endif /* HAVE_WINDOW_SYSTEM */
   init_macros ();
   init_window ();
+  fprintf (stderr, "[ohos] main after init_window\n");
   init_font ();
+  fprintf (stderr, "[ohos] main after init_font\n");
 
 #ifdef HAVE_ANDROID
   init_androidmenu ();
@@ -2636,8 +2639,11 @@ Using an Emacs configured with --with-x-toolkit=lucid does not have this problem
 #endif
 
   /* Enter editor command loop.  This never returns.  */
+  fprintf (stderr, "[ohos] main before set_initial_minibuffer_mode\n");
   set_initial_minibuffer_mode ();
+  fprintf (stderr, "[ohos] main before Frecursive_edit\n");
   Frecursive_edit ();
+  fprintf (stderr, "[ohos] main after Frecursive_edit\n");
   eassume (false);
 }
 
