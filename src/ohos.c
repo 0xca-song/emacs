@@ -29,6 +29,7 @@ struct ohos_draw_cmd
 {
   int op;
   int x, y, w, h;
+  int to_y;
   unsigned code;
   uint32_t fg, bg;
   uint32_t flags;
@@ -182,11 +183,11 @@ ohos_draw_cursor (int x, int y, int w, int h, uint32_t fg, uint32_t bg,
 }
 
 void
-ohos_draw_scroll (int current_y, int desired_y, int height)
+ohos_draw_scroll (int x, int from_y, int width, int height, int to_y)
 {
   struct ohos_draw_cmd cmd = { .op = OHOS_OP_SCROLL,
-			       .x = current_y, .y = desired_y,
-			       .h = height };
+			       .x = x, .y = from_y, .w = width,
+			       .h = height, .to_y = to_y };
   enqueue (&cmd);
 }
 
@@ -236,7 +237,7 @@ ohos_pump_draw_commands (void)
 	  break;
 	case OHOS_OP_SCROLL:
 	  if (draw_scroll_sink)
-	    draw_scroll_sink (cmd.x, cmd.y, cmd.h);
+	    draw_scroll_sink (cmd.x, cmd.y, cmd.w, cmd.h, cmd.to_y);
 	  break;
 	case OHOS_OP_PRESENT:
 	  if (draw_present_sink)

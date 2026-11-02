@@ -74,8 +74,6 @@ ohos_clear_frame (struct frame *f)
   ohos_draw_clear ((uint32_t) FRAME_BACKGROUND_PIXEL (f));
 }
 
-static bool ohos_force_redraw;
-
 static void
 ohos_flush (struct frame *f)
 {
@@ -87,12 +85,6 @@ ohos_flush (struct frame *f)
       snprintf (buf, sizeof buf, "ohos_flush frame=%p selected=%p live=%d",
 		(void *) f, (void *) sf, FRAME_LIVE_P (f));
       ohos_log (buf);
-    }
-  if (ohos_force_redraw)
-    {
-      ohos_force_redraw = false;
-      ohos_draw_clear ((uint32_t) FRAME_BACKGROUND_PIXEL (f));
-      SET_FRAME_GARBAGED (f);
     }
   ohos_draw_present ();
 }
@@ -106,9 +98,40 @@ ohos_after_update_window_line (struct window *w, struct glyph_row *row)
 static void
 ohos_scroll_run (struct window *w, struct run *run)
 {
-  if (run)
-    ohos_draw_scroll (run->current_y, run->desired_y, run->height);
-  ohos_force_redraw = true;
+  struct frame *f = XFRAME (w->frame);
+  int x, y, width, height, from_y, to_y, bottom_y;
+
+  window_box (w, ANY_AREA, &x, &y, &width, &height);
+  from_y = WINDOW_TO_FRAME_PIXEL_Y (w, run->current_y);
+  to_y = WINDOW_TO_FRAME_PIXEL_Y (w, run->desired_y);
+  bottom_y = y + height;
+
+  if (to_y < from_y)
+    {
+      if (from_y + run->height > bottom_y)
+	height = bottom_y - from_y;
+      else
+	height = run->height;
+      if (to_y < y)
+	{
+	  int d = y - to_y;
+	  height -= d;
+	  to_y += d;
+	  from_y += d;
+	}
+    }
+  else
+    {
+      if (to_y + run->height > bottom_y)
+	height = bottom_y - to_y;
+      else
+	height = run->height;
+    }
+  if (height <= 0)
+    return;
+
+  gui_clear_cursor (w);
+  ohos_draw_scroll (x, from_y, width, height, to_y);
 }
 
 static void
