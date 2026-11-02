@@ -67,9 +67,14 @@ ohos_create_frame (struct terminal *terminal)
   ohosfont_register_frame (f);
   Lisp_Object font_obj = ohosfont_make_default_object (f);
   f->output_data.ohos->font = NILP (font_obj) ? NULL : XFONT_OBJECT (font_obj);
-  f->output_data.ohos->fontset = fs_query_fontset (build_string ("fontset-default"), 0);
   if (!NILP (font_obj))
-    store_frame_param (f, Qfont, font_obj);
+    {
+      store_frame_param (f, Qfont, font_obj);
+      f->output_data.ohos->fontset = fontset_from_font (font_obj);
+    }
+  else
+    f->output_data.ohos->fontset
+      = fs_query_fontset (build_string ("fontset-default"), 0);
   ohos_log (NILP (font_obj) ? "ohos frame font open failed"
 	    : "ohos frame font open ok");
   ohos_log ("ohos_create_frame font/fontset done");
