@@ -17,6 +17,9 @@ typedef struct ohos_display_info Display_Info;
 #include "keyboard.h"
 #include "ohosgui.h"
 
+extern Lisp_Object Fset_fontset_font (Lisp_Object, Lisp_Object,
+				      Lisp_Object, Lisp_Object, Lisp_Object);
+
 static struct terminal *
 ohos_find_terminal (void)
 {
@@ -71,6 +74,21 @@ ohos_create_frame (struct terminal *terminal)
     {
       store_frame_param (f, Qfont, font_obj);
       f->output_data.ohos->fontset = fontset_from_font (font_obj);
+      {
+	/* Map the CJK charsets explicitly; fontset_from_font only maps
+	   the registry's primary charset (unicode-bmp), leaving the
+	   generic chinese-gb2312 fallback in front for CJK text.  */
+	static const char *const cjk_charsets[] = {
+	  "chinese-gb2312", "chinese-gbk", "chinese-big5-1",
+	  "chinese-big5-2", "japanese-jisx0208", "korean-ksc5601",
+	  "unicode-bmp", NULL
+	};
+	Lisp_Object fset_name = fontset_name (f->output_data.ohos->fontset);
+	Lisp_Object spec = AREF (font_obj, FONT_NAME_INDEX);
+	for (int i = 0; cjk_charsets[i]; i++)
+	  Fset_fontset_font (fset_name, intern (cjk_charsets[i]),
+			     spec, Qnil, Qnil);
+      }
     }
   else
     f->output_data.ohos->fontset
