@@ -265,6 +265,13 @@ static pthread_mutex_t input_lock = PTHREAD_MUTEX_INITIALIZER;
 static int input_pipe[2] = { -1, -1 };
 
 void
+ohos_input_raw (const char *data, size_t len)
+{
+  for (size_t i = 0; i < len; i++)
+    ohos_input_key ((unsigned char) data[i], 0, 1);
+}
+
+void
 ohos_create_input_pipe (void)
 {
   if (input_pipe[0] >= 0)

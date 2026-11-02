@@ -182,6 +182,7 @@ void ohos_pump_draw_commands (void);
 /* UI thread -> Emacs input queue.  */
 #define OHOS_INPUT_TEXT_FLAG 0x80000000u
 void ohos_create_input_pipe (void);
+void ohos_input_raw (const char *data, size_t len);
 int ohos_input_wait_fd (void);
 int ohos_input_key (unsigned key, unsigned modifiers, int pressed);
 int ohos_pop_input (unsigned *key, unsigned *modifiers);
