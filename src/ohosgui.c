@@ -428,6 +428,19 @@ ohos_delete_frame (struct frame *f)
   (void) f;
 }
 
+static void
+ohos_delete_terminal (struct terminal *terminal)
+{
+  struct ohos_display_info *dpyinfo = terminal->display_info.ohos;
+  if (!dpyinfo)
+    return;
+  int fd = ohos_input_wait_fd ();
+  if (fd >= 0)
+    delete_keyboard_wait_descriptor (fd);
+  terminal->display_info.ohos = NULL;
+  xfree (dpyinfo);
+}
+
 struct terminal *
 ohos_create_terminal (struct ohos_display_info *dpyinfo)
 {
@@ -438,6 +451,7 @@ ohos_create_terminal (struct ohos_display_info *dpyinfo)
   terminal->kboard = allocate_kboard (Qohos);
   terminal->read_socket_hook = ohos_read_socket;
   terminal->delete_frame_hook = ohos_delete_frame;
+  terminal->delete_terminal_hook = ohos_delete_terminal;
   terminal->clear_frame_hook = ohos_clear_frame;
   terminal->defined_color_hook = ohos_defined_color;
   terminal->query_frame_background_color
