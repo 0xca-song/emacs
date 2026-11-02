@@ -192,6 +192,7 @@ void ohos_pump_draw_commands (void);
 /* UI thread -> Emacs input queue.  */
 #define OHOS_INPUT_TEXT_FLAG 0x80000000u
 #define OHOS_INPUT_RAW_FLAG  0x40000000u
+#define OHOS_INPUT_FOCUS_FLAG 0x20000000u
 void ohos_create_input_pipe (void);
 void ohos_input_raw (const char *data, size_t len);
 int ohos_input_wait_fd (void);
@@ -201,6 +202,7 @@ int ohos_pop_input (unsigned *key, unsigned *modifiers, int *mouse,
 void ohos_input_mouse (int button, int x, int y, unsigned modifiers,
 		       int press);
 void ohos_input_text (const char *text);
+void ohos_input_focus (int focused);
 
 #ifdef __cplusplus
 }

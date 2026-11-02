@@ -338,6 +338,15 @@ ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
       ev.frame_or_window = selected_frame;
       ev.timestamp = 0;
 
+      if (key & OHOS_INPUT_FOCUS_FLAG)
+	{
+	  ev.kind = modifiers ? FOCUS_IN_EVENT : FOCUS_OUT_EVENT;
+	  ev.code = 0;
+	  ev.modifiers = 0;
+	  kbd_buffer_store_event (&ev);
+	  count++;
+	  continue;
+	}
       if (key & OHOS_INPUT_RAW_FLAG)
 	{
 	  ev.kind = ASCII_KEYSTROKE_EVENT;

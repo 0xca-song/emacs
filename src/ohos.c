@@ -422,3 +422,24 @@ ohos_input_text (const char *text)
       (void) write (input_pipe[1], &byte, 1);
     }
 }
+
+void
+ohos_input_focus (int focused)
+{
+  pthread_mutex_lock (&input_lock);
+  if (input_count == OHOS_INPUT_CAP)
+    input_dropped++;
+  else
+    {
+      input_ring[input_tail].key = OHOS_INPUT_FOCUS_FLAG;
+      input_ring[input_tail].modifiers = focused ? 1 : 0;
+      input_tail = (input_tail + 1) & OHOS_INPUT_MASK;
+      input_count++;
+    }
+  pthread_mutex_unlock (&input_lock);
+  if (input_pipe[1] >= 0)
+    {
+      char byte = 1;
+      (void) write (input_pipe[1], &byte, 1);
+    }
+}
