@@ -7,10 +7,13 @@
 
 #include <config.h>
 #include <fcntl.h>
+#include <poll.h>
 #include <pthread.h>
+#include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 #include "lisp.h"
 #include "ohosgui.h"
@@ -424,6 +427,31 @@ ohos_input_text (const char *text)
 }
 
 void
+ohos_input_resize (int width, int height)
+{
+  if (width <= 0 || height <= 0)
+    return;
+  pthread_mutex_lock (&input_lock);
+  if (input_count == OHOS_INPUT_CAP)
+    input_dropped++;
+  else
+    {
+      input_ring[input_tail].key = OHOS_INPUT_RESIZE_FLAG
+	| ((unsigned) width & 0xffffu);
+      input_ring[input_tail].modifiers = (unsigned) height;
+      input_ring[input_tail].mouse = 0;
+      input_tail = (input_tail + 1) & OHOS_INPUT_MASK;
+      input_count++;
+    }
+  pthread_mutex_unlock (&input_lock);
+  if (input_pipe[1] >= 0)
+    {
+      char byte = 1;
+      (void) write (input_pipe[1], &byte, 1);
+    }
+}
+
+void
 ohos_input_focus (int focused)
 {
   pthread_mutex_lock (&input_lock);
@@ -442,4 +470,198 @@ ohos_input_focus (int focused)
       char byte = 1;
       (void) write (input_pipe[1], &byte, 1);
     }
+}
+
+/* ------------------------------------------------------------------ */
+/* Host (ArkUI) chrome channel: Emacs -> UI thread.                   */
+
+#define OHOS_HOST_QUEUE_CAP 32
+
+static char host_cmds[OHOS_HOST_QUEUE_CAP][OHOS_HOST_CMD_MAX];
+static unsigned host_head, host_tail, host_count;
+static unsigned long host_dropped;
+static pthread_mutex_t host_lock = PTHREAD_MUTEX_INITIALIZER;
+
+/* One-slot answer channel: the UI thread stores the result of the
+   pending request and wakes the Emacs thread through `result_pipe'.  */
+
+static int result_pipe[2] = { -1, -1 };
+static int result_id = -1;
+static int result_index = -1;
+static char result_text[OHOS_HOST_RESULT_TEXT];
+static pthread_mutex_t result_lock = PTHREAD_MUTEX_INITIALIZER;
+
+static void
+ohos_host_queue_init (void)
+{
+  static bool initialized;
+  if (initialized)
+    return;
+  initialized = true;
+  if (pipe (result_pipe) == 0)
+    {
+      fcntl (result_pipe[0], F_SETFL, O_NONBLOCK);
+      fcntl (result_pipe[1], F_SETFL, O_NONBLOCK);
+      fcntl (result_pipe[0], F_SETFD, FD_CLOEXEC);
+      fcntl (result_pipe[1], F_SETFD, FD_CLOEXEC);
+    }
+  else
+    result_pipe[0] = result_pipe[1] = -1;
+}
+
+void
+ohos_host_command (const char *fmt, ...)
+{
+  va_list ap;
+  char buf[OHOS_HOST_CMD_MAX];
+
+  ohos_host_queue_init ();
+  va_start (ap, fmt);
+  vsnprintf (buf, sizeof buf, fmt, ap);
+  va_end (ap);
+
+  pthread_mutex_lock (&host_lock);
+  if (host_count == OHOS_HOST_QUEUE_CAP)
+    host_dropped++;
+  else
+    {
+      strncpy (host_cmds[host_tail], buf, OHOS_HOST_CMD_MAX - 1);
+      host_cmds[host_tail][OHOS_HOST_CMD_MAX - 1] = '\0';
+      host_tail = (host_tail + 1) % OHOS_HOST_QUEUE_CAP;
+      host_count++;
+    }
+  pthread_mutex_unlock (&host_lock);
+}
+
+int
+ohos_host_take_command (char *buf, int cap)
+{
+  int found = 0;
+
+  if (!buf || cap <= 0)
+    return 0;
+  ohos_host_queue_init ();
+  pthread_mutex_lock (&host_lock);
+  if (host_count != 0)
+    {
+      strncpy (buf, host_cmds[host_head], cap - 1);
+      buf[cap - 1] = '\0';
+      host_head = (host_head + 1) % OHOS_HOST_QUEUE_CAP;
+      host_count--;
+      found = 1;
+    }
+  pthread_mutex_unlock (&host_lock);
+  return found;
+}
+
+void
+ohos_host_result (int id, int index, const char *text)
+{
+  ohos_host_queue_init ();
+  pthread_mutex_lock (&result_lock);
+  result_id = id;
+  result_index = index;
+  if (text)
+    {
+      strncpy (result_text, text, OHOS_HOST_RESULT_TEXT - 1);
+      result_text[OHOS_HOST_RESULT_TEXT - 1] = '\0';
+    }
+  else
+    result_text[0] = '\0';
+  pthread_mutex_unlock (&result_lock);
+  if (result_pipe[1] >= 0)
+    {
+      char byte = 1;
+      (void) write (result_pipe[1], &byte, 1);
+    }
+}
+
+int
+ohos_host_wait_result (int id, int timeout_ms, int *index,
+		       char *text, int cap)
+{
+  int remaining = timeout_ms;
+
+  ohos_host_queue_init ();
+  for (;;)
+    {
+      int matched = 0;
+      int got_index = -1;
+      char got_text[OHOS_HOST_RESULT_TEXT];
+
+      pthread_mutex_lock (&result_lock);
+      if (result_id == id)
+	{
+	  matched = 1;
+	  got_index = result_index;
+	  strncpy (got_text, result_text, sizeof got_text - 1);
+	  got_text[sizeof got_text - 1] = '\0';
+	  result_id = -1;
+	  result_index = -1;
+	  result_text[0] = '\0';
+	}
+      pthread_mutex_unlock (&result_lock);
+      if (matched)
+	{
+	  if (index)
+	    *index = got_index;
+	  if (text && cap > 0)
+	    {
+	      strncpy (text, got_text, cap - 1);
+	      text[cap - 1] = '\0';
+	    }
+	  return 1;
+	}
+
+      if (result_pipe[0] < 0)
+	{
+	  struct timespec ts = { 0, 5 * 1000 * 1000 };
+	  if (remaining <= 0)
+	    return 0;
+	  nanosleep (&ts, NULL);
+	  remaining -= 5;
+	  continue;
+	}
+
+      int wait = remaining < 20 ? remaining : 20;
+      if (wait < 0)
+	wait = 0;
+      struct pollfd pfd;
+      pfd.fd = result_pipe[0];
+      pfd.events = POLLIN;
+      pfd.revents = 0;
+      int rc = poll (&pfd, 1, wait);
+      if (rc > 0 && (pfd.revents & POLLIN))
+	{
+	  char buf[32];
+	  while (read (result_pipe[0], buf, sizeof buf) > 0)
+	    ;
+	}
+      if (remaining <= 20 && rc == 0)
+	return 0;
+      remaining -= wait;
+    }
+}
+
+void
+ohos_host_menu_result (int id, int index)
+{
+  ohos_host_result (id, index, NULL);
+}
+
+int
+ohos_menu_wait_result (int id, int timeout_ms)
+{
+  int index = -1;
+  if (!ohos_host_wait_result (id, timeout_ms, &index, NULL, 0))
+    return -2;
+  return index;
+}
+
+void
+ohos_host_drain (void)
+{
+  char buf[OHOS_HOST_CMD_MAX];
+  while (ohos_host_take_command (buf, sizeof buf))
+    ;
 }

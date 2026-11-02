@@ -32,7 +32,9 @@ struct ohos_display_info
 {
   struct terminal *terminal;
   Lisp_Object name_list_element;
-  struct frame *focused_frame;
+  /* Frame that currently has the input focus, and the frame the last
+     focus event named.  */
+  Lisp_Object focus_frame;
   struct frame *focus_event_frame;
   Mouse_HLInfo mouse_highlight;
   struct frame *last_mouse_frame;
@@ -58,6 +60,19 @@ struct ohos_display_info
   struct ohos_display_info *next;
 };
 
+/* One drawn scroll bar.  Scroll bars are painted with the normal draw
+   command stream rather than as toolkit widgets, so the rectangle and
+   handle position are kept here for hit testing and redraws.  */
+struct ohos_scroll_bar
+{
+  struct ohos_scroll_bar *next;
+  struct window *window;
+  int x, y, width, height;	/* frame pixel rectangle */
+  int portion, whole, position;
+  bool horizontal;
+  bool condemned;
+};
+
 struct ohos_output
 {
   struct ohos_display_info *display_info;
@@ -66,6 +81,34 @@ struct ohos_output
   int width, height;
   uintptr_t parent_desc;
   uintptr_t root_window;
+  /* Colors decoded from frame parameters.  The draw pipeline reads the
+     frame pixel colors, so these only need to be remembered when they
+     differ from the frame defaults (cursor/mouse).  */
+  unsigned long cursor_pixel;
+  unsigned long cursor_foreground_pixel;
+  unsigned long mouse_pixel;
+  /* Window state mirrored from frame parameters, used by the host
+     command channel to avoid redundant window operations.  */
+  bool fullscreen_hint;
+  int alpha_hint;
+  int iconified;
+  bool window_shown;
+  /* Incremented whenever the frame geometry changes, so the host can
+     tell a resize that came from Emacs from one the user performed.  */
+  unsigned geometry_serial;
+  /* Pixel size last reported by the ArkUI surface.  A resize request
+     that matches this size came from the host itself and must not be
+     echoed back as a window operation.  */
+  int host_surface_width;
+  int host_surface_height;
+  /* Redisplay / interaction state.  */
+  bool complete_p;		/* frame fully drawn in this update */
+  bool update_in_progress;
+  bool hourglass;		/* busy indicator active */
+  /* Cursor handles, see ohos_init_frame_cursors.  */
+  Emacs_Cursor invisible_cursor;
+  /* Scroll bar areas currently drawn, for hit testing and cleanup.  */
+  struct ohos_scroll_bar *scroll_bars;
   Emacs_Cursor text_cursor;
   Emacs_Cursor nontext_cursor;
   Emacs_Cursor modeline_cursor;
@@ -123,12 +166,38 @@ extern int XParseGeometry (const char *, int *, int *, unsigned int *, unsigned 
 extern Lisp_Object Fxw_display_color_p (Lisp_Object);
 extern Lisp_Object Fx_display_grayscale_p (Lisp_Object);
 extern struct ohos_display_info *ohos_term_init (void);
-extern struct frame *ohos_create_frame (struct terminal *);
+extern struct frame *ohos_create_frame (struct terminal *, Lisp_Object);
 extern struct terminal *ohos_create_terminal (struct ohos_display_info *);
 extern struct redisplay_interface *ohos_get_redisplay_interface (void);
 extern void syms_of_ohosgui (void);
 extern void syms_of_ohosfns (void);
+extern void ohos_frame_parm_init (void);
+extern frame_parm_handler ohos_frame_parm_handlers[];
+extern void ohos_set_window_size (struct frame *, bool, int, int);
+extern void ohos_set_window_size_and_position (struct frame *, int, int);
+extern void ohos_set_offset (struct frame *, int, int, int);
+extern void ohos_set_new_font_object (void);
+extern Lisp_Object ohos_set_new_font (struct frame *, Lisp_Object, int);
+extern void ohos_implicitly_set_name (struct frame *, Lisp_Object,
+				      Lisp_Object);
+extern void ohos_fullscreen_hook (struct frame *);
+extern void ohos_frame_visible_invisible (struct frame *, bool);
+extern void ohos_iconify_frame (struct frame *);
+extern void ohos_handle_surface_resize (struct frame *, int, int);
+extern void ohos_change_tab_bar_height (struct frame *, int);
+extern void ohos_change_tool_bar_height (struct frame *, int);
 extern void syms_of_ohosfont (void);
+extern void syms_of_ohosmenu (void);
+extern void syms_of_ohosselect (void);
+extern void ohos_default_font_parameter (struct frame *, Lisp_Object);
+extern void ohos_init_frame_cursors (struct frame *);
+extern Lisp_Object ohos_menu_show (struct frame *, int, int, int,
+				   Lisp_Object, const char **);
+extern Lisp_Object ohos_popup_dialog (struct frame *, Lisp_Object,
+				      Lisp_Object);
+extern void ohos_activate_menubar (struct frame *);
+extern Lisp_Object ohos_get_selection_value (Lisp_Object, Lisp_Object,
+					     bool, Lisp_Object);
 extern struct font *ohosfont_make_default (struct frame *);
 extern Lisp_Object ohosfont_make_default_object (struct frame *);
 extern void ohosfont_register_frame (struct frame *);
@@ -170,11 +239,50 @@ void ohos_set_draw_text_sink (ohos_draw_text_fn fn);
 void ohos_set_draw_cursor_sink (ohos_draw_cursor_fn fn);
 void ohos_set_draw_scroll_sink (ohos_draw_scroll_fn fn);
 void ohos_set_draw_present_sink (ohos_draw_present_fn fn);
+/* Native frame property sinks: the host (ArkUI page) installs these to
+   apply window title/clipboard changes.  */
 typedef void (*ohos_set_title_fn) (const char *);
 typedef void (*ohos_set_clipboard_fn) (const char *);
 void ohos_set_title_sink (ohos_set_title_fn fn);
 void ohos_set_clipboard_sink (ohos_set_clipboard_fn fn);
 void ohos_set_title (const char *title);
+
+/* ------------------------------------------------------------------ */
+/* Host (ArkUI) chrome channel.
+
+   Window operations that only ArkTS can perform (move/resize the native
+   window, change its decoration, show a menu panel, post a
+   notification) are queued as short text commands.  The ArkUI page
+   drains the queue from its UI thread with `ohos_host_take_command',
+   applies the command, and reports interactive results back with
+   `ohos_host_menu_result'.  */
+
+#define OHOS_HOST_CMD_MAX 8192
+#define OHOS_HOST_RESULT_TEXT 65536
+
+void ohos_host_command (const char *fmt, ...)
+  ATTRIBUTE_FORMAT_PRINTF (1, 2);
+int ohos_host_take_command (char *buf, int cap);
+
+/* Request/response pair for operations that must return a value to
+   Emacs (a menu selection, the clipboard contents).  Emacs allocates a
+   small integer ID, queues the request, then waits for the host to call
+   `ohos_host_result'.  */
+void ohos_host_result (int id, int index, const char *text);
+int ohos_host_wait_result (int id, int timeout_ms, int *index,
+			   char *text, int cap);
+
+/* Convenience wrappers used by the menu and selection backends.  */
+void ohos_host_menu_result (int id, int index);
+int ohos_menu_wait_result (int id, int timeout_ms);
+
+/* Drain any queued chrome command.  Used by the input pump so a busy
+   loop still lets window operations reach the host.  */
+void ohos_host_drain (void);
+
+/* True when a native OHOS terminal is up and the host channel can be
+   used.  */
+bool ohos_gui_available (void);
 void ohos_font_metrics (int ascent, int descent, int height,
 			int space_width, int underline_position,
 			int underline_thickness);
@@ -195,6 +303,7 @@ void ohos_pump_draw_commands (void);
 #define OHOS_INPUT_TEXT_FLAG 0x80000000u
 #define OHOS_INPUT_RAW_FLAG  0x40000000u
 #define OHOS_INPUT_FOCUS_FLAG 0x20000000u
+#define OHOS_INPUT_RESIZE_FLAG 0x10000000u
 void ohos_create_input_pipe (void);
 void ohos_input_raw (const char *data, size_t len);
 int ohos_input_wait_fd (void);
@@ -205,6 +314,9 @@ void ohos_input_mouse (int button, int x, int y, unsigned modifiers,
 		       int press);
 void ohos_input_text (const char *text);
 void ohos_input_focus (int focused);
+/* UI thread: the XComponent surface now has WIDTH x HEIGHT pixels.
+   Emacs adopts that geometry so the native frame fills the surface.  */
+void ohos_input_resize (int width, int height);
 
 #ifdef __cplusplus
 }
