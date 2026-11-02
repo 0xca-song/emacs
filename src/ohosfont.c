@@ -153,8 +153,7 @@ ohosfont_text_extents (struct font *font, const unsigned *code, int nglyphs,
 {
   int width = 0;
   for (int i = 0; i < nglyphs; i++)
-    width += (code[i] >= 0x1100 && code[i] <= 0x115f)
-      || (code[i] >= 0x2e80 && code[i] <= 0xa4cf) ? 18 : 9;
+    width += ohosfont_wide (code[i]) ? 18 : 9;
   metrics->lbearing = 0;
   metrics->rbearing = width;
   metrics->width = width;
