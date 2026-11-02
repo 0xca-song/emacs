@@ -621,9 +621,9 @@ ohos_find_scroll_bar (struct frame *f, struct window *w)
 static void
 ohos_draw_one_scroll_bar (struct frame *f, struct ohos_scroll_bar *bar)
 {
-  uint32_t bg = ohos_scroll_bar_color (f, intern ("scroll-bar-background"),
+  uint32_t bg = ohos_scroll_bar_color (f, Qohos_scroll_bar_background,
 				       (uint32_t) FRAME_BACKGROUND_PIXEL (f));
-  uint32_t fg = ohos_scroll_bar_color (f, intern ("scroll-bar-foreground"),
+  uint32_t fg = ohos_scroll_bar_color (f, Qohos_scroll_bar_foreground,
 				       (uint32_t) FRAME_FOREGROUND_PIXEL (f));
   int length = bar->horizontal ? bar->width : bar->height;
   int handle_size, handle_start, denominator;
@@ -824,7 +824,9 @@ ohos_judge_scroll_bars (struct frame *f)
       next = bar->next;
       if (!bar->condemned)
 	continue;
-      if (bar->window)
+      /* The window may have been deleted together with its bar; only
+	 touch windows that are still live.  */
+      if (bar->window && !NILP (bar->window->contents))
 	{
 	  if (WINDOW_HAS_VERTICAL_SCROLL_BAR (bar->window))
 	    wset_vertical_scroll_bar (bar->window, Qnil);
@@ -939,7 +941,8 @@ ohos_frame_rehighlight (struct ohos_display_info *dpyinfo)
 {
   struct frame *old_highlight = dpyinfo->highlight_frame;
 
-  if (!NILP (dpyinfo->focus_frame) && FRAME_LIVE_P (XFRAME (dpyinfo->focus_frame)))
+  if (!NILP (dpyinfo->focus_frame) && FRAMEP (dpyinfo->focus_frame)
+      && FRAME_LIVE_P (XFRAME (dpyinfo->focus_frame)))
     {
       dpyinfo->highlight_frame
 	= ((FRAMEP (FRAME_FOCUS_FRAME (XFRAME (dpyinfo->focus_frame))))
@@ -974,7 +977,7 @@ ohos_get_focus_frame (struct frame *f)
 {
   Lisp_Object focus = FRAME_DISPLAY_INFO (f)->focus_frame;
 
-  if (!FRAME_LIVE_P (XFRAME (focus)))
+  if (!FRAMEP (focus) || !FRAME_LIVE_P (XFRAME (focus)))
     return Qnil;
   return focus;
 }
@@ -1242,6 +1245,14 @@ ohos_handle_surface_resize (struct frame *f, int width, int height)
 
   cols = width / FRAME_COLUMN_WIDTH (f);
   lines = height / FRAME_LINE_HEIGHT (f);
+  {
+    char buf[160];
+    snprintf (buf, sizeof buf,
+	      "surface_resize px=%dx%d cell=%dx%d cols=%d lines=%d",
+	      width, height, FRAME_COLUMN_WIDTH (f), FRAME_LINE_HEIGHT (f),
+	      cols, lines);
+    ohos_log (buf);
+  }
   if (cols < 10)
     cols = 10;
   if (lines < 4)
@@ -1251,6 +1262,7 @@ ohos_handle_surface_resize (struct frame *f, int width, int height)
      resize command back to the host that reported it.  */
   o->host_surface_width = width;
   o->host_surface_height = height;
+  o->surface_seen = true;
 
   if (cols == FRAME_COLS (f) && lines == FRAME_LINES (f))
     return;
@@ -1711,6 +1723,8 @@ void
 syms_of_ohosgui (void)
 {
   DEFSYM (Qohos, "ohos");
+  DEFSYM (Qohos_scroll_bar_foreground, "scroll-bar-foreground");
+  DEFSYM (Qohos_scroll_bar_background, "scroll-bar-background");
   ohos_frame_parm_init ();
   syms_of_ohosfns ();
   /* syms_of_ohosfont is called from emacs.c next to this function.  */

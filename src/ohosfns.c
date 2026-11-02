@@ -373,8 +373,10 @@ ohos_set_window_size (struct frame *f, bool change_gravity,
 {
   {
     char buf[160];
-    snprintf (buf, sizeof buf, "set_window_size %d %d f=%p", width, height,
-	      (void *) f);
+    snprintf (buf, sizeof buf,
+	      "set_window_size px=%dx%d cols=%d lines=%d cell=%dx%d",
+	      width, height, FRAME_COLS (f), FRAME_LINES (f),
+	      FRAME_COLUMN_WIDTH (f), FRAME_LINE_HEIGHT (f));
     ohos_log (buf);
   }
   struct ohos_output *o = FRAME_OUTPUT_DATA (f);
@@ -390,6 +392,12 @@ ohos_set_window_size (struct frame *f, bool change_gravity,
   /* A resize that matches the surface size the ArkUI page reported
      came from the user resizing the window; echoing it back would
      start a resize loop.  */
+  /* Before the first surface report the native window already exists
+     and owns its size; asking the host to resize it would shrink it to
+     the boot frame size.  */
+  if (!o->surface_seen)
+    return;
+
   dw = width - o->host_surface_width;
   dh = height - o->host_surface_height;
   if (dw < 0)
@@ -690,9 +698,6 @@ ohos_create_frame (struct terminal *terminal, Lisp_Object parms)
   }
   ohos_log ("ohos_create_frame font/fontset done");
 
-  init_frame_faces (f);
-  ohos_log ("ohos_create_frame faces done");
-
   gui_default_parameter (f, parms, Qinternal_border_width, make_fixnum (0),
 			 "internalBorderWidth", "internalBorderWidth",
 			 RES_TYPE_NUMBER);
@@ -728,6 +733,12 @@ ohos_create_frame (struct terminal *terminal, Lisp_Object parms)
 			 "rightFringe", "RightFringe", RES_TYPE_NUMBER);
   gui_default_parameter (f, parms, Qno_special_glyphs, Qnil,
 			 NULL, NULL, RES_TYPE_BOOLEAN);
+  /* The default face is realized from the frame parameters, so all the
+     color parameters must be in place before init_frame_faces: it calls
+     realize_basic_faces, which aborts when they are missing.  */
+  init_frame_faces (f);
+  ohos_log ("ohos_create_frame faces done");
+
   gui_default_parameter (f, parms, Qmenu_bar_lines,
 			 NILP (Vmenu_bar_mode) ? make_fixnum (0) : make_fixnum (1),
 			 NULL, NULL, RES_TYPE_NUMBER);
@@ -756,7 +767,10 @@ ohos_create_frame (struct terminal *terminal, Lisp_Object parms)
 	f->explicit_name = false;
       }
   }
-  adjust_frame_size (f, 80 * 9, 24 * 18, 5, true, Qnil);
+  /* adjust_frame_size takes TEXT dimensions (columns and lines), not
+     pixels.  Passing pixels here made the frame collapse to the
+     default 10x6 text size.  */
+  adjust_frame_size (f, 80, 24, 5, true, Qnil);
   ohos_log ("ohos_create_frame size done");
 
   f->terminal->reference_count++;

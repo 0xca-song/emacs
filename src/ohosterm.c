@@ -1,6 +1,7 @@
 /* OHOS terminal backend, mirroring androidterm.c.  */
 
 #include <config.h>
+#include <stdlib.h>
 typedef void *Emacs_Pix_Container;
 typedef void *Emacs_Cursor;
 typedef void *Emacs_Pixmap;
@@ -86,6 +87,14 @@ ohos_term_init (void)
   dpyinfo->smallest_font_height = 18;
   dpyinfo->smallest_char_width = 9;
   dpyinfo->next = NULL;
+  /* xzalloc zeroes the structure, but every Lisp_Object field must be
+     Qnil, not NULL: the GC and the frame code rely on it.  */
+  dpyinfo->focus_frame = Qnil;
+  dpyinfo->name_list_element = Qnil;
+  dpyinfo->rdb = Qnil;
+  dpyinfo->default_name = Qnil;
+  dpyinfo->color_map = Qnil;
+  reset_mouse_highlight (&dpyinfo->mouse_highlight);
   struct terminal *terminal = ohos_create_terminal (dpyinfo);
   if (current_kboard == initial_kboard)
     current_kboard = terminal->kboard;
