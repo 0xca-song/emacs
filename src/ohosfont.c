@@ -17,11 +17,40 @@ typedef struct ohos_display_info Display_Info;
 #include "ohosgui.h"
 
 #include <string.h>
+#include <native_drawing/drawing_font.h>
+#include <native_drawing/drawing_font_mgr.h>
+#include <native_drawing/drawing_typeface.h>
+#include <native_drawing/drawing_text_declaration.h>
 
 struct ohosfont_info
 {
   struct font font;
+  OH_Drawing_Font *drawing_font;
 };
+
+static int
+ohosfont_utf8 (unsigned code, char *buf)
+{
+  if (code < 0x80) { buf[0] = (char) code; return 1; }
+  if (code < 0x800)
+    {
+      buf[0] = (char) (0xc0 | (code >> 6));
+      buf[1] = (char) (0x80 | (code & 0x3f));
+      return 2;
+    }
+  if (code < 0x10000)
+    {
+      buf[0] = (char) (0xe0 | (code >> 12));
+      buf[1] = (char) (0x80 | ((code >> 6) & 0x3f));
+      buf[2] = (char) (0x80 | (code & 0x3f));
+      return 3;
+    }
+  buf[0] = (char) (0xf0 | (code >> 18));
+  buf[1] = (char) (0x80 | ((code >> 12) & 0x3f));
+  buf[2] = (char) (0x80 | ((code >> 6) & 0x3f));
+  buf[3] = (char) (0x80 | (code & 0x3f));
+  return 4;
+}
 
 static struct font_driver ohosfont_driver;
 static int ohos_ascent = 14;
@@ -106,6 +135,19 @@ ohosfont_open (struct frame *f, Lisp_Object entity, int pixel_size)
   font->vertical_centering = 0;
   font->baseline_offset = 0;
   font->relative_compose = 0;
+  info->drawing_font = OH_Drawing_FontCreate ();
+  OH_Drawing_FontMgr *mgr = OH_Drawing_FontMgrCreate ();
+  OH_Drawing_FontStyleStruct style = { FONT_WEIGHT_400, FONT_WIDTH_NORMAL,
+				       FONT_STYLE_NORMAL };
+  OH_Drawing_Typeface *typeface = mgr
+    ? OH_Drawing_FontMgrMatchFamilyStyle (mgr, "monospace", style) : NULL;
+  if (typeface && info->drawing_font)
+    {
+      OH_Drawing_FontSetTypeface (info->drawing_font, typeface);
+      OH_Drawing_FontSetTextSize (info->drawing_font, 15.5f);
+    }
+  if (mgr)
+    OH_Drawing_FontMgrDestroy (mgr);
   font->props[FONT_NAME_INDEX] = build_string ("Noto Sans Mono-12");
   font->props[FONT_FAMILY_INDEX] = intern ("Noto Sans Mono");
   font->props[FONT_REGISTRY_INDEX] = Qiso10646_1;
@@ -131,20 +173,37 @@ ohosfont_make_default (struct frame *f)
 static void
 ohosfont_close (struct font *font)
 {
-  (void) font;
+  struct ohosfont_info *info = (struct ohosfont_info *) font;
+  if (info->drawing_font)
+    OH_Drawing_FontDestroy (info->drawing_font);
+  info->drawing_font = NULL;
 }
 
 static int
 ohosfont_has_char (Lisp_Object font, int c)
 {
-  return c >= 0 && c <= 0x10ffff;
+  struct ohosfont_info *info = (struct ohosfont_info *) XFONT_OBJECT (font);
+  if (!info->drawing_font || c < 0 || c > 0x10ffff)
+    return 0;
+  char buf[4]; int n = ohosfont_utf8 ((unsigned) c, buf);
+  uint16_t glyph = 0;
+  return OH_Drawing_FontTextToGlyphs (info->drawing_font, buf, n,
+				      TEXT_ENCODING_UTF8, &glyph, 1) > 0
+    && glyph != 0;
 }
 
 static unsigned
 ohosfont_encode_char (struct font *font, int c)
 {
-  (void) font;
-  return (unsigned) c;
+  struct ohosfont_info *info = (struct ohosfont_info *) font;
+  if (!info->drawing_font || c < 0 || c > 0x10ffff)
+    return 0;
+  char buf[4]; int n = ohosfont_utf8 ((unsigned) c, buf);
+  uint16_t glyph = 0;
+  if (OH_Drawing_FontTextToGlyphs (info->drawing_font, buf, n,
+				   TEXT_ENCODING_UTF8, &glyph, 1) == 0)
+    return 0;
+  return glyph;
 }
 
 static bool
