@@ -7309,7 +7309,9 @@ init_display_interactive (void)
 #ifdef HAVE_OHOS_GUI
   if (!inhibit_window_system)
     {
+#ifdef HAVE_OHOS_GUI
       Vinitial_window_system = Qohos;
+#endif
       ohos_term_init ();
       return;
     }

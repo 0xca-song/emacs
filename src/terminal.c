@@ -474,8 +474,10 @@ return values.  */)
       return Qhaiku;
     case output_android:
       return Qandroid;
+#ifdef HAVE_OHOS_GUI
     case output_ohos:
       return Qohos;
+#endif
     default:
       emacs_abort ();
     }
