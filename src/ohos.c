@@ -256,6 +256,8 @@ struct ohos_input_cmd
 {
   unsigned key;
   unsigned modifiers;
+  int mouse;
+  int button, x, y, press;
 };
 
 static struct ohos_input_cmd input_ring[OHOS_INPUT_CAP];
@@ -305,6 +307,7 @@ ohos_input_key (unsigned key, unsigned modifiers, int pressed)
     {
       input_ring[input_tail].key = key;
       input_ring[input_tail].modifiers = modifiers;
+      input_ring[input_tail].mouse = 0;
       input_tail = (input_tail + 1) & OHOS_INPUT_MASK;
       input_count++;
     }
@@ -317,8 +320,34 @@ ohos_input_key (unsigned key, unsigned modifiers, int pressed)
   return 0;
 }
 
+void
+ohos_input_mouse (int button, int x, int y, unsigned modifiers, int press)
+{
+  pthread_mutex_lock (&input_lock);
+  if (input_count == OHOS_INPUT_CAP)
+    input_dropped++;
+  else
+    {
+      input_ring[input_tail].mouse = 1;
+      input_ring[input_tail].button = button;
+      input_ring[input_tail].x = x;
+      input_ring[input_tail].y = y;
+      input_ring[input_tail].modifiers = modifiers;
+      input_ring[input_tail].press = press;
+      input_tail = (input_tail + 1) & OHOS_INPUT_MASK;
+      input_count++;
+    }
+  pthread_mutex_unlock (&input_lock);
+  if (input_pipe[1] >= 0)
+    {
+      char byte = 1;
+      (void) write (input_pipe[1], &byte, 1);
+    }
+}
+
 int
-ohos_pop_input (unsigned *key, unsigned *modifiers)
+ohos_pop_input (unsigned *key, unsigned *modifiers, int *mouse,
+		int *button, int *x, int *y, int *press)
 {
   int found = 0;
   pthread_mutex_lock (&input_lock);
@@ -326,6 +355,11 @@ ohos_pop_input (unsigned *key, unsigned *modifiers)
     {
       *key = input_ring[input_head].key;
       *modifiers = input_ring[input_head].modifiers;
+      *mouse = input_ring[input_head].mouse;
+      *button = input_ring[input_head].button;
+      *x = input_ring[input_head].x;
+      *y = input_ring[input_head].y;
+      *press = input_ring[input_head].press;
       input_head = (input_head + 1) & OHOS_INPUT_MASK;
       input_count--;
       found = 1;

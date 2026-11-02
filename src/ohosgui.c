@@ -321,13 +321,37 @@ ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
 {
   unsigned key, modifiers;
   int count = 0;
+  int mouse, button, mx, my, press;
   (void) terminal; (void) hold_quit;
 
-  while (ohos_pop_input (&key, &modifiers))
+  while (ohos_pop_input (&key, &modifiers, &mouse, &button, &mx, &my,
+			 &press))
     {
       struct input_event ev;
       int emods = 0;
       unsigned char_code = ohos_char_from_key (key);
+
+      if (mouse)
+	{
+	  EVENT_INIT (ev);
+	  ev.kind = MOUSE_CLICK_EVENT;
+	  ev.code = button & 3;
+	  ev.modifiers = press ? down_modifier : up_modifier;
+	  if (modifiers & OHOS_MOD_CTRL)
+	    ev.modifiers |= ctrl_modifier;
+	  if (modifiers & OHOS_MOD_SHIFT)
+	    ev.modifiers |= shift_modifier;
+	  if (modifiers & OHOS_MOD_ALT)
+	    ev.modifiers |= meta_modifier;
+	  XSETINT (ev.x, mx);
+	  XSETINT (ev.y, my);
+	  XSETFRAME (ev.frame_or_window, XFRAME (selected_frame));
+	  ev.arg = Qnil;
+	  ev.timestamp = 0;
+	  kbd_buffer_store_event (&ev);
+	  count++;
+	  continue;
+	}
 
       EVENT_INIT (ev);
       ev.frame_or_window = selected_frame;

@@ -186,7 +186,10 @@ void ohos_create_input_pipe (void);
 void ohos_input_raw (const char *data, size_t len);
 int ohos_input_wait_fd (void);
 int ohos_input_key (unsigned key, unsigned modifiers, int pressed);
-int ohos_pop_input (unsigned *key, unsigned *modifiers);
+int ohos_pop_input (unsigned *key, unsigned *modifiers, int *mouse,
+		    int *button, int *x, int *y, int *press);
+void ohos_input_mouse (int button, int x, int y, unsigned modifiers,
+		       int press);
 void ohos_input_text (const char *text);
 
 #ifdef __cplusplus
