@@ -441,6 +441,35 @@ ohos_create_terminal (struct ohos_display_info *dpyinfo)
   return terminal;
 }
 
+static ohos_set_title_fn ohos_title_sink;
+static ohos_set_clipboard_fn ohos_clipboard_sink;
+
+void
+ohos_set_title_sink (ohos_set_title_fn fn)
+{
+  ohos_title_sink = fn;
+}
+
+void
+ohos_set_clipboard_sink (ohos_set_clipboard_fn fn)
+{
+  ohos_clipboard_sink = fn;
+}
+
+void
+ohos_set_title (const char *title)
+{
+  if (ohos_title_sink)
+    ohos_title_sink (title);
+}
+
+void
+ohos_set_clipboard (const char *b64)
+{
+  if (ohos_clipboard_sink)
+    ohos_clipboard_sink (b64);
+}
+
 struct redisplay_interface *
 ohos_get_redisplay_interface (void)
 {

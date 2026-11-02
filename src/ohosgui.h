@@ -168,6 +168,12 @@ void ohos_set_draw_text_sink (ohos_draw_text_fn fn);
 void ohos_set_draw_cursor_sink (ohos_draw_cursor_fn fn);
 void ohos_set_draw_scroll_sink (ohos_draw_scroll_fn fn);
 void ohos_set_draw_present_sink (ohos_draw_present_fn fn);
+typedef void (*ohos_set_title_fn) (const char *);
+typedef void (*ohos_set_clipboard_fn) (const char *);
+void ohos_set_title_sink (ohos_set_title_fn fn);
+void ohos_set_clipboard_sink (ohos_set_clipboard_fn fn);
+void ohos_set_title (const char *title);
+void ohos_set_clipboard (const char *b64);
 
 void ohos_draw_clear (uint32_t bg);
 void ohos_draw_fill (int x, int y, int w, int h, uint32_t color);

@@ -137,8 +137,29 @@ DEFUN ("ohos-create-frame", Fohos_create_frame, Sohos_create_frame, 0, 1, 0,
   return obj;
 }
 
+DEFUN ("ohos-set-title", Fohos_set_title, Sohos_set_title, 1, 1, 0,
+       doc: /* Set the native window title to TITLE.  */)
+  (Lisp_Object title)
+{
+  CHECK_STRING (title);
+  ohos_set_title (SSDATA (title));
+  return Qnil;
+}
+
+DEFUN ("ohos-set-clipboard", Fohos_set_clipboard, Sohos_set_clipboard,
+       1, 1, 0,
+       doc: /* Set the system clipboard to base64-encoded B64.  */)
+  (Lisp_Object b64)
+{
+  CHECK_STRING (b64);
+  ohos_set_clipboard (SSDATA (b64));
+  return Qnil;
+}
+
 void
 syms_of_ohosfns (void)
 {
   defsubr (&Sohos_create_frame);
+  defsubr (&Sohos_set_title);
+  defsubr (&Sohos_set_clipboard);
 }
