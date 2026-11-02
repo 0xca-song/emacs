@@ -5,6 +5,7 @@
    patch; this file deliberately has no tty/pty dependency.  */
 
 #include <config.h>
+#include <unistd.h>
 typedef void *Emacs_Pix_Container;
 typedef void *Emacs_Cursor;
 typedef void *Emacs_Pixmap;
@@ -172,11 +173,159 @@ XParseGeometry (const char *string, int *x, int *y, unsigned int *width,
 }
 static struct redisplay_interface ohos_redisplay_interface;
 
+/* OHOS KeyCode values used by the ArkUI bridge.  Keep this small and
+   local: Emacs must not depend on the ArkUI headers.  */
+#define OHOS_KEY_0		2000
+#define OHOS_KEY_9		2009
+#define OHOS_KEY_DPAD_UP	2012
+#define OHOS_KEY_DPAD_DOWN	2013
+#define OHOS_KEY_DPAD_LEFT	2014
+#define OHOS_KEY_DPAD_RIGHT	2015
+#define OHOS_KEY_A		2017
+#define OHOS_KEY_Z		2042
+#define OHOS_KEY_COMMA		2043
+#define OHOS_KEY_PERIOD		2044
+#define OHOS_KEY_TAB		2049
+#define OHOS_KEY_SPACE		2050
+#define OHOS_KEY_ENTER		2054
+#define OHOS_KEY_DEL		2055
+#define OHOS_KEY_GRAVE		2056
+#define OHOS_KEY_MINUS		2057
+#define OHOS_KEY_EQUALS		2058
+#define OHOS_KEY_LEFT_BRACKET	2059
+#define OHOS_KEY_RIGHT_BRACKET	2060
+#define OHOS_KEY_BACKSLASH	2061
+#define OHOS_KEY_SEMICOLON	2062
+#define OHOS_KEY_APOSTROPHE	2063
+#define OHOS_KEY_SLASH		2064
+#define OHOS_KEY_PAGE_UP	2068
+#define OHOS_KEY_PAGE_DOWN	2069
+#define OHOS_KEY_ESCAPE		2070
+#define OHOS_KEY_FORWARD_DEL	2071
+#define OHOS_KEY_MOVE_HOME	2081
+#define OHOS_KEY_MOVE_END	2082
+#define OHOS_KEY_F1		2090
+#define OHOS_KEY_F12		2101
+
+#define OHOS_MOD_SHIFT	1
+#define OHOS_MOD_CTRL	2
+#define OHOS_MOD_ALT	4
+#define OHOS_MOD_META	8
+
+static unsigned
+ohos_char_from_key (unsigned code)
+{
+  if (code >= OHOS_KEY_A && code <= OHOS_KEY_Z)
+    return 'a' + (code - OHOS_KEY_A);
+  if (code >= OHOS_KEY_0 && code <= OHOS_KEY_9)
+    return '0' + (code - OHOS_KEY_0);
+  switch (code)
+    {
+    case OHOS_KEY_SPACE: return ' ';
+    case OHOS_KEY_COMMA: return ',';
+    case OHOS_KEY_PERIOD: return '.';
+    case OHOS_KEY_SLASH: return '/';
+    case OHOS_KEY_SEMICOLON: return ';';
+    case OHOS_KEY_APOSTROPHE: return '\'';
+    case OHOS_KEY_LEFT_BRACKET: return '[';
+    case OHOS_KEY_RIGHT_BRACKET: return ']';
+    case OHOS_KEY_BACKSLASH: return '\\';
+    case OHOS_KEY_GRAVE: return '`';
+    case OHOS_KEY_MINUS: return '-';
+    case OHOS_KEY_EQUALS: return '=';
+    default: return 0;
+    }
+}
+
+static unsigned
+ohos_keysym_from_key (unsigned code)
+{
+  switch (code)
+    {
+    case OHOS_KEY_ENTER: return 0xff0d;	/* XK_Return */
+    case OHOS_KEY_DEL: return 0xff08;	/* XK_BackSpace */
+    case OHOS_KEY_TAB: return 0xff09;	/* XK_Tab */
+    case OHOS_KEY_ESCAPE: return 0xff1b;	/* XK_Escape */
+    case OHOS_KEY_FORWARD_DEL: return 0xffff; /* XK_Delete */
+    case OHOS_KEY_DPAD_LEFT: return 0xff51;
+    case OHOS_KEY_DPAD_UP: return 0xff52;
+    case OHOS_KEY_DPAD_RIGHT: return 0xff53;
+    case OHOS_KEY_DPAD_DOWN: return 0xff54;
+    case OHOS_KEY_PAGE_UP: return 0xff55;
+    case OHOS_KEY_PAGE_DOWN: return 0xff56;
+    case OHOS_KEY_MOVE_HOME: return 0xff50;
+    case OHOS_KEY_MOVE_END: return 0xff57;
+    default:
+      if (code >= OHOS_KEY_F1 && code <= OHOS_KEY_F12)
+	return 0xffbe + (code - OHOS_KEY_F1);
+      return 0;
+    }
+}
+
 static int
 ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
 {
+  unsigned key, modifiers;
+  int count = 0;
   (void) terminal; (void) hold_quit;
-  return 0;
+
+  while (ohos_pop_input (&key, &modifiers))
+    {
+      struct input_event ev;
+      int emods = 0;
+      unsigned char_code = ohos_char_from_key (key);
+
+      EVENT_INIT (ev);
+      ev.frame_or_window = selected_frame;
+      ev.timestamp = 0;
+
+      if (char_code)
+	{
+	  if (modifiers & OHOS_MOD_SHIFT)
+	    {
+	      if (char_code >= 'a' && char_code <= 'z')
+		char_code -= 32;
+	      else if (char_code >= '0' && char_code <= '9')
+		{
+		  static const char shifted[] = ")!@#$%^&*(";
+		  char_code = shifted[char_code - '0'];
+		}
+	    }
+	  if (modifiers & OHOS_MOD_CTRL)
+	    char_code = make_ctrl_char (char_code);
+	  if (modifiers & (OHOS_MOD_ALT | OHOS_MOD_META))
+	    emods |= meta_modifier;
+
+	  ev.kind = ASCII_KEYSTROKE_EVENT;
+	  ev.code = char_code;
+	}
+      else
+	{
+	  unsigned keysym = ohos_keysym_from_key (key);
+	  if (!keysym)
+	    continue;
+	  if (modifiers & OHOS_MOD_SHIFT)
+	    emods |= shift_modifier;
+	  if (modifiers & OHOS_MOD_CTRL)
+	    emods |= ctrl_modifier;
+	  if (modifiers & (OHOS_MOD_ALT | OHOS_MOD_META))
+	    emods |= meta_modifier;
+	  ev.kind = NON_ASCII_KEYSTROKE_EVENT;
+	  ev.code = keysym;
+	}
+      ev.modifiers = emods;
+      kbd_buffer_store_event (&ev);
+      count++;
+    }
+
+  {
+    int fd = ohos_input_wait_fd ();
+    char buf[64];
+    if (fd >= 0)
+      while (read (fd, buf, sizeof buf) > 0)
+	;
+  }
+  return count;
 }
 
 static void

@@ -51,6 +51,10 @@ ohos_term_init (void)
   struct terminal *terminal = ohos_create_terminal (dpyinfo);
   if (current_kboard == initial_kboard)
     current_kboard = terminal->kboard;
+  ohos_create_input_pipe ();
+  int input_fd = ohos_input_wait_fd ();
+  if (input_fd >= 0)
+    add_keyboard_wait_descriptor (input_fd);
   terminal->kboard->reference_count++;
   terminal->reference_count++;
   terminal->name = xstrdup ("ohos");

@@ -6,8 +6,11 @@
    drains them from ohos_pump_draw_commands.  */
 
 #include <config.h>
+#include <fcntl.h>
 #include <pthread.h>
 #include <stdint.h>
+#include <string.h>
+#include <unistd.h>
 #include "lisp.h"
 #include "ohosgui.h"
 
@@ -219,4 +222,85 @@ ohos_pump_draw_commands (void)
 	  break;
 	}
     }
+}
+
+/* ------------------------------------------------------------------ */
+/* Input queue: ArkUI UI thread -> Emacs read_socket_hook.            */
+
+#define OHOS_INPUT_CAP 256
+#define OHOS_INPUT_MASK (OHOS_INPUT_CAP - 1)
+
+struct ohos_input_cmd
+{
+  unsigned key;
+  unsigned modifiers;
+};
+
+static struct ohos_input_cmd input_ring[OHOS_INPUT_CAP];
+static unsigned input_head, input_tail, input_count;
+static unsigned long input_dropped;
+static pthread_mutex_t input_lock = PTHREAD_MUTEX_INITIALIZER;
+static int input_pipe[2] = { -1, -1 };
+
+void
+ohos_create_input_pipe (void)
+{
+  if (input_pipe[0] >= 0)
+    return;
+  if (pipe (input_pipe) != 0)
+    {
+      input_pipe[0] = input_pipe[1] = -1;
+      return;
+    }
+  fcntl (input_pipe[0], F_SETFL, O_NONBLOCK);
+  fcntl (input_pipe[1], F_SETFL, O_NONBLOCK);
+  fcntl (input_pipe[0], F_SETFD, FD_CLOEXEC);
+  fcntl (input_pipe[1], F_SETFD, FD_CLOEXEC);
+}
+
+int
+ohos_input_wait_fd (void)
+{
+  return input_pipe[0];
+}
+
+int
+ohos_input_key (unsigned key, unsigned modifiers, int pressed)
+{
+  if (!pressed)
+    return 0;
+  pthread_mutex_lock (&input_lock);
+  if (input_count == OHOS_INPUT_CAP)
+    input_dropped++;
+  else
+    {
+      input_ring[input_tail].key = key;
+      input_ring[input_tail].modifiers = modifiers;
+      input_tail = (input_tail + 1) & OHOS_INPUT_MASK;
+      input_count++;
+    }
+  pthread_mutex_unlock (&input_lock);
+  if (input_pipe[1] >= 0)
+    {
+      char byte = 1;
+      (void) write (input_pipe[1], &byte, 1);
+    }
+  return 0;
+}
+
+int
+ohos_pop_input (unsigned *key, unsigned *modifiers)
+{
+  int found = 0;
+  pthread_mutex_lock (&input_lock);
+  if (input_count != 0)
+    {
+      *key = input_ring[input_head].key;
+      *modifiers = input_ring[input_head].modifiers;
+      input_head = (input_head + 1) & OHOS_INPUT_MASK;
+      input_count--;
+      found = 1;
+    }
+  pthread_mutex_unlock (&input_lock);
+  return found;
 }
