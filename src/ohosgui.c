@@ -24,39 +24,10 @@ typedef struct ohos_display_info Display_Info;
 static void
 ohos_draw_glyph_string (struct glyph_string *s)
 {
-  static int calls;
-  if ((calls++ % 200) == 0)
-    ohos_log ("ohos_draw_glyph_string");
   if (!s || !s->f || !s->first_glyph || s->nchars <= 0 || !s->face)
     return;
-
-  int line_height = FRAME_LINE_HEIGHT (s->f);
-  if (line_height <= 0)
-    return;
-
-  int pixel_x = s->x;
-  for (int i = 0; i < s->nchars; i++)
-    {
-      struct glyph *g = s->first_glyph + i;
-      if (g->type != CHAR_GLYPH)
-	continue;
-
-      int width = g->pixel_width;
-      if (width <= 0)
-	width = FRAME_COLUMN_WIDTH (s->f);
-      if (width <= 0)
-	continue;
-
-      uint32_t flags = (s->face->background != s->face->foreground) ? 1 : 0;
-      if (s->face->underline != FACE_NO_UNDERLINE)
-	flags |= 4;
-      if (s->font && FONT_WEIGHT_NUMERIC (s->font) >= 150)
-	flags |= 2;
-      ohos_draw_text (pixel_x, s->y, width, line_height, g->u.ch,
-		      (uint32_t) s->face->foreground,
-		      (uint32_t) s->face->background, flags);
-      pixel_x += width;
-    }
+  if (s->font && s->font->driver && s->font->driver->draw)
+    s->font->driver->draw (s, 0, s->nchars, s->x, s->y, true);
 }
 
 static void

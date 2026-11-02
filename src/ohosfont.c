@@ -166,19 +166,28 @@ static int
 ohosfont_draw (struct glyph_string *s, int from, int to, int x, int y,
                bool with_background)
 {
-  if (!s || from >= to)
+  if (!s || from >= to || !s->face)
     return 0;
+  int line_height = FRAME_LINE_HEIGHT (s->f);
   for (int i = from; i < to; i++)
     {
       struct glyph *g = s->first_glyph + i;
       if (g->type != CHAR_GLYPH)
         continue;
-      int w = (g->u.ch >= 0x1100 && g->u.ch <= 0x115f)
-        || (g->u.ch >= 0x2e80 && g->u.ch <= 0xa4cf) ? 18 : 9;
-      ohos_frame_text (x, y, w, g->u.ch,
-                       (uint32_t) s->face->foreground,
-                       (uint32_t) s->face->background,
-                       with_background);
+      int w = g->pixel_width > 0 ? g->pixel_width : FRAME_COLUMN_WIDTH (s->f);
+      if (w <= 0)
+        continue;
+      uint32_t flags = 0;
+      if (with_background
+          && s->face->background != s->face->foreground)
+        flags |= 1;
+      if (s->face->underline != FACE_NO_UNDERLINE)
+        flags |= 4;
+      if (s->font && FONT_WEIGHT_NUMERIC (s->font) >= 150)
+        flags |= 2;
+      ohos_draw_text (x, y, w, line_height, g->u.ch,
+                      (uint32_t) s->face->foreground,
+                      (uint32_t) s->face->background, flags);
       x += w;
     }
   return 0;
