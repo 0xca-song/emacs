@@ -1,6 +1,7 @@
 /* OHOS frame backend, mirroring the Android androidfns.c layout.  */
 
 #include <config.h>
+#include <stdio.h>
 typedef void *Emacs_Pix_Container;
 typedef void *Emacs_Cursor;
 typedef void *Emacs_Pixmap;
@@ -87,6 +88,40 @@ ohos_create_frame (struct terminal *terminal)
   Fselect_frame (frame, Qnil);
   SET_FRAME_GARBAGED (f);
   ohos_log ("ohos_create_frame selected");
+  {
+    /* Drop the bootstrap tty frame.  Only the native OHOS frame may
+       remain registered after startup.  */
+    Lisp_Object tail, next;
+    for (tail = Vframe_list; CONSP (tail); tail = next)
+      {
+	next = XCDR (tail);
+	Lisp_Object frame_object = XCAR (tail);
+	if (!FRAME_OHOS_P (XFRAME (frame_object)))
+	  Fdelete_frame (frame_object, Qt);
+      }
+  }
+  {
+    int frame_count = 0;
+    Lisp_Object tail;
+    for (tail = Vframe_list; CONSP (tail); tail = XCDR (tail))
+      frame_count++;
+    struct frame *selected = SELECTED_FRAME ();
+    char buf[160];
+    snprintf (buf, sizeof buf,
+	      "frame-list count=%d selected=%p selected_ohos=%d",
+	      frame_count, (void *) selected,
+	      selected ? FRAME_OHOS_P (selected) : 0);
+    ohos_log (buf);
+    int index = 0;
+    for (tail = Vframe_list; CONSP (tail); tail = XCDR (tail))
+      {
+	struct frame *item = XFRAME (XCAR (tail));
+	snprintf (buf, sizeof buf, "frame[%d] ptr=%p ohos=%d selected=%d",
+		  index++, (void *) item, FRAME_OHOS_P (item),
+		  item == selected);
+	ohos_log (buf);
+      }
+  }
   unbind_to (count, Qnil);
   return f;
 }
