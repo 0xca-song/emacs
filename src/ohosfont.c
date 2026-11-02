@@ -17,6 +17,7 @@ typedef struct ohos_display_info Display_Info;
 #include "ohosgui.h"
 
 #include <string.h>
+#include <stdio.h>
 #include <native_drawing/drawing_font.h>
 #include <native_drawing/drawing_font_mgr.h>
 #include <native_drawing/drawing_typeface.h>
@@ -206,6 +207,13 @@ ohosfont_has_char (Lisp_Object font, int c)
   uint16_t glyph = 0;
   OH_Drawing_Font *font_obj = ohosfont_wide ((unsigned) c)
     ? info->cjk_font : info->drawing_font;
+  if (ohosfont_wide ((unsigned) c))
+    {
+      char msg[96];
+      snprintf (msg, sizeof msg, "has_char U+%04X cjk=%p mono=%p",
+		(unsigned) c, info->cjk_font, info->drawing_font);
+      ohos_log (msg);
+    }
   if (!font_obj)
     font_obj = info->drawing_font ? info->drawing_font : info->cjk_font;
   if (!font_obj)
@@ -232,6 +240,13 @@ ohosfont_encode_char (struct font *font, int c)
   uint16_t glyph = 0;
   OH_Drawing_Font *font_obj = ohosfont_wide ((unsigned) c)
     ? info->cjk_font : info->drawing_font;
+  if (ohosfont_wide ((unsigned) c))
+    {
+      char msg[96];
+      snprintf (msg, sizeof msg, "has_char U+%04X cjk=%p mono=%p",
+		(unsigned) c, info->cjk_font, info->drawing_font);
+      ohos_log (msg);
+    }
   if (!font_obj)
     return 0;
   if (OH_Drawing_FontTextToGlyphs (font_obj, buf, n, TEXT_ENCODING_UTF8,
