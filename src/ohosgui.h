@@ -176,10 +176,12 @@ void ohos_draw_present (void);
 void ohos_pump_draw_commands (void);
 
 /* UI thread -> Emacs input queue.  */
+#define OHOS_INPUT_TEXT_FLAG 0x80000000u
 void ohos_create_input_pipe (void);
 int ohos_input_wait_fd (void);
 int ohos_input_key (unsigned key, unsigned modifiers, int pressed);
 int ohos_pop_input (unsigned *key, unsigned *modifiers);
+void ohos_input_text (const char *text);
 
 #ifdef __cplusplus
 }

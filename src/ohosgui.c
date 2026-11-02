@@ -5,6 +5,7 @@
    patch; this file deliberately has no tty/pty dependency.  */
 
 #include <config.h>
+#include <string.h>
 #include <unistd.h>
 typedef void *Emacs_Pix_Container;
 typedef void *Emacs_Cursor;
@@ -206,11 +207,23 @@ static struct redisplay_interface ohos_redisplay_interface;
 #define OHOS_KEY_MOVE_END	2082
 #define OHOS_KEY_F1		2090
 #define OHOS_KEY_F12		2101
+#define OHOS_KEY_DPAD_CENTER	2016
+#define OHOS_KEY_NUMPAD_0	2103
+#define OHOS_KEY_NUMPAD_9	2112
+#define OHOS_KEY_NUMPAD_DIVIDE	2113
+#define OHOS_KEY_NUMPAD_MULTIPLY 2114
+#define OHOS_KEY_NUMPAD_SUBTRACT 2115
+#define OHOS_KEY_NUMPAD_ADD	2116
+#define OHOS_KEY_NUMPAD_DOT	2117
+#define OHOS_KEY_NUMPAD_COMMA	2118
+#define OHOS_KEY_NUMPAD_ENTER	2119
+#define OHOS_KEY_NUMPAD_EQUALS	2120
 
 #define OHOS_MOD_SHIFT	1
 #define OHOS_MOD_CTRL	2
 #define OHOS_MOD_ALT	4
 #define OHOS_MOD_META	8
+#define OHOS_MOD_CAPS	16
 
 static unsigned
 ohos_char_from_key (unsigned code)
@@ -219,6 +232,8 @@ ohos_char_from_key (unsigned code)
     return 'a' + (code - OHOS_KEY_A);
   if (code >= OHOS_KEY_0 && code <= OHOS_KEY_9)
     return '0' + (code - OHOS_KEY_0);
+  if (code >= OHOS_KEY_NUMPAD_0 && code <= OHOS_KEY_NUMPAD_9)
+    return '0' + (code - OHOS_KEY_NUMPAD_0);
   switch (code)
     {
     case OHOS_KEY_SPACE: return ' ';
@@ -233,6 +248,13 @@ ohos_char_from_key (unsigned code)
     case OHOS_KEY_GRAVE: return '`';
     case OHOS_KEY_MINUS: return '-';
     case OHOS_KEY_EQUALS: return '=';
+    case OHOS_KEY_NUMPAD_DIVIDE: return '/';
+    case OHOS_KEY_NUMPAD_MULTIPLY: return '*';
+    case OHOS_KEY_NUMPAD_SUBTRACT: return '-';
+    case OHOS_KEY_NUMPAD_ADD: return '+';
+    case OHOS_KEY_NUMPAD_DOT: return '.';
+    case OHOS_KEY_NUMPAD_COMMA: return ',';
+    case OHOS_KEY_NUMPAD_EQUALS: return '=';
     default: return 0;
     }
 }
@@ -243,6 +265,8 @@ ohos_keysym_from_key (unsigned code)
   switch (code)
     {
     case OHOS_KEY_ENTER: return 0xff0d;	/* XK_Return */
+    case OHOS_KEY_NUMPAD_ENTER: return 0xff0d;
+    case OHOS_KEY_DPAD_CENTER: return 0xff0d;
     case OHOS_KEY_DEL: return 0xff08;	/* XK_BackSpace */
     case OHOS_KEY_TAB: return 0xff09;	/* XK_Tab */
     case OHOS_KEY_ESCAPE: return 0xff1b;	/* XK_Escape */
@@ -279,17 +303,34 @@ ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
       ev.frame_or_window = selected_frame;
       ev.timestamp = 0;
 
+      if (key & OHOS_INPUT_TEXT_FLAG)
+	{
+	  unsigned cp = key & 0x1fffff;
+	  ev.kind = cp < 0x80 ? ASCII_KEYSTROKE_EVENT
+	    : MULTIBYTE_CHAR_KEYSTROKE_EVENT;
+	  ev.code = cp;
+	  ev.modifiers = 0;
+	  kbd_buffer_store_event (&ev);
+	  count++;
+	  continue;
+	}
+
       if (char_code)
 	{
-	  if (modifiers & OHOS_MOD_SHIFT)
+	  if (char_code >= 'a' && char_code <= 'z')
 	    {
-	      if (char_code >= 'a' && char_code <= 'z')
+	      bool upper = ((modifiers & OHOS_MOD_SHIFT) != 0)
+		^ ((modifiers & OHOS_MOD_CAPS) != 0);
+	      if (upper)
 		char_code -= 32;
-	      else if (char_code >= '0' && char_code <= '9')
-		{
-		  static const char shifted[] = ")!@#$%^&*(";
-		  char_code = shifted[char_code - '0'];
-		}
+	    }
+	  else if (modifiers & OHOS_MOD_SHIFT)
+	    {
+	      static const char *from = "`1234567890-=[]\\;',./";
+	      static const char *to = "~!@#$%^&*()_+{}|:\"<>?";
+	      const char *p = strchr (from, char_code);
+	      if (p)
+		char_code = to[p - from];
 	    }
 	  if (modifiers & OHOS_MOD_CTRL)
 	    char_code = make_ctrl_char (char_code);

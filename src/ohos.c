@@ -9,6 +9,7 @@
 #include <fcntl.h>
 #include <pthread.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 #include "lisp.h"
@@ -303,4 +304,58 @@ ohos_pop_input (unsigned *key, unsigned *modifiers)
     }
   pthread_mutex_unlock (&input_lock);
   return found;
+}
+
+void
+ohos_input_text (const char *text)
+{
+  const unsigned char *p = (const unsigned char *) text;
+  if (!p)
+    return;
+  while (*p)
+    {
+      unsigned cp = 0;
+      int n = 1;
+      if (*p < 0x80)
+	cp = *p;
+      else if ((*p & 0xe0) == 0xc0 && p[1])
+	{
+	  cp = ((*p & 0x1f) << 6) | (p[1] & 0x3f);
+	  n = 2;
+	}
+      else if ((*p & 0xf0) == 0xe0 && p[1] && p[2])
+	{
+	  cp = ((*p & 0x0f) << 12) | ((p[1] & 0x3f) << 6)
+	    | (p[2] & 0x3f);
+	  n = 3;
+	}
+      else if ((*p & 0xf8) == 0xf0 && p[1] && p[2] && p[3])
+	{
+	  cp = ((*p & 0x07) << 18) | ((p[1] & 0x3f) << 12)
+	    | ((p[2] & 0x3f) << 6) | (p[3] & 0x3f);
+	  n = 4;
+	}
+      else
+	{
+	  p++;
+	  continue;
+	}
+      pthread_mutex_lock (&input_lock);
+      if (input_count == OHOS_INPUT_CAP)
+	input_dropped++;
+      else
+	{
+	  input_ring[input_tail].key = cp | OHOS_INPUT_TEXT_FLAG;
+	  input_ring[input_tail].modifiers = 0;
+	  input_tail = (input_tail + 1) & OHOS_INPUT_MASK;
+	  input_count++;
+	}
+      pthread_mutex_unlock (&input_lock);
+      p += n;
+    }
+  if (input_pipe[1] >= 0)
+    {
+      char byte = 1;
+      (void) write (input_pipe[1], &byte, 1);
+    }
 }
