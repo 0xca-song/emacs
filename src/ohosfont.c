@@ -223,14 +223,31 @@ static void
 ohosfont_text_extents (struct font *font, const unsigned *code, int nglyphs,
                        struct font_metrics *metrics)
 {
+  struct ohosfont_info *info = (struct ohosfont_info *) font;
   int width = 0;
   for (int i = 0; i < nglyphs; i++)
-    width += ohosfont_wide (code[i]) ? 18 : 9;
+    {
+      if (ohosfont_wide (code[i]))
+	width += 18;
+      else
+	{
+	  float advance = 0.0f;
+	  char buf[4];
+	  int n = ohosfont_utf8 (code[i], buf);
+	  if (info->drawing_font
+	      && OH_Drawing_FontMeasureText (info->drawing_font, buf, n,
+					     TEXT_ENCODING_UTF8, NULL,
+					     &advance) == OH_DRAWING_SUCCESS)
+	    width += (int) (advance + 0.5f);
+	  else
+	    width += 9;
+	}
+    }
   metrics->lbearing = 0;
   metrics->rbearing = width;
   metrics->width = width;
-  metrics->ascent = ohos_ascent;
-  metrics->descent = ohos_descent;
+  metrics->ascent = font->ascent;
+  metrics->descent = font->descent;
 }
 
 static int
