@@ -32,6 +32,12 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 
 #define MAIN_PROGRAM
 #include "lisp.h"
+
+#ifdef HAVE_OHOS_GUI
+/* Native OHOS startup/fatal diagnostics; implemented in ohos.c.  */
+extern void ohos_log (const char *);
+#include <dlfcn.h>
+#endif
 #include "sysstdio.h"
 
 #ifdef HAVE_ANDROID
@@ -2978,6 +2984,21 @@ killed.  */
   (Lisp_Object arg, Lisp_Object restart)
 {
   int exit_code;
+
+#ifdef HAVE_OHOS_GUI
+  {
+    char buf[256];
+    void *caller = __builtin_return_address (0);
+    Dl_info info;
+    const char *name = "?";
+    if (dladdr (caller, &info) && info.dli_sname)
+      name = info.dli_sname;
+    snprintf (buf, sizeof buf, "Fkill_emacs arg=%ld restart=%d caller=%s",
+	      FIXNUMP (arg) ? (long) XFIXNUM (arg) : -999L,
+	      NILP (restart) ? 0 : 1, name);
+    ohos_log (buf);
+  }
+#endif
 
 #ifndef WINDOWSNT
   /* Do some checking before shutting down Emacs, because errors

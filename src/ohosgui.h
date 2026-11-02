@@ -64,7 +64,7 @@ struct ohos_output
   struct font *font;
   int fontset;
   int width, height;
-  void *parent_desc;
+  uintptr_t parent_desc;
   uintptr_t root_window;
   Emacs_Cursor text_cursor;
   Emacs_Cursor nontext_cursor;
@@ -130,16 +130,50 @@ extern void syms_of_ohosgui (void);
 extern void syms_of_ohosfns (void);
 extern void syms_of_ohosfont (void);
 extern struct font *ohosfont_make_default (struct frame *);
+extern bool ohos_defined_color (struct frame *, const char *, Emacs_Color *,
+				bool, bool);
+extern void ohos_query_frame_background_color (struct frame *, Emacs_Color *);
 
 typedef void (*ohos_frame_sink_fn) (int x, int y, int width, unsigned code,
                                     uint32_t fg, uint32_t bg,
                                     int with_background);
 typedef void (*ohos_log_fn) (const char *);
+typedef void (*ohos_clear_fn) (void);
 void ohos_set_log_sink (ohos_log_fn fn);
 void ohos_log (const char *s);
 void ohos_set_frame_sink (ohos_frame_sink_fn fn);
 void ohos_frame_text (int x, int y, int width, unsigned code,
                       uint32_t fg, uint32_t bg, int with_background);
+void ohos_set_clear_sink (ohos_clear_fn fn);
+void ohos_frame_clear (void);
+
+/* Native draw command queue.  Emacs redisplay only enqueues commands;
+   the ArkUI host thread drains them with ohos_pump_draw_commands.  */
+typedef void (*ohos_draw_clear_fn) (uint32_t bg);
+typedef void (*ohos_draw_fill_fn) (int x, int y, int w, int h,
+				   uint32_t color);
+typedef void (*ohos_draw_text_fn) (int x, int y, int w, int h,
+				   unsigned code, uint32_t fg,
+				   uint32_t bg, uint32_t flags);
+typedef void (*ohos_draw_cursor_fn) (int x, int y, int w, int h,
+				     uint32_t fg, uint32_t bg,
+				     uint32_t flags);
+typedef void (*ohos_draw_present_fn) (void);
+
+void ohos_set_draw_clear_sink (ohos_draw_clear_fn fn);
+void ohos_set_draw_fill_sink (ohos_draw_fill_fn fn);
+void ohos_set_draw_text_sink (ohos_draw_text_fn fn);
+void ohos_set_draw_cursor_sink (ohos_draw_cursor_fn fn);
+void ohos_set_draw_present_sink (ohos_draw_present_fn fn);
+
+void ohos_draw_clear (uint32_t bg);
+void ohos_draw_fill (int x, int y, int w, int h, uint32_t color);
+void ohos_draw_text (int x, int y, int w, int h, unsigned code,
+		     uint32_t fg, uint32_t bg, uint32_t flags);
+void ohos_draw_cursor (int x, int y, int w, int h,
+		       uint32_t fg, uint32_t bg, uint32_t flags);
+void ohos_draw_present (void);
+void ohos_pump_draw_commands (void);
 
 #ifdef __cplusplus
 }

@@ -15,9 +15,31 @@ typedef struct ohos_display_info Display_Info;
 #include "keyboard.h"
 #include "ohosgui.h"
 
+bool
+ohos_defined_color (struct frame *f, const char *color_name,
+		    Emacs_Color *color_def, bool alloc, bool make_index)
+{
+  (void) f; (void) color_name; (void) color_def;
+  (void) alloc; (void) make_index;
+  /* The PoC face layer falls back to the frame foreground/background
+     pixels when this hook returns false.  A real color parser is part
+     of the MVP face work.  */
+  return false;
+}
+
+void
+ohos_query_frame_background_color (struct frame *f, Emacs_Color *color)
+{
+  color->pixel = FRAME_BACKGROUND_PIXEL (f);
+  color->red = ((color->pixel >> 16) & 0xff) * 0x101;
+  color->green = ((color->pixel >> 8) & 0xff) * 0x101;
+  color->blue = (color->pixel & 0xff) * 0x101;
+}
+
 struct ohos_display_info *
 ohos_term_init (void)
 {
+  ohos_log ("ohos_term_init enter");
   struct ohos_display_info *dpyinfo = xzalloc (sizeof *dpyinfo);
   dpyinfo->resx = 96.0;
   dpyinfo->resy = 96.0;
@@ -35,5 +57,6 @@ ohos_term_init (void)
   dpyinfo->name_list_element = Fcons (build_string ("ohos"), Qnil);
   KVAR (current_kboard, Vwindow_system) = Qohos;
   Fprovide (Qohos, Qnil);
+  ohos_log ("ohos_term_init done");
   return dpyinfo;
 }

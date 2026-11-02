@@ -11,6 +11,7 @@
 
 (require 'frame)
 (require 'term/common-win)
+(require 'fontset)
 
 (declare-function ohos-create-frame "ohosfns.c" (&optional parms))
 (declare-function x-handle-args "term/common-win" (args))

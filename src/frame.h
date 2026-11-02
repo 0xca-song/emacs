@@ -1635,7 +1635,9 @@ FRAME_INTERNAL_BORDER_WIDTH (struct frame *f)
 #ifdef HAVE_OHOS_GUI
 /* Avoid the inline helper's dependency on window-system macros.  */
 #define FRAME_INTERNAL_BORDER_WIDTH(f) frame_dimension ((f)->internal_border_width)
-#define STORE_NATIVE_RECT(nr, x, y, w, h)   do { (nr).x = (x); (nr).y = (y); (nr).width = (w); (nr).height = (h);        (nr).gx = (x); (nr).gy = (y); } while (0)
+#define STORE_NATIVE_RECT(nr, x_, y_, w_, h_) \
+  do { (nr).x = (x_); (nr).y = (y_); (nr).width = (w_); (nr).height = (h_); \
+       (nr).gx = (x_); (nr).gy = (y_); } while (0)
 #endif
 
 /* Pixel-size of window divider lines.  */

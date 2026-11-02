@@ -22,53 +22,65 @@ typedef struct ohos_display_info Display_Info;
 static void
 ohos_draw_glyph_string (struct glyph_string *s)
 {
-  if (!s || !s->f || !s->first_glyph || s->nchars <= 0)
+  static int calls;
+  if ((calls++ % 200) == 0)
+    ohos_log ("ohos_draw_glyph_string");
+  if (!s || !s->f || !s->first_glyph || s->nchars <= 0 || !s->face)
     return;
 
-  int column_width = FRAME_COLUMN_WIDTH (s->f);
   int line_height = FRAME_LINE_HEIGHT (s->f);
-  if (column_width <= 0 || line_height <= 0)
+  if (line_height <= 0)
     return;
 
-  int row = s->y / line_height;
   int pixel_x = s->x;
-
   for (int i = 0; i < s->nchars; i++)
     {
       struct glyph *g = s->first_glyph + i;
       if (g->type != CHAR_GLYPH)
-        continue;
+	continue;
 
-      int cell_x = pixel_x / column_width;
-      int cell_width = (g->pixel_width + column_width - 1) / column_width;
-      if (cell_width < 1)
-        cell_width = 1;
+      int width = g->pixel_width;
+      if (width <= 0)
+	width = FRAME_COLUMN_WIDTH (s->f);
+      if (width <= 0)
+	continue;
 
-      ohos_frame_text (cell_x, row, cell_width, g->u.ch,
-                       (uint32_t) s->face->foreground,
-                       (uint32_t) s->face->background,
-                       s->face->background != s->face->foreground);
-
-      pixel_x += g->pixel_width;
+      uint32_t flags = (s->face->background != s->face->foreground) ? 1 : 0;
+      ohos_draw_text (pixel_x, s->y, width, line_height, g->u.ch,
+		      (uint32_t) s->face->foreground,
+		      (uint32_t) s->face->background, flags);
+      pixel_x += width;
     }
 }
 
 static void
 ohos_clear_frame_area (struct frame *f, int x, int y, int width, int height)
 {
-  (void) f; (void) x; (void) y; (void) width; (void) height;
+  ohos_draw_fill (x, y, width, height, (uint32_t) FRAME_BACKGROUND_PIXEL (f));
 }
 
 static void
 ohos_clear_frame (struct frame *f)
 {
-  (void) f;
+  static int calls;
+  if ((calls++ % 20) == 0)
+    ohos_log ("ohos_clear_frame");
+  ohos_draw_clear ((uint32_t) FRAME_BACKGROUND_PIXEL (f));
 }
 
 static void
 ohos_flush (struct frame *f)
 {
-  (void) f;
+  static int calls;
+  if ((calls++ % 20) == 0)
+    {
+      char buf[160];
+      struct frame *sf = SELECTED_FRAME ();
+      snprintf (buf, sizeof buf, "ohos_flush frame=%p selected=%p live=%d",
+		(void *) f, (void *) sf, FRAME_LIVE_P (f));
+      ohos_log (buf);
+    }
+  ohos_draw_present ();
 }
 
 static void
@@ -88,8 +100,18 @@ ohos_draw_window_cursor (struct window *w, struct glyph_row *row,
                          int x, int y, enum text_cursor_kinds type,
                          int width, bool on_p, bool active_p)
 {
-  (void) w; (void) row; (void) x; (void) y; (void) type;
-  (void) width; (void) on_p; (void) active_p;
+  (void) row; (void) type; (void) active_p;
+  if (!on_p || !w)
+    return;
+  struct frame *f = WINDOW_XFRAME (w);
+  int line_height = FRAME_LINE_HEIGHT (f);
+  if (line_height <= 0)
+    return;
+  if (width <= 0)
+    width = FRAME_COLUMN_WIDTH (f);
+  ohos_draw_cursor (x, y, width, line_height,
+		    (uint32_t) FRAME_FOREGROUND_PIXEL (f),
+		    (uint32_t) FRAME_BACKGROUND_PIXEL (f), 1);
 }
 
 static void
@@ -173,6 +195,10 @@ ohos_create_terminal (struct ohos_display_info *dpyinfo)
   terminal->kboard = allocate_kboard (Qohos);
   terminal->read_socket_hook = ohos_read_socket;
   terminal->delete_frame_hook = ohos_delete_frame;
+  terminal->clear_frame_hook = ohos_clear_frame;
+  terminal->defined_color_hook = ohos_defined_color;
+  terminal->query_frame_background_color
+    = ohos_query_frame_background_color;
   terminal->get_focus_frame = NULL;
   return terminal;
 }

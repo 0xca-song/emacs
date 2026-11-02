@@ -37,6 +37,10 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 #include "dispextern.h"
 #include "syntax.h"
 #include "intervals.h"
+
+#ifdef HAVE_OHOS_GUI
+extern void ohos_log (const char *);
+#endif
 #include "keymap.h"
 #include "blockinput.h"
 #include "sysstdio.h"
@@ -1077,6 +1081,12 @@ Default value of `command-error-function'.  */)
 	  || (!(IS_DAEMON && !DAEMON_RUNNING) && FRAME_INITIAL_P (sf))
 	  || noninteractive))
     {
+#ifdef HAVE_OHOS_GUI
+      {
+	Lisp_Object msg = Ferror_message_string (data);
+	ohos_log (STRINGP (msg) ? SSDATA (msg) : "startup error");
+      }
+#endif
       print_error_message (data, Qexternal_debugging_output,
 			   SSDATA (context), signal);
       Fterpri (Qexternal_debugging_output, Qnil);
@@ -12547,6 +12557,13 @@ handle_interrupt_signal (int sig)
          well-behaving UN*X program and exit.  We must not call Lisp
          in a signal handler, so tell maybe_quit to exit when it is
          safe.  */
+#ifdef HAVE_OHOS_GUI
+      /* The native OHOS GUI runs without a controlling tty.  SIGINT
+         is not a user C-g in this environment and must not kill the
+         whole application; the ArkUI host owns process lifetime.  */
+      ohos_log ("ignoring SIGINT without a tty");
+      return;
+#endif
       Vquit_flag = (kill_emacs_on_sigint
 		    /* Don't risk running ELisp code while shutting down
 		       and limit the effect of 'kill_emacs_on_sigint'

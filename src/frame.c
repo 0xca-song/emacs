@@ -318,6 +318,8 @@ See also `frame-live-p'.  */)
       return Qhaiku;
     case output_android:
       return Qandroid;
+    case output_ohos:
+      return Qohos;
     default:
       emacs_abort ();
     }

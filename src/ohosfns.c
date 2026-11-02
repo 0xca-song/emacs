@@ -11,6 +11,7 @@ typedef struct ohos_display_info Display_Info;
 #include "window.h"
 #include "dispextern.h"
 #include "font.h"
+#include "fontset.h"
 #include "termhooks.h"
 #include "keyboard.h"
 #include "ohosgui.h"
@@ -24,17 +25,29 @@ ohos_find_terminal (void)
   return NULL;
 }
 
+static void
+ohos_unwind_create_frame (Lisp_Object frame)
+{
+  /* Keep FRAME rooted while the C code below calls Lisp (fontset and
+     face realization can allocate and run the GC).  */
+  (void) frame;
+}
+
 struct frame *
 ohos_create_frame (struct terminal *terminal)
 {
+  ohos_log ("ohos_create_frame enter");
   if (!terminal)
     terminal = ohos_find_terminal ();
   if (!terminal)
     error ("OHOS terminal is not initialized");
 
+  specpdl_ref count = SPECPDL_INDEX ();
   struct frame *f = make_frame (true);
+  ohos_log ("ohos_create_frame make_frame done");
   Lisp_Object frame;
   XSETFRAME (frame, f);
+  record_unwind_protect (ohos_unwind_create_frame, frame);
 
   f->terminal = terminal;
   f->output_method = output_ohos;
@@ -51,6 +64,9 @@ ohos_create_frame (struct terminal *terminal)
   f->column_width = 9;
   f->line_height = 18;
   f->output_data.ohos->font = ohosfont_make_default (f);
+  f->output_data.ohos->fontset
+    = fs_query_fontset (build_string ("fontset-default"), 0);
+  ohos_log ("ohos_create_frame font/fontset done");
 
   FRAME_FOREGROUND_PIXEL (f) = 0x000000;
   FRAME_BACKGROUND_PIXEL (f) = 0xffffff;
@@ -61,11 +77,17 @@ ohos_create_frame (struct terminal *terminal)
   store_frame_param (f, Qbackground_color, build_string ("white"));
 
   init_frame_faces (f);
+  ohos_log ("ohos_create_frame faces done");
   adjust_frame_size (f, 80 * 9, 24 * 18, 5, true, Qnil);
+  ohos_log ("ohos_create_frame size done");
 
   f->terminal->reference_count++;
   Vframe_list = Fcons (frame, Vframe_list);
+  SET_FRAME_VISIBLE (f, true);
   Fselect_frame (frame, Qnil);
+  SET_FRAME_GARBAGED (f);
+  ohos_log ("ohos_create_frame selected");
+  unbind_to (count, Qnil);
   return f;
 }
 

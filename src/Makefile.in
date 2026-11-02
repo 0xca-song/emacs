@@ -386,6 +386,8 @@ ANDROID_LIBS = @ANDROID_LIBS@
 ANDROID_LDFLAGS = @ANDROID_LDFLAGS@
 ANDROID_BUILD_CFLAGS = @ANDROID_BUILD_CFLAGS@
 
+OHOS_OBJ = @OHOS_OBJ@
+
 LIBGMP_CFLAGS = @LIBGMP_CFLAGS@
 
 DUMPING=@DUMPING@
@@ -467,7 +469,7 @@ base_obj = dispnew.o frame.o scroll.o xdisp.o menu.o $(XMENU_OBJ) window.o     \
 	itree.o json.o 							       \
 	$(MSDOS_OBJ) $(MSDOS_X_OBJ) $(NS_OBJ) $(CYGWIN_OBJ) $(FONT_OBJ)        \
 	$(W32_OBJ) $(WINDOW_SYSTEM_OBJ) $(XGSELOBJ)			       \
-	$(HAIKU_OBJ) $(PGTK_OBJ) $(ANDROID_OBJ)
+	$(HAIKU_OBJ) $(PGTK_OBJ) $(ANDROID_OBJ) $(OHOS_OBJ)
 doc_obj = $(base_obj) $(NS_OBJC_OBJ)
 obj = $(doc_obj) $(HAIKU_CXX_OBJ)
 

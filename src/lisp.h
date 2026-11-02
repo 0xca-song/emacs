@@ -3935,7 +3935,8 @@ struct frame;
 
 /* Define if the windowing system provides a menu bar.  */
 #if defined (USE_X_TOOLKIT) || defined (HAVE_NTGUI) \
-  || defined (HAVE_NS) || defined (USE_GTK) || defined (HAVE_HAIKU)
+  || defined (HAVE_NS) || defined (USE_GTK) || defined (HAVE_HAIKU) \
+  || defined (HAVE_OHOS_GUI)
 #define HAVE_EXT_MENU_BAR true
 #endif
 
