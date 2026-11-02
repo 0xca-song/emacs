@@ -147,6 +147,19 @@ ohosfont_encode_char (struct font *font, int c)
   return (unsigned) c;
 }
 
+static bool
+ohosfont_wide (unsigned code)
+{
+  return (code >= 0x1100 && code <= 0x115f)
+    || (code >= 0x2e80 && code <= 0xa4cf)
+    || (code >= 0xac00 && code <= 0xd7a3)
+    || (code >= 0xf900 && code <= 0xfaff)
+    || (code >= 0xfe30 && code <= 0xfe4f)
+    || (code >= 0xff00 && code <= 0xff60)
+    || (code >= 0xffe0 && code <= 0xffe6)
+    || (code >= 0x20000 && code <= 0x3fffd);
+}
+
 static void
 ohosfont_text_extents (struct font *font, const unsigned *code, int nglyphs,
                        struct font_metrics *metrics)
