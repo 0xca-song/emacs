@@ -48,6 +48,8 @@ ohos_draw_glyph_string (struct glyph_string *s)
 	continue;
 
       uint32_t flags = (s->face->background != s->face->foreground) ? 1 : 0;
+      if (s->face->underline != FACE_NO_UNDERLINE)
+	flags |= 4;
       ohos_draw_text (pixel_x, s->y, width, line_height, g->u.ch,
 		      (uint32_t) s->face->foreground,
 		      (uint32_t) s->face->background, flags);
@@ -70,6 +72,8 @@ ohos_clear_frame (struct frame *f)
   ohos_draw_clear ((uint32_t) FRAME_BACKGROUND_PIXEL (f));
 }
 
+static bool ohos_force_redraw;
+
 static void
 ohos_flush (struct frame *f)
 {
@@ -81,6 +85,12 @@ ohos_flush (struct frame *f)
       snprintf (buf, sizeof buf, "ohos_flush frame=%p selected=%p live=%d",
 		(void *) f, (void *) sf, FRAME_LIVE_P (f));
       ohos_log (buf);
+    }
+  if (ohos_force_redraw)
+    {
+      ohos_force_redraw = false;
+      ohos_draw_clear ((uint32_t) FRAME_BACKGROUND_PIXEL (f));
+      SET_FRAME_GARBAGED (f);
     }
   ohos_draw_present ();
 }
@@ -94,7 +104,9 @@ ohos_after_update_window_line (struct window *w, struct glyph_row *row)
 static void
 ohos_scroll_run (struct window *w, struct run *run)
 {
-  (void) w; (void) run;
+  if (run)
+    ohos_draw_scroll (run->current_y, run->desired_y, run->height);
+  ohos_force_redraw = true;
 }
 
 static void
@@ -103,7 +115,7 @@ ohos_draw_window_cursor (struct window *w, struct glyph_row *row,
                          int width, bool on_p, bool active_p)
 {
   (void) row; (void) type; (void) active_p;
-  if (!on_p || !w)
+  if (!w)
     return;
   struct frame *f = WINDOW_XFRAME (w);
   int line_height = FRAME_LINE_HEIGHT (f);
@@ -111,9 +123,12 @@ ohos_draw_window_cursor (struct window *w, struct glyph_row *row,
     return;
   if (width <= 0)
     width = FRAME_COLUMN_WIDTH (f);
-  ohos_draw_cursor (x, y, width, line_height,
+  int fx = WINDOW_TEXT_TO_FRAME_PIXEL_X (w, x);
+  int fy = WINDOW_TOP_EDGE_Y (w) + y;
+  ohos_draw_cursor (fx, fy, width, line_height,
 		    (uint32_t) FRAME_FOREGROUND_PIXEL (f),
-		    (uint32_t) FRAME_BACKGROUND_PIXEL (f), 1);
+		    (uint32_t) FRAME_BACKGROUND_PIXEL (f),
+		    on_p ? 1u : 0u);
 }
 
 static void

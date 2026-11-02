@@ -158,12 +158,15 @@ typedef void (*ohos_draw_text_fn) (int x, int y, int w, int h,
 typedef void (*ohos_draw_cursor_fn) (int x, int y, int w, int h,
 				     uint32_t fg, uint32_t bg,
 				     uint32_t flags);
+typedef void (*ohos_draw_scroll_fn) (int current_y, int desired_y,
+				     int height);
 typedef void (*ohos_draw_present_fn) (void);
 
 void ohos_set_draw_clear_sink (ohos_draw_clear_fn fn);
 void ohos_set_draw_fill_sink (ohos_draw_fill_fn fn);
 void ohos_set_draw_text_sink (ohos_draw_text_fn fn);
 void ohos_set_draw_cursor_sink (ohos_draw_cursor_fn fn);
+void ohos_set_draw_scroll_sink (ohos_draw_scroll_fn fn);
 void ohos_set_draw_present_sink (ohos_draw_present_fn fn);
 
 void ohos_draw_clear (uint32_t bg);
@@ -172,6 +175,7 @@ void ohos_draw_text (int x, int y, int w, int h, unsigned code,
 		     uint32_t fg, uint32_t bg, uint32_t flags);
 void ohos_draw_cursor (int x, int y, int w, int h,
 		       uint32_t fg, uint32_t bg, uint32_t flags);
+void ohos_draw_scroll (int current_y, int desired_y, int height);
 void ohos_draw_present (void);
 void ohos_pump_draw_commands (void);
 

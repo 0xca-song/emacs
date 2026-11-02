@@ -21,6 +21,7 @@ enum ohos_draw_op
   OHOS_OP_FILL,
   OHOS_OP_TEXT,
   OHOS_OP_CURSOR,
+  OHOS_OP_SCROLL,
   OHOS_OP_PRESENT
 };
 
@@ -49,6 +50,7 @@ static ohos_draw_clear_fn draw_clear_sink;
 static ohos_draw_fill_fn draw_fill_sink;
 static ohos_draw_text_fn draw_text_sink;
 static ohos_draw_cursor_fn draw_cursor_sink;
+static ohos_draw_scroll_fn draw_scroll_sink;
 static ohos_draw_present_fn draw_present_sink;
 
 void
@@ -116,6 +118,12 @@ ohos_set_draw_cursor_sink (ohos_draw_cursor_fn fn)
 }
 
 void
+ohos_set_draw_scroll_sink (ohos_draw_scroll_fn fn)
+{
+  draw_scroll_sink = fn;
+}
+
+void
 ohos_set_draw_present_sink (ohos_draw_present_fn fn)
 {
   draw_present_sink = fn;
@@ -174,6 +182,15 @@ ohos_draw_cursor (int x, int y, int w, int h, uint32_t fg, uint32_t bg,
 }
 
 void
+ohos_draw_scroll (int current_y, int desired_y, int height)
+{
+  struct ohos_draw_cmd cmd = { .op = OHOS_OP_SCROLL,
+			       .x = current_y, .y = desired_y,
+			       .h = height };
+  enqueue (&cmd);
+}
+
+void
 ohos_draw_present (void)
 {
   struct ohos_draw_cmd cmd = { .op = OHOS_OP_PRESENT };
@@ -216,6 +233,10 @@ ohos_pump_draw_commands (void)
 	  if (draw_cursor_sink)
 	    draw_cursor_sink (cmd.x, cmd.y, cmd.w, cmd.h,
 			      cmd.fg, cmd.bg, cmd.flags);
+	  break;
+	case OHOS_OP_SCROLL:
+	  if (draw_scroll_sink)
+	    draw_scroll_sink (cmd.x, cmd.y, cmd.h);
 	  break;
 	case OHOS_OP_PRESENT:
 	  if (draw_present_sink)
