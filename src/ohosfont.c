@@ -26,6 +26,7 @@ struct ohosfont_info
 {
   struct font font;
   OH_Drawing_Font *drawing_font;
+  OH_Drawing_Font *cjk_font;
 };
 
 static int
@@ -148,6 +149,17 @@ ohosfont_open (struct frame *f, Lisp_Object entity, int pixel_size)
     }
   if (mgr)
     OH_Drawing_FontMgrDestroy (mgr);
+  info->cjk_font = OH_Drawing_FontCreate ();
+  OH_Drawing_Typeface *cjk_typeface = OH_Drawing_TypefaceCreateFromFile (
+    "/system/fonts/HarmonyOS_Sans_SC.ttf", 0);
+  if (!cjk_typeface)
+    cjk_typeface = OH_Drawing_TypefaceCreateFromFile (
+      "/system/fonts/NotoSansCJK-Regular.ttc", 0);
+  if (cjk_typeface && info->cjk_font)
+    {
+      OH_Drawing_FontSetTypeface (info->cjk_font, cjk_typeface);
+      OH_Drawing_FontSetTextSize (info->cjk_font, 18.0f);
+    }
   font->props[FONT_NAME_INDEX] = build_string ("Noto Sans Mono-12");
   font->props[FONT_FAMILY_INDEX] = intern ("Noto Sans Mono");
   font->props[FONT_REGISTRY_INDEX] = Qiso10646_1;
@@ -176,32 +188,61 @@ ohosfont_close (struct font *font)
   struct ohosfont_info *info = (struct ohosfont_info *) font;
   if (info->drawing_font)
     OH_Drawing_FontDestroy (info->drawing_font);
+  if (info->cjk_font)
+    OH_Drawing_FontDestroy (info->cjk_font);
   info->drawing_font = NULL;
+  info->cjk_font = NULL;
 }
+
+static bool ohosfont_wide (unsigned code);
 
 static int
 ohosfont_has_char (Lisp_Object font, int c)
 {
   struct ohosfont_info *info = (struct ohosfont_info *) XFONT_OBJECT (font);
-  if (!info->drawing_font || c < 0 || c > 0x10ffff)
+  if (c < 0 || c > 0x10ffff)
     return 0;
   char buf[4]; int n = ohosfont_utf8 ((unsigned) c, buf);
   uint16_t glyph = 0;
-  return OH_Drawing_FontTextToGlyphs (info->drawing_font, buf, n,
-				      TEXT_ENCODING_UTF8, &glyph, 1) > 0
-    && glyph != 0;
+  OH_Drawing_Font *font_obj = ohosfont_wide ((unsigned) c)
+    ? info->cjk_font : info->drawing_font;
+  if (!font_obj)
+    font_obj = info->drawing_font ? info->drawing_font : info->cjk_font;
+  if (!font_obj)
+    return 0;
+  if (OH_Drawing_FontTextToGlyphs (font_obj, buf, n, TEXT_ENCODING_UTF8,
+				   &glyph, 1) > 0 && glyph != 0)
+    return 1;
+  /* Fallback between mono and CJK for punctuation/rare characters.  */
+  font_obj = font_obj == info->cjk_font ? info->drawing_font : info->cjk_font;
+  if (!font_obj)
+    return 0;
+  glyph = 0;
+  return OH_Drawing_FontTextToGlyphs (font_obj, buf, n, TEXT_ENCODING_UTF8,
+				      &glyph, 1) > 0 && glyph != 0;
 }
 
 static unsigned
 ohosfont_encode_char (struct font *font, int c)
 {
   struct ohosfont_info *info = (struct ohosfont_info *) font;
-  if (!info->drawing_font || c < 0 || c > 0x10ffff)
+  if (c < 0 || c > 0x10ffff)
     return 0;
   char buf[4]; int n = ohosfont_utf8 ((unsigned) c, buf);
   uint16_t glyph = 0;
-  if (OH_Drawing_FontTextToGlyphs (info->drawing_font, buf, n,
-				   TEXT_ENCODING_UTF8, &glyph, 1) == 0)
+  OH_Drawing_Font *font_obj = ohosfont_wide ((unsigned) c)
+    ? info->cjk_font : info->drawing_font;
+  if (!font_obj)
+    return 0;
+  if (OH_Drawing_FontTextToGlyphs (font_obj, buf, n, TEXT_ENCODING_UTF8,
+				   &glyph, 1) > 0 && glyph != 0)
+    return glyph;
+  font_obj = font_obj == info->cjk_font ? info->drawing_font : info->cjk_font;
+  if (!font_obj)
+    return 0;
+  glyph = 0;
+  if (OH_Drawing_FontTextToGlyphs (font_obj, buf, n, TEXT_ENCODING_UTF8,
+				   &glyph, 1) == 0)
     return 0;
   return glyph;
 }
