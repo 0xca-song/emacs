@@ -185,6 +185,10 @@ ohosfont_draw (struct glyph_string *s, int from, int to, int x, int y,
         flags |= 4;
       if (s->font && FONT_WEIGHT_NUMERIC (s->font) >= 150)
         flags |= 2;
+      if (s->face->strike_through_p)
+        flags |= 8;
+      if (s->face->overline_p)
+        flags |= 16;
       ohos_draw_text (x, y, w, line_height, g->u.ch,
                       (uint32_t) s->face->foreground,
                       (uint32_t) s->face->background, flags);
