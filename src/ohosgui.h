@@ -173,6 +173,9 @@ typedef void (*ohos_set_clipboard_fn) (const char *);
 void ohos_set_title_sink (ohos_set_title_fn fn);
 void ohos_set_clipboard_sink (ohos_set_clipboard_fn fn);
 void ohos_set_title (const char *title);
+void ohos_font_metrics (int ascent, int descent, int height,
+			int space_width, int underline_position,
+			int underline_thickness);
 void ohos_set_clipboard (const char *b64);
 
 void ohos_draw_clear (uint32_t bg);

@@ -24,6 +24,32 @@ struct ohosfont_info
 };
 
 static struct font_driver ohosfont_driver;
+static int ohos_ascent = 14;
+static int ohos_descent = 4;
+static int ohos_height = 18;
+static int ohos_space_width = 9;
+static int ohos_underline_position = 15;
+static int ohos_underline_thickness = 1;
+
+void
+ohos_font_metrics (int ascent, int descent, int height, int space_width,
+		   int underline_position, int underline_thickness)
+{
+  int total = ascent + descent;
+  if (total <= 0)
+    return;
+  ohos_height = height > 0 ? height : 18;
+  ohos_ascent = (ohos_height * ascent + total / 2) / total;
+  if (ohos_ascent >= ohos_height)
+    ohos_ascent = ohos_height - 1;
+  ohos_descent = ohos_height - ohos_ascent;
+  if (space_width > 0)
+    ohos_space_width = space_width;
+  if (underline_position >= 0)
+    ohos_underline_position = underline_position;
+  if (underline_thickness > 0)
+    ohos_underline_thickness = underline_thickness;
+}
 
 static Lisp_Object
 ohosfont_list (struct frame *f, Lisp_Object font_spec)
@@ -67,16 +93,16 @@ ohosfont_open (struct frame *f, Lisp_Object entity, int pixel_size)
   font = &info->font;
   font->driver = &ohosfont_driver;
   font->pixel_size = pixel_size;
-  font->height = 18;
-  font->ascent = 14;
-  font->descent = 4;
-  font->space_width = 9;
+  font->height = ohos_height;
+  font->ascent = ohos_ascent;
+  font->descent = ohos_descent;
+  font->space_width = ohos_space_width;
   font->min_width = 9;
-  font->max_width = 9;
-  font->average_width = 9;
-  font->underline_position = 15;
-  font->underline_thickness = 1;
-  font->default_ascent = 14;
+  font->max_width = 18;
+  font->average_width = ohos_space_width;
+  font->underline_position = ohos_underline_position;
+  font->underline_thickness = ohos_underline_thickness;
+  font->default_ascent = ohos_ascent;
   font->vertical_centering = 0;
   font->baseline_offset = 0;
   font->relative_compose = 0;
@@ -132,8 +158,8 @@ ohosfont_text_extents (struct font *font, const unsigned *code, int nglyphs,
   metrics->lbearing = 0;
   metrics->rbearing = width;
   metrics->width = width;
-  metrics->ascent = 14;
-  metrics->descent = 4;
+  metrics->ascent = ohos_ascent;
+  metrics->descent = ohos_descent;
 }
 
 static int
