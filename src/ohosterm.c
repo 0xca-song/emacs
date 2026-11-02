@@ -19,14 +19,52 @@ bool
 ohos_defined_color (struct frame *f, const char *color_name,
 		    Emacs_Color *color_def, bool alloc, bool make_index)
 {
-  (void) f; (void) color_name; (void) color_def;
-  (void) alloc; (void) make_index;
-  /* The PoC face layer falls back to the frame foreground/background
-     pixels when this hook returns false.  A real color parser is part
-     of the MVP face work.  */
-  return false;
+  static const struct { const char *name; uint32_t rgb; } colors[] = {
+    { "black", 0x000000 }, { "white", 0xffffff },
+    { "red", 0xff0000 }, { "green", 0x00ff00 }, { "blue", 0x0000ff },
+    { "yellow", 0xffff00 }, { "magenta", 0xff00ff }, { "cyan", 0x00ffff },
+    { "gray", 0x808080 }, { "grey", 0x808080 },
+    { "darkgray", 0x404040 }, { "lightgray", 0xc0c0c0 },
+    { "orange", 0xffa500 }, { "purple", 0x800080 },
+  };
+  uint32_t rgb = 0;
+  (void) f; (void) alloc; (void) make_index;
+  if (!color_name || !color_def)
+    return false;
+  if (color_name[0] == '#')
+    {
+      char *endp;
+      unsigned long v = strtoul (color_name + 1, &endp, 16);
+      if (*endp != '\0')
+	return false;
+      if (endp - color_name == 4)
+	{
+	  unsigned r = (v >> 8) & 0xf, g = (v >> 4) & 0xf, b = v & 0xf;
+	  rgb = (r * 0x11 << 16) | (g * 0x11 << 8) | (b * 0x11);
+	}
+      else if (endp - color_name == 7)
+	rgb = (uint32_t) v;
+      else
+	return false;
+    }
+  else
+    {
+      size_t i;
+      for (i = 0; i < sizeof colors / sizeof colors[0]; i++)
+	if (!strcasecmp (color_name, colors[i].name))
+	  {
+	    rgb = colors[i].rgb;
+	    break;
+	  }
+      if (i == sizeof colors / sizeof colors[0])
+	return false;
+    }
+  color_def->pixel = rgb;
+  color_def->red = ((rgb >> 16) & 0xff) * 0x101;
+  color_def->green = ((rgb >> 8) & 0xff) * 0x101;
+  color_def->blue = (rgb & 0xff) * 0x101;
+  return true;
 }
-
 void
 ohos_query_frame_background_color (struct frame *f, Emacs_Color *color)
 {
