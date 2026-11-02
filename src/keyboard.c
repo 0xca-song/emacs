@@ -745,11 +745,8 @@ recursive_edit_1 (void)
      See Bug #23632.
   */
   specbind (Qundo_auto__undoably_changed_buffers, Qnil);
-  fprintf (stderr, "[ohos] recursive_edit_1 before command_loop\n");
 
-  fprintf (stderr, "[ohos] recursive_edit_1 before command_loop\n");
   val = command_loop ();
-  fprintf (stderr, "[ohos] recursive_edit_1 after command_loop\n");
   if (EQ (val, Qt))
     quit ();
   /* Handle throw from read_minibuf when using minibuffer
@@ -806,8 +803,6 @@ This function is called by the editor initialization to begin editing.  */)
 {
   specpdl_ref count = SPECPDL_INDEX ();
   Lisp_Object buffer;
-  fprintf (stderr, "[ohos] recursive begin selected_window=%p frame=%p\n",
-           (void *) selected_window, (void *) selected_frame);
 
   /* If we enter while input is blocked, don't lock up here.
      This may happen through the debugger during redisplay.  */
@@ -834,9 +829,7 @@ This function is called by the editor initialization to begin editing.  */)
   if (command_loop_level > 0 && !multiple_terminals_merge_keyboards)
     temporarily_switch_to_single_kboard (SELECTED_FRAME ());
 
-  fprintf (stderr, "[ohos] recursive before edit_1\n");
   recursive_edit_1 ();
-  fprintf (stderr, "[ohos] recursive after edit_1\n");
   return unbind_to (count, Qnil);
 }
 
@@ -1005,10 +998,8 @@ cmd_error (Lisp_Object data)
 
   specbind (Qstandard_output, Qt);
   specbind (Qstandard_input, Qt);
-  fprintf (stderr, "[ohos] cl1 before kset prefix\n");
   kset_prefix_arg (current_kboard, Qnil);
   kset_last_prefix_arg (current_kboard, Qnil);
-  fprintf (stderr, "[ohos] cl1 after kset prefix\n");
   cancel_echoing ();
 
   /* Avoid unquittable loop if data contains a circular list.  */
@@ -1166,7 +1157,6 @@ command_loop (void)
 Lisp_Object
 command_loop_2 (Lisp_Object handlers)
 {
-  fprintf (stderr, "[ohos] command_loop_2 enter\n");
   register Lisp_Object val;
 
   do
@@ -1186,13 +1176,7 @@ top_level_2 (void)
     /* FIXME: Should we (re)use `list_of_error` from `xdisp.c`? */
     push_handler_bind (list1 (Qerror), Qdebug_early__handler, 0);
 
-  {
-    Lisp_Object top = Fprin1_to_string (Vtop_level, Qnil, Qnil);
-    fprintf (stderr, "[ohos] top_level=%s\n", SDATA (top));
-  }
-  fprintf (stderr, "[ohos] top_level_2 before Feval\n");
   Lisp_Object res = Feval (Vtop_level, Qt);
-  fprintf (stderr, "[ohos] top_level_2 after Feval\n");
 
   if (setup_handler)
     pop_handler ();
@@ -1202,7 +1186,6 @@ top_level_2 (void)
 static Lisp_Object
 top_level_1 (Lisp_Object ignore)
 {
-  fprintf (stderr, "[ohos] top_level_1 enter\n");
   /* On entry to the outer level, run the startup file.  */
   if (!NILP (Vtop_level))
     internal_condition_case (top_level_2, Qerror, cmd_error);
@@ -1334,24 +1317,19 @@ static void adjust_point_for_property (ptrdiff_t, bool);
 static Lisp_Object
 command_loop_1 (void)
 {
-  fprintf (stderr, "[ohos] command_loop_1 enter\n");
   modiff_count prev_modiff = 0;
   struct buffer *prev_buffer = NULL;
 
-  fprintf (stderr, "[ohos] cl1 before kset prefix\n");
   kset_prefix_arg (current_kboard, Qnil);
   kset_last_prefix_arg (current_kboard, Qnil);
-  fprintf (stderr, "[ohos] cl1 after kset prefix\n");
   Vdeactivate_mark = Qnil;
   waiting_for_input = false;
-  fprintf (stderr, "[ohos] cl1 before cancel_echoing\n");
   cancel_echoing ();
-  fprintf (stderr, "[ohos] cl1 after cancel_echoing\n");
 
   this_command_key_count = 0;
   this_single_command_key_start = 0;
 
-  if (NILP (Vmemory_full) && !EQ (KVAR (current_kboard, Vwindow_system), Qohos))
+  if (NILP (Vmemory_full))
     {
       /* Make sure this hook runs after commands that get errors and
 	 throw to top level.  */
@@ -1371,7 +1349,6 @@ command_loop_1 (void)
         safe_run_hooks (Qdelayed_warnings_hook);
     }
 
-  fprintf (stderr, "[ohos] command_loop_1 after initial hooks\n");
   /* Do this after running Vpost_command_hook, for consistency.  */
   kset_last_command (current_kboard, Vthis_command);
   kset_real_last_command (current_kboard, Vreal_this_command);
@@ -1442,46 +1419,15 @@ command_loop_1 (void)
       Vthis_command_keys_shift_translated = Qnil;
 
       /* Read next key sequence; i gets its length.  */
-      if (EQ (KVAR (current_kboard, Vwindow_system), Qohos))
-        {
-          fprintf (stderr, "[ohos] command_loop_1 force redisplay\n");
-          ohos_log ("force redisplay");
-          if (!FRAME_OHOS_P (SELECTED_FRAME ()))
-            {
-              Lisp_Object tail;
-              for (tail = Vframe_list; CONSP (tail); tail = XCDR (tail))
-                {
-                  struct frame *rf = XFRAME (XCAR (tail));
-                  if (FRAME_OHOS_P (rf))
-                    {
-                      Fselect_frame (XCAR (tail), Qnil);
-                      break;
-                    }
-                }
-            }
-          {
-            struct frame *rf = SELECTED_FRAME ();
-            rf->garbaged = 1;
-            rf->redisplay = 1;
-          }
-          redisplay ();
-          fprintf (stderr, "[ohos] command_loop_1 force redisplay done\n");
-          for (;;)
-            pause ();
-        }
-      fprintf (stderr, "[ohos] command_loop_1 before read_key_sequence\n");
       raw_keybuf_count = 0;
       Lisp_Object keybuf[READ_KEY_ELTS];
       int i = read_key_sequence (keybuf, Qnil, false, true, true, false,
 				 false);
-      fprintf (stderr, "[ohos] command_loop_1 after read_key_sequence i=%d\n", i);
 
       /* A filter may have run while we were reading the input.  */
       if (! FRAME_LIVE_P (XFRAME (selected_frame)))
 	Fkill_emacs (Qnil, Qnil);
-      fprintf (stderr, "[ohos] command_loop_1 before set_buffer\n");
       set_buffer_internal (XBUFFER (XWINDOW (selected_window)->contents));
-      fprintf (stderr, "[ohos] command_loop_1 after set_buffer\n");
 
       ++num_input_keys;
 

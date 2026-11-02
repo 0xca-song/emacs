@@ -111,12 +111,10 @@ struct ohos_output
 #endif
 extern int XParseGeometry (const char *, int *, int *, unsigned int *, unsigned int *);
 
-#define WINDOW_HANDLE_UINTPTR(h) ((uintptr_t) (h))
 #define FRAME_NATIVE_WINDOW(f) 0
 #define FRAME_BASELINE_OFFSET(f) 0
 #define BLACK_PIX_DEFAULT(f) 0x000000
 #define WHITE_PIX_DEFAULT(f) 0xffffff
-#define STORE_NATIVE_RECT(nr, px, py, pw, ph) do { (nr).x = (px); (nr).y = (py); (nr).width = (pw); (nr).height = (ph); (nr).gx = (px); (nr).gy = (py); } while (0)
 #define FRAME_OUTPUT_DATA(f) ((f)->output_data.ohos)
 #define FRAME_DISPLAY_INFO(f) ((f)->output_data.ohos->display_info)
 #define FRAME_FONT(f) ((f)->output_data.ohos->font)
@@ -139,7 +137,6 @@ typedef void (*ohos_frame_sink_fn) (int x, int y, int width, unsigned code,
 typedef void (*ohos_log_fn) (const char *);
 void ohos_set_log_sink (ohos_log_fn fn);
 void ohos_log (const char *s);
-void ohos_set_interactive (void);
 void ohos_set_frame_sink (ohos_frame_sink_fn fn);
 void ohos_frame_text (int x, int y, int width, unsigned code,
                       uint32_t fg, uint32_t bg, int with_background);

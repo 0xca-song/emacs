@@ -1,8 +1,6 @@
 /* OHOS terminal backend, mirroring androidterm.c.  */
 
 #include <config.h>
-#include <execinfo.h>
-#include <signal.h>
 typedef void *Emacs_Pix_Container;
 typedef void *Emacs_Cursor;
 typedef void *Emacs_Pixmap;
@@ -20,7 +18,6 @@ typedef struct ohos_display_info Display_Info;
 struct ohos_display_info *
 ohos_term_init (void)
 {
-  fprintf (stderr, "[ohos] term_init begin\n");
   struct ohos_display_info *dpyinfo = xzalloc (sizeof *dpyinfo);
   dpyinfo->resx = 96.0;
   dpyinfo->resy = 96.0;
@@ -37,7 +34,6 @@ ohos_term_init (void)
   terminal->name = xstrdup ("ohos");
   dpyinfo->name_list_element = Fcons (build_string ("ohos"), Qnil);
   KVAR (current_kboard, Vwindow_system) = Qohos;
-  fprintf (stderr, "[ohos] term_init end\n");
+  Fprovide (Qohos, Qnil);
   return dpyinfo;
 }
-

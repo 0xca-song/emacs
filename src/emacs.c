@@ -20,7 +20,6 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 
 #define INLINE EXTERN_INLINE
 #include <config.h>
-#include <execinfo.h>
 
 #include <errno.h>
 #include <fcntl.h>
@@ -1321,7 +1320,6 @@ int
 android_emacs_init (int argc, char **argv, char *dump_file)
 #endif
 {
-  ohos_log ("emacs main enter");
   /* Variable near the bottom of the stack, and aligned appropriately
      for pointers.  */
   void *stack_bottom_variable;
@@ -1367,13 +1365,6 @@ android_emacs_init (int argc, char **argv, char *dump_file)
 #ifdef HAVE_PDUMPER
   bool attempt_load_pdump = false;
 #endif
-  {
-    char dbgbuf[256];
-    snprintf (dbgbuf, sizeof dbgbuf,
-              "main parse temacs=%s initialized=%d skip=%d argc=%d",
-              temacs ? temacs : "(null)", initialized, skip_args, argc);
-    ohos_log (dbgbuf);
-  }
 
   /* Look for this argument first, before any heap allocation, so we
      can set heap flags properly if we're going to dump.  */
@@ -2202,15 +2193,12 @@ Using an Emacs configured with --with-x-toolkit=lucid does not have this problem
 
   /* Init buffer storage and default directory of main buffer.  */
   init_buffer ();
-  ohos_log ("after init_buffer");
 
   /* Must precede init_cmdargs and init_sys_modes.  */
   init_callproc_1 ();
-  ohos_log ("after init_callproc_1");
 
   /* Must precede init_lread.  */
   init_cmdargs (argc, argv, skip_args, original_pwd);
-  ohos_log ("after init_cmdargs");
 
   if (initialized)
     {
@@ -2223,11 +2211,8 @@ Using an Emacs configured with --with-x-toolkit=lucid does not have this problem
     }
 
   init_callproc ();	/* Must follow init_cmdargs but not init_sys_modes.  */
-  ohos_log ("after init_callproc");
   init_fileio ();
-  ohos_log ("after init_fileio");
   init_lread ();
-  ohos_log ("after init_lread");
 
   /* If "-version" was specified, produce version information and
      exit.  We do it here because the code below needs to call Lisp
@@ -2540,14 +2525,11 @@ Using an Emacs configured with --with-x-toolkit=lucid does not have this problem
 #endif
 
   init_charset ();
-  ohos_log ("after init_charset");
 
   /* This calls putenv and so must precede init_process_emacs.  */
   init_timefns ();
-  ohos_log ("after init_timefns");
 
   init_editfns ();
-  ohos_log ("after init_editfns");
 
   /* These two call putenv.  */
 #ifdef HAVE_DBUS
@@ -2562,28 +2544,20 @@ Using an Emacs configured with --with-x-toolkit=lucid does not have this problem
      all calls to putenv and setenv.  Also, this sets up
      add_keyboard_wait_descriptor, which init_display uses.  */
   init_process_emacs (sockfd);
-  ohos_log ("after init_process_emacs");
 
-  ohos_log ("before init_keyboard");
   init_keyboard ();	/* This too must precede init_sys_modes.  */
-  ohos_log ("after init_keyboard");
-  ohos_log ("before init_display");
-  init_display ();
-  ohos_log ("after init_display");	/* Determine terminal type.  Calls init_sys_modes.  */
+  init_display ();	/* Determine terminal type.  Calls init_sys_modes.  */
 #if HAVE_W32NOTIFY
   if (noninteractive)
     init_crit ();	/* w32notify.c needs this in batch mode.  */
 #endif	/* HAVE_W32NOTIFY */
   init_xdisp ();
-  ohos_log ("after init_xdisp");
 #ifdef HAVE_WINDOW_SYSTEM
   init_fringe ();
 #endif /* HAVE_WINDOW_SYSTEM */
   init_macros ();
   init_window ();
-  ohos_log ("after init_window");
   init_font ();
-  ohos_log ("after init_font");
 
 #ifdef HAVE_ANDROID
   init_androidmenu ();
@@ -2661,35 +2635,8 @@ Using an Emacs configured with --with-x-toolkit=lucid does not have this problem
 #endif
 
   /* Enter editor command loop.  This never returns.  */
-  fprintf (stderr, "[ohos] main before set_initial_minibuffer_mode\n");
   set_initial_minibuffer_mode ();
-#ifdef HAVE_OHOS_GUI
-  /* The OHOS terminal/frame are already created by ohos_term_init; skip
-     the tty-oriented normal-top-level bootstrap for the first display.
-     Keep Vtop_level during dump generation.  */
-  if (initialized && !will_dump_p () && !temacs)
-    Vtop_level = Qnil;
-#endif
-  ohos_log ("before Frecursive_edit");
-#ifdef HAVE_OHOS_GUI
-  if (!FRAME_OHOS_P (SELECTED_FRAME ()))
-    {
-      Lisp_Object nf = Fohos_create_frame (Qnil);
-      Fselect_frame (nf, Qnil);
-      {
-        Lisp_Object tail, next;
-        for (tail = Vframe_list; CONSP (tail); tail = next)
-          {
-            next = XCDR (tail);
-            if (!FRAME_OHOS_P (XFRAME (XCAR (tail))))
-              Fdelete_frame (XCAR (tail), Qnil);
-          }
-      }
-      ohos_log ("C-owned OHOS frame selected; tty frames removed");
-    }
-#endif
   Frecursive_edit ();
-  fprintf (stderr, "[ohos] main after Frecursive_edit\n");
   eassume (false);
 }
 
@@ -3030,21 +2977,6 @@ killed.  */
        attributes: noreturn)
   (Lisp_Object arg, Lisp_Object restart)
 {
-  fprintf (stderr, "[ohos-haiku] Fkill_emacs called\n");
-  {
-    void *frames[64];
-    int n = backtrace (frames, 64);
-    backtrace_symbols_fd (frames, n, 2);
-    void **fp = (void **) __builtin_frame_address (0);
-    for (int i = 0; i < 24 && fp; i++)
-      {
-        dprintf (2, "fk#%d %p\n", i, fp[1]);
-        void **next = (void **) fp[0];
-        if (next <= fp)
-          break;
-        fp = next;
-      }
-  }
   int exit_code;
 
 #ifndef WINDOWSNT

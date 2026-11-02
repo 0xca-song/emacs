@@ -5,8 +5,6 @@
    patch; this file deliberately has no tty/pty dependency.  */
 
 #include <config.h>
-#include <execinfo.h>
-#include <signal.h>
 typedef void *Emacs_Pix_Container;
 typedef void *Emacs_Cursor;
 typedef void *Emacs_Pixmap;
@@ -24,20 +22,34 @@ typedef struct ohos_display_info Display_Info;
 static void
 ohos_draw_glyph_string (struct glyph_string *s)
 {
-  ohos_log ("draw_glyph_string");
-  if (!s || !s->first_glyph || s->nchars <= 0)
+  if (!s || !s->f || !s->first_glyph || s->nchars <= 0)
     return;
+
+  int column_width = FRAME_COLUMN_WIDTH (s->f);
+  int line_height = FRAME_LINE_HEIGHT (s->f);
+  if (column_width <= 0 || line_height <= 0)
+    return;
+
+  int row = s->y / line_height;
+  int pixel_x = s->x;
+
   for (int i = 0; i < s->nchars; i++)
     {
       struct glyph *g = s->first_glyph + i;
       if (g->type != CHAR_GLYPH)
         continue;
-      int w = ((g->u.ch >= 0x1100 && g->u.ch <= 0x115f)
-               || (g->u.ch >= 0x2e80 && g->u.ch <= 0xa4cf)) ? 18 : 9;
-      ohos_frame_text (s->x, s->y, w, g->u.ch,
+
+      int cell_x = pixel_x / column_width;
+      int cell_width = (g->pixel_width + column_width - 1) / column_width;
+      if (cell_width < 1)
+        cell_width = 1;
+
+      ohos_frame_text (cell_x, row, cell_width, g->u.ch,
                        (uint32_t) s->face->foreground,
                        (uint32_t) s->face->background,
                        s->face->background != s->face->foreground);
+
+      pixel_x += g->pixel_width;
     }
 }
 
@@ -165,32 +177,10 @@ ohos_create_terminal (struct ohos_display_info *dpyinfo)
   return terminal;
 }
 
-static void
-ohos_crash_handler (int sig)
-{
-  void *frames[64];
-  int n = backtrace (frames, 64);
-  dprintf (2, "\n--- ohos crash signal %d ---\n", sig);
-  backtrace_symbols_fd (frames, n, 2);
-  signal (sig, SIG_DFL);
-  raise (sig);
-}
-
 struct redisplay_interface *
 ohos_get_redisplay_interface (void)
 {
   return &ohos_redisplay_interface;
-}
-
-extern bool noninteractive;
-
-DEFUN ("ohos-trace", Fohos_trace, Sohos_trace, 1, 1, 0,
-       doc: /* Write a trace line to stderr.  */)
-  (Lisp_Object msg)
-{
-  CHECK_STRING (msg);
-  fprintf (stderr, "[ohos] %s\n", SDATA (msg));
-  return Qnil;
 }
 
 static struct redisplay_interface ohos_redisplay_interface =
@@ -230,6 +220,5 @@ void
 syms_of_ohosgui (void)
 {
   DEFSYM (Qohos, "ohos");
-  defsubr (&Sohos_trace);
   syms_of_ohosfns ();
 }

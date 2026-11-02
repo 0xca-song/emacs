@@ -5,18 +5,8 @@
    app installs callbacks with the setter functions.  */
 
 #include <config.h>
-#include <execinfo.h>
-#include <signal.h>
 #include "lisp.h"
 #include "ohosgui.h"
-
-extern bool noninteractive;
-
-void
-ohos_set_interactive (void)
-{
-  noninteractive = false;
-}
 
 static ohos_frame_sink_fn ohos_frame_sink;
 static ohos_log_fn ohos_log_sink;
@@ -47,4 +37,3 @@ ohos_frame_text (int x, int y, int width, unsigned code, uint32_t fg,
   if (ohos_frame_sink)
     ohos_frame_sink (x, y, width, code, fg, bg, with_background);
 }
-

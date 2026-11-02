@@ -579,7 +579,6 @@ It is the default value of the variable `top-level'."
     (funcall 'android-enumerate-fonts)
     (setq android-fonts-enumerated t))
 
-  (ohos-trace "normal-top-level start")
   (if command-line-processed
       (message internal--top-level-message)
     (setq command-line-processed t)
@@ -610,7 +609,6 @@ It is the default value of the variable `top-level'."
       (push (expand-file-name "eln-cache/" user-emacs-directory)
             native-comp-eln-load-path))
 
-    (ohos-trace "before subdirs")
     ;; Look in each dir in load-path for a subdirs.el file.  If we
     ;; find one, load it, which will add the appropriate subdirs of
     ;; that dir into load-path.  This needs to be done before setting
@@ -638,7 +636,6 @@ It is the default value of the variable `top-level'."
         ;; of load-path and we want to take it into account.
         (setq tail (cdr tail))))
 
-    (ohos-trace "before eol/set-locale")
     ;; Set the default strings to display in mode line for end-of-line
     ;; formats that aren't native to this platform.  This should be
     ;; done before calling set-locale-environment, as the latter might
@@ -669,7 +666,6 @@ It is the default value of the variable `top-level'."
         (set-locale-environment
          (funcall 'android-locale-for-system-language))
       (set-locale-environment nil))
-    (ohos-trace "after set-locale")
     ;; Decode all default-directory's (probably, only *scratch* exists
     ;; at this point).  default-directory of *scratch* is the basis
     ;; for many other file-name variables and directory lists, so it
@@ -774,31 +770,19 @@ It is the default value of the variable `top-level'."
     (if default-directory
 	(setq default-directory (abbreviate-file-name default-directory))
       (display-warning 'initialization "Error setting default-directory"))
-    (ohos-trace "before old-face-font-rescale")
-    (setq initial-window-system 'ohos)
-    (setq window-system 'ohos)
     (let ((old-face-font-rescale-alist face-font-rescale-alist))
       (unwind-protect
-	  (progn (ohos-trace "before command-line")
-		 (load "term/ohos-win" t)
-		 (setq window-system 'ohos)
-		 (command-line)
-		 (ohos-trace "after command-line"))
+	  (command-line)
 
-        (when (and (featurep 'native-compile)
-                   (not (eq window-system 'ohos)))
+        (when (featurep 'native-compile)
           (startup--update-eln-cache))
-        (ohos-trace "after command-line cleanup native")
-        (when (eq window-system 'ohos)
-          (ohos-trace "ohos skip term hooks"))
 
 	;; Do this again, in case .emacs defined more abbreviations.
-	(if (and (not (eq window-system 'ohos)) default-directory)
+	(if default-directory
 	    (setq default-directory (abbreviate-file-name default-directory)))
 	;; Specify the file for recording all the auto save files of this session.
 	;; This is used by recover-session.
-	(unless (eq window-system 'ohos)
-	 (or auto-save-list-file-name
+	(or auto-save-list-file-name
 	    (and auto-save-list-file-prefix
 		 (setq auto-save-list-file-name
 		       ;; Under MS-DOS our PID is almost always reused between
@@ -819,19 +803,17 @@ It is the default value of the variable `top-level'."
 			       (format "%s%d-%s~"
 				       auto-save-list-file-prefix
 				       (emacs-pid)
-				       (system-name)))))))))
-	(unless (or inhibit-startup-hooks
-                    (eq window-system 'ohos))
+				       (system-name))))))))
+	(unless inhibit-startup-hooks
 	  (run-hooks 'emacs-startup-hook 'term-setup-hook))
 
 	;; Don't do this if we failed to create the initial frame,
 	;; for instance due to a dense colormap.
-	(when (and (not (eq window-system 'ohos))
-                   (or frame-initial-frame
+	(when (or frame-initial-frame
 		  ;; If frame-initial-frame has no meaning, do this anyway.
 		  (not (and initial-window-system
 			    (not noninteractive)
-			    (not (eq initial-window-system 'pc))))))
+			    (not (eq initial-window-system 'pc)))))
 
 	  ;; FIXME: The user's init file may change
 	  ;; face-font-rescale-alist.  However, the default face
@@ -851,9 +833,8 @@ It is the default value of the variable `top-level'."
 
 	  ;; Modify the initial frame based on what .emacs puts into
 	  ;; ...-frame-alist.
-	  (unless (eq window-system 'ohos)
-	    (if (fboundp 'frame-notice-user-settings)
-		(frame-notice-user-settings)))
+	  (if (fboundp 'frame-notice-user-settings)
+	      (frame-notice-user-settings))
 	  ;; Set the faces for the initial background mode even if
 	  ;; frame-notice-user-settings didn't (such as on a tty).
 	  ;; frame-set-background-mode is idempotent, so it won't
@@ -862,10 +843,9 @@ It is the default value of the variable `top-level'."
 	      (frame-set-background-mode (selected-frame))))
 
 	;; Now we know the user's default font, so add it to the menu.
-	(unless (eq window-system 'ohos)
-	  (if (fboundp 'font-menu-add-default)
-	      (font-menu-add-default)))
-	(unless (or inhibit-startup-hooks (eq window-system 'ohos))
+	(if (fboundp 'font-menu-add-default)
+	    (font-menu-add-default))
+	(unless inhibit-startup-hooks
 	  (run-hooks 'window-setup-hook))))
 
     ;; Subprocesses of Emacs do not have direct access to the terminal, so
@@ -873,7 +853,6 @@ It is the default value of the variable `top-level'."
     ;; We are careful to do it late (after term-setup-hook), although the
     ;; new multi-tty code does not use $TERM any more there anyway.
     (setenv "TERM" "dumb")
-    (ohos-trace "normal-top-level after TERM=dumb")
     ;; Remove DISPLAY from the process-environment as well.  This allows
     ;; `callproc.c' to give it a useful adaptive default which is either
     ;; the value of the `display' frame-parameter or the DISPLAY value
@@ -890,8 +869,7 @@ It is the default value of the variable `top-level'."
                                 nil)))
             (setq env (cdr env)))))
       (when display
-        (setq process-environment (delete display process-environment))))
-    (ohos-trace "normal-top-level after display cleanup")))
+        (setq process-environment (delete display process-environment))))))
 
 ;; Precompute the keyboard equivalents in the menu bar items.
 ;; Command-line options supported by tty's:
@@ -1319,18 +1297,13 @@ unconditionally."
   "A subroutine of `normal-top-level'.
 Amongst another things, it parses the command-line arguments."
  (let (xdg-dir startup-init-directory)
-  (ohos-trace "command-line start")
-  (ohos-trace "command-line before setq")
   (setq before-init-time (current-time)
 	after-init-time nil
         command-line-default-directory default-directory)
-  (ohos-trace "command-line after setq")
 
   ;; Force recomputation, in case it was computed during the dump.
   (setq abbreviated-home-dir nil)
-  (ohos-trace "command-line after abbreviated-home-dir")
 
-  (ohos-trace "command-line before vc")
   ;; See if we should import version-control from the environment variable.
   (let ((vc (getenv "VERSION_CONTROL")))
     (cond ((eq vc nil))			;don't do anything if not set
@@ -1347,9 +1320,7 @@ Amongst another things, it parses the command-line arguments."
   ;;! ;; Choose a good default value for split-window-keep-point.
   ;;! (setq split-window-keep-point (> baud-rate 2400))
 
-  (ohos-trace "command-line after vc")
   ;; Convert preloaded file names in load-history to absolute.
-  (ohos-trace "command-line before locate simple")
   (let ((simple-file-name
 	 ;; Look for simple.el or simple.elc and use their directory
 	 ;; as the place where all Lisp files live.
@@ -1380,8 +1351,6 @@ please check its value")
 			elt))
 		    load-history))))
 
-  (ohos-trace "command-line after load-history")
-  (ohos-trace "command-line before args decode")
   ;; Convert the arguments to Emacs internal representation.
   (let ((args command-line-args))
     (while args
@@ -1389,10 +1358,6 @@ please check its value")
 	      (decode-coding-string (car args) locale-coding-system t))
       (pop args)))
 
-  (ohos-trace "command-line after args decode")
-  (when (eq window-system 'ohos)
-    (ohos-trace "command-line ohos dropping args")
-    (setq command-line-args nil))
   (let ((done nil)
 	(args (cdr command-line-args))
 	display-arg)
@@ -1404,7 +1369,6 @@ please check its value")
     (and init-file-user
          (equal init-file-user (user-real-login-name))
 	 (setq init-file-user ""))
-    (ohos-trace "command-line after init-file-user")
 
     ;; Process the command-line args, and delete the arguments
     ;; processed.  This is consistent with the way main in emacs.c
@@ -1498,7 +1462,6 @@ please check its value")
 	;; Was argval set but not used?
 	(and argval
 	     (error "Option `%s' doesn't allow an argument" argi))))
-    (ohos-trace "command-line after arg loop")
 
     ;; Re-attach the --display arg.
     (and display-arg (setq args (append display-arg args)))
@@ -1506,7 +1469,6 @@ please check its value")
     ;; Re-attach the program name to the front of the arg list.
     (and command-line-args
          (setcdr command-line-args args)))
-  (ohos-trace "command-line after reattach")
 
   ;; Re-evaluate predefined variables whose initial value depends on
   ;; the runtime context.  But delay the warning about
@@ -1514,14 +1476,12 @@ please check its value")
   ;; the init file and the command-line arguments, in case the user
   ;; customized `user-emacs-directory-warning' to nil via those.
   (let ((user-emacs-directory-warning nil))
-    (when (and (not (eq window-system 'ohos))
-               (listp custom-delayed-init-variables))
+    (when (listp custom-delayed-init-variables)
       (mapc #'custom-reevaluate-setting
             ;; Initialize them in the same order they were loaded, in
             ;; case there are dependencies between them.
             (reverse custom-delayed-init-variables))))
   (setq custom-delayed-init-variables t)
-  (ohos-trace "command-line after custom re-eval")
 
   ;; Warn for invalid user name.
   (when init-file-user
@@ -1550,7 +1510,6 @@ please check its value")
                                    init-file-user))
                          :error))))
 
-  (ohos-trace "command-line after init-file-user check")
   ;; Calculate the name of the Emacs init directory.
   ;; This is typically ~INIT-FILE-USER/.config/emacs unless the user
   ;; is following the ~INIT-FILE-USER/.emacs.d convention.
@@ -1565,7 +1524,6 @@ please check its value")
 	  (setq xdg-dir (concat "~" init-file-user "/.config/emacs/"))
 	  (startup--xdg-or-homedot xdg-dir init-file-user)))
 
-  (ohos-trace "command-line after startup-init-directory")
   ;; Run the site-start library if it exists.
   ;; This used to come after the early init file, but was moved here to
   ;; make it possible for sites to do early init things on behalf of
@@ -1581,7 +1539,6 @@ please check its value")
     (let ((inhibit-startup-screen inhibit-startup-screen))
       (load site-run-file t t)))
 
-  (ohos-trace "command-line after site-run")
   ;; Load the early init file, if found.
   (startup--load-user-init-file
    (lambda ()
@@ -1593,18 +1550,15 @@ please check its value")
       "early-init.el"
       startup-init-directory)))
   (setq early-init-file user-init-file)
-  (ohos-trace "command-line after early-init")
 
   ;; Amend `native-comp-eln-load-path', since the early-init file may
   ;; have altered `user-emacs-directory' and/or changed the eln-cache
   ;; directory.
-  (when (and (featurep 'native-compile)
-             (not (eq window-system 'ohos)))
+  (when (featurep 'native-compile)
     (startup--update-eln-cache))
 
   ;; If any package directory exists, initialize the package system.
-  (unless (eq window-system 'ohos)
-   (and user-init-file
+  (and user-init-file
        package-enable-at-startup
        (not (bound-and-true-p package--activated))
        (catch 'package-dir-found
@@ -1619,22 +1573,19 @@ please check its value")
                                 (package--description-file subdir)
                                 subdir))))
 		   (throw 'package-dir-found t)))))))
-       (package-activate-all)))
+       (package-activate-all))
 
   ;; If it enabled and the directory exists, process the contents of the
   ;; user-lisp/ directory.
-  (when (and (not (eq window-system 'ohos))
-             init-file-user
+  (when (and init-file-user
              (file-directory-p user-lisp-directory))
     (prepare-user-lisp (not user-lisp-auto-scrape)))
 
-  (ohos-trace "command-line after user-lisp")
   ;; Make sure window system's init file was loaded in loadup.el if
   ;; using a window system.
   ;; Initialize the window-system only after processing the command-line
   ;; args so that -Q can influence this initialization.
-  (unless (eq initial-window-system 'ohos)
-   (condition-case error
+  (condition-case error
     (unless noninteractive
       (if (and initial-window-system
 	       (not (featurep
@@ -1646,10 +1597,8 @@ please check its value")
             (let ((window-system initial-window-system)) ;Hack attack!
               (handle-args-function command-line-args)))
       ;; Initialize the window system. (Open connection, etc.)
-      (ohos-trace "command-line before window-system-initialization")
       (let ((window-system initial-window-system)) ;Hack attack!
         (window-system-initialization))
-      (ohos-trace "command-line after window-system-initialization")
       (put initial-window-system 'window-system-initialized t))
     ;; If there was an error, print the error message and exit.
     (error
@@ -1658,12 +1607,9 @@ please check its value")
       'external-debugging-output)
      (terpri 'external-debugging-output)
      (setq initial-window-system nil)
-     (kill-emacs))))
-  (ohos-trace "command-line after window-system block")
+     (kill-emacs)))
 
-  (ohos-trace "command-line before before-init-hook")
   (run-hooks 'before-init-hook)
-  (ohos-trace "command-line after before-init-hook")
 
   ;; Under X, create the X frame and delete the terminal frame.
   (unless (daemonp)
@@ -1671,29 +1617,19 @@ please check its value")
 	(setq menu-bar-mode nil
 	      tab-bar-mode nil
 	      tool-bar-mode nil))
-    (ohos-trace "command-line before frame-initialize")
-    (setq window-system 'ohos)
-    (if (eq window-system 'ohos)
-        (let ((f (make-frame '((window-system . ohos)))))
-          (select-frame f)
-          (delete-other-frames f))
-      (frame-initialize))
-    (ohos-trace "command-line after frame-initialize"))
+    (frame-initialize))
 
-  (when (and (fboundp 'x-create-frame)
-             (not (eq window-system 'ohos)))
+  (when (fboundp 'x-create-frame)
     ;; Set up the tool-bar (even in tty frames, since Emacs might open a
     ;; graphical frame later).
     (unless noninteractive
       (tool-bar-setup)))
 
-  (unless (or noninteractive (eq window-system 'ohos))
+  (unless noninteractive
     (startup--setup-quote-display)
     (setq internal--text-quoting-flag t))
-  (ohos-trace "command-line after quote display")
 
-  (unless (eq window-system 'ohos)
-    (normal-erase-is-backspace-setup-frame))
+  (normal-erase-is-backspace-setup-frame)
 
   ;; Register default TTY colors for the case the terminal hasn't a
   ;; terminal init file.  We do this regardless of whether the terminal
@@ -1704,19 +1640,14 @@ please check its value")
   ;; Exception: the `pc' ``window system'' has only 16 fixed colors,
   ;; and they are already set at this point by a suitable method of
   ;; window-system-initialization.
-  (unless (eq initial-window-system 'ohos)
-    (or (eq initial-window-system 'pc)
-        (tty-register-default-colors)))
-  (ohos-trace "command-line after tty colors")
+  (or (eq initial-window-system 'pc)
+      (tty-register-default-colors))
 
   (let ((old-scalable-fonts-allowed scalable-fonts-allowed)
 	(old-face-ignored-fonts face-ignored-fonts))
 
     ;; Load the user's init file, or the default one, or none.
-    (ohos-trace "command-line before user init file")
-    (if (eq window-system 'ohos)
-        nil
-      (startup--load-user-init-file
+    (startup--load-user-init-file
      (lambda ()
        (cond
 	((eq startup-init-directory xdg-dir) nil)
@@ -1741,24 +1672,20 @@ please check its value")
        (expand-file-name
         "init.el"
         startup-init-directory))
-     t))
-    (ohos-trace "command-line after user init file")
+     t)
 
     ;; Amend `native-comp-eln-load-path' again, since the early-init
     ;; file may have altered `user-emacs-directory' and/or changed the
     ;; eln-cache directory.
     (when (featurep 'native-compile)
       (startup--update-eln-cache))
-    (ohos-trace "command-line after native comp update")
 
-    (when (and (not (eq window-system 'ohos))
-               deactivate-mark transient-mark-mode)
+    (when (and deactivate-mark transient-mark-mode)
       (with-current-buffer (window-buffer)
         (deactivate-mark)))
 
     ;; If the user has a file of abbrevs, read it (unless -batch).
-    (when (and (not (eq window-system 'ohos))
-               (not noninteractive)
+    (when (and (not noninteractive)
                (file-exists-p abbrev-file-name)
                (file-readable-p abbrev-file-name))
       (quietly-read-abbrev-file abbrev-file-name))
@@ -1766,7 +1693,6 @@ please check its value")
     ;; If the abbrevs came entirely from the init file or the
     ;; abbrevs file, they do not need saving.
     (setq abbrevs-changed nil)
-    (ohos-trace "command-line after abbrev file")
 
     ;; Do this here in case the init file sets mail-host-address.
     (and mail-host-address
@@ -1786,16 +1712,13 @@ please check its value")
     ;; be realized.
     (unless (and (eq scalable-fonts-allowed old-scalable-fonts-allowed)
 		 (eq face-ignored-fonts old-face-ignored-fonts))
-      (clear-face-cache))
-    (ohos-trace "command-line after clear-face-cache"))
+      (clear-face-cache)))
 
   (setq after-init-time (current-time))
   ;; Display any accumulated warnings after all functions in
   ;; `after-init-hook' like `desktop-read' have finalized possible
   ;; changes in the window configuration.
-  (unless (eq window-system 'ohos)
-    (run-hooks 'after-init-hook 'delayed-warnings-hook))
-  (ohos-trace "command-line after after-init-hook")
+  (run-hooks 'after-init-hook 'delayed-warnings-hook)
 
   ;; If *scratch* exists and init file didn't change its mode, initialize it.
   (if (get-buffer "*scratch*")
@@ -1821,12 +1744,8 @@ please check its value")
   ;; value in the '--eval' forms.
   (custom-reevaluate-setting 'user-emacs-directory-warning)
 
-  (ohos-trace "command-line after scratch/memory")
   ;; Process the remaining args.
-  (ohos-trace "command-line before command-line-1")
-  (setq initial-window-system 'ohos)
-  (ohos-log "startup C-owned OHOS frame")
-  (ohos-trace "command-line after command-line-1")
+  (command-line-1 (cdr command-line-args))
 
   ;; If -batch, terminate after processing the command options.
   (if noninteractive (kill-emacs t))
@@ -2815,10 +2734,7 @@ A fancy display is used on graphic displays, normal otherwise."
 
 (defun command-line-1 (args-left)
   "A subroutine of `command-line'."
-  (ohos-trace "command-line-1 start")
-  (unless (eq window-system 'ohos)
-    (display-startup-echo-area-message))
-  (ohos-trace "command-line-1 after echo")
+  (display-startup-echo-area-message)
 
   ;; `displayable-buffers' is a list of buffers that may be displayed,
   ;; which includes files parsed from the command line arguments and
@@ -3207,10 +3123,7 @@ nil default-directory" name)
         ;; (with-no-warnings
         ;; 	(setq menubar-bindings-done t))
 
-        (ohos-trace "command-line-1 before startup screen")
-        (unless (eq window-system 'ohos)
-          (display-startup-screen (> displayable-buffers-len 0)))
-        (ohos-trace "command-line-1 after startup screen")))))
+        (display-startup-screen (> displayable-buffers-len 0))))))
 
 (defun command-line--load-script (file)
   (load-with-code-conversion
