@@ -86,21 +86,6 @@ ohos_flush (struct frame *f)
 		(void *) f, (void *) sf, FRAME_LIVE_P (f));
       ohos_log (buf);
     }
-  static bool mouse_enabled;
-  if (!mouse_enabled)
-    {
-      mouse_enabled = true;
-      Lisp_Object tty_key = intern ("tty-type");
-      f->terminal->param_alist
-	= Fcons (Fcons (tty_key, build_string ("xterm")),
-		 f->terminal->param_alist);
-      Lisp_Object function = intern ("xterm-mouse-mode");
-      if (!NILP (Ffboundp (function)))
-	{
-	  Lisp_Object args[2] = { function, make_fixnum (1) };
-	  Ffuncall (2, args);
-	}
-    }
   if (ohos_force_redraw)
     {
       ohos_force_redraw = false;
