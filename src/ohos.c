@@ -268,7 +268,7 @@ void
 ohos_input_raw (const char *data, size_t len)
 {
   for (size_t i = 0; i < len; i++)
-    ohos_input_key ((unsigned char) data[i], 0, 1);
+    ohos_input_key (((unsigned char) data[i]) | OHOS_INPUT_RAW_FLAG, 0, 1);
 }
 
 void

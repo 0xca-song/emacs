@@ -90,6 +90,10 @@ ohos_flush (struct frame *f)
   if (!mouse_enabled)
     {
       mouse_enabled = true;
+      Lisp_Object tty_key = intern ("tty-type");
+      f->terminal->param_alist
+	= Fcons (Fcons (tty_key, build_string ("xterm")),
+		 f->terminal->param_alist);
       Lisp_Object function = intern ("xterm-mouse-mode");
       if (!NILP (Ffboundp (function)))
 	{
@@ -329,6 +333,15 @@ ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
       ev.frame_or_window = selected_frame;
       ev.timestamp = 0;
 
+      if (key & OHOS_INPUT_RAW_FLAG)
+	{
+	  ev.kind = ASCII_KEYSTROKE_EVENT;
+	  ev.code = key & 0xff;
+	  ev.modifiers = 0;
+	  kbd_buffer_store_event (&ev);
+	  count++;
+	  continue;
+	}
       if (key & OHOS_INPUT_TEXT_FLAG)
 	{
 	  unsigned cp = key & 0x1fffff;
