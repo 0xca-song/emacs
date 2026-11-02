@@ -50,6 +50,8 @@ ohos_draw_glyph_string (struct glyph_string *s)
       uint32_t flags = (s->face->background != s->face->foreground) ? 1 : 0;
       if (s->face->underline != FACE_NO_UNDERLINE)
 	flags |= 4;
+      if (s->font && FONT_WEIGHT_NUMERIC (s->font) >= 150)
+	flags |= 2;
       ohos_draw_text (pixel_x, s->y, width, line_height, g->u.ch,
 		      (uint32_t) s->face->foreground,
 		      (uint32_t) s->face->background, flags);
