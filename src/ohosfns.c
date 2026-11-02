@@ -56,7 +56,7 @@ ohos_create_frame (struct terminal *terminal)
   f->output_data.ohos->display_info = terminal->display_info.ohos;
   f->output_data.ohos->width = 800;
   f->output_data.ohos->height = 600;
-  f->output_data.ohos->fontset = -1;
+  f->output_data.ohos->fontset = fs_query_fontset (build_string ("fontset-default"), 0);
   f->output_data.ohos->parent_desc = 0;
   f->output_data.ohos->root_window = 0;
 
@@ -64,9 +64,14 @@ ohos_create_frame (struct terminal *terminal)
   FRAME_DISPLAY_INFO (f)->resy = 96;
   f->column_width = 9;
   f->line_height = 18;
-  f->output_data.ohos->font = ohosfont_make_default (f);
-  f->output_data.ohos->fontset
-    = fs_query_fontset (build_string ("fontset-default"), 0);
+  ohosfont_register_frame (f);
+  Lisp_Object font_obj = ohosfont_make_default_object (f);
+  f->output_data.ohos->font = NILP (font_obj) ? NULL : XFONT_OBJECT (font_obj);
+  f->output_data.ohos->fontset = fs_query_fontset (build_string ("fontset-default"), 0);
+  if (!NILP (font_obj))
+    store_frame_param (f, Qfont, font_obj);
+  ohos_log (NILP (font_obj) ? "ohos frame font open failed"
+	    : "ohos frame font open ok");
   ohos_log ("ohos_create_frame font/fontset done");
 
   FRAME_FOREGROUND_PIXEL (f) = 0x000000;

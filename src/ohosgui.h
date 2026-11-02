@@ -130,6 +130,8 @@ extern void syms_of_ohosgui (void);
 extern void syms_of_ohosfns (void);
 extern void syms_of_ohosfont (void);
 extern struct font *ohosfont_make_default (struct frame *);
+extern Lisp_Object ohosfont_make_default_object (struct frame *);
+extern void ohosfont_register_frame (struct frame *);
 extern bool ohos_defined_color (struct frame *, const char *, Emacs_Color *,
 				bool, bool);
 extern void ohos_query_frame_background_color (struct frame *, Emacs_Color *);
