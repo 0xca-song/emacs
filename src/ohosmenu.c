@@ -470,16 +470,32 @@ ohos_menu_show (struct frame *f, int x, int y, int menuflags,
   json = ohos_menu_json (title, menuflags, dialog);
   record_unwind_protect_ptr (xfree, json);
 
-  /* The host command channel truncates at OHOS_HOST_CMD_MAX: never send
-     a menu that would arrive as broken JSON.  */
-  if (strlen (json) >= OHOS_MENU_JSON_MAX)
-    {
-      if (error_name)
-	*error_name = "Menu too large";
-      xfree (json);
-      unblock_input ();
-      return Qnil;
-    }
+  /* The host command channel truncates at OHOS_HOST_CMD_MAX, so a large
+     menu is pushed in numbered chunks; the host reassembles them and only
+     then parses the JSON.  */
+  {
+    size_t len = strlen (json);
+    size_t chunk = 4000;
+    size_t total = (len + chunk - 1) / chunk;
+
+    if (total <= 1)
+      ohos_host_command ("menu-open %d %s %s", id,
+			 dialog ? "dialog" : "menu", json);
+    else
+      {
+	size_t k;
+
+	for (k = 0; k < total; k++)
+	  {
+	    size_t off = k * chunk;
+	    size_t n = len - off < chunk ? len - off : chunk;
+
+	    ohos_host_command ("menu-part %d %zu %zu %.*s",
+			       id, k, total, (int) n, json + off);
+	  }
+	ohos_log ("menu_show sent in parts");
+      }
+  }
 
   /* Dismiss the panel if Emacs leaves this function abnormally.  */
   record_unwind_protect_int (ohos_cancel_menu, id);
