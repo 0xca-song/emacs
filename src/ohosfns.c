@@ -314,14 +314,12 @@ ohos_set_menu_bar_lines (struct frame *f, Lisp_Object value,
   /* Make sure we redisplay all windows in this frame.  */
   fset_redisplay (f);
 
-  /* External menu bar (xfns.c:1708) would set 0 here and mark the bar
-     external; with FRAME_EXTERNAL_MENU_BAR = 1 this build crashes inside
-     try_window, even when our set_frame_menubar does nothing at all, so the
-     crash is in the core display path for external bars and has to be
-     debugged there.  Keep the glyph row meanwhile.  */
-  FRAME_MENU_BAR_LINES (f) = nlines;
-  FRAME_MENU_BAR_HEIGHT (f) = nlines * FRAME_LINE_HEIGHT (f);
-  FRAME_EXTERNAL_MENU_BAR (f) = 0;
+  /* External menu bar (xfns.c:1708): the frame keeps no glyph row, ArkUI
+     draws it.  display_menu_bar returns early for OHOS frames (xdisp.c),
+     so redisplay never tries to draw the row itself.  */
+  FRAME_MENU_BAR_LINES (f) = 0;
+  FRAME_MENU_BAR_HEIGHT (f) = 0;
+  FRAME_EXTERNAL_MENU_BAR (f) = nlines ? 1 : 0;
 
   if (nlines != olines)
     {

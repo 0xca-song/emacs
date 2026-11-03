@@ -27797,6 +27797,11 @@ display_menu_bar (struct window *w)
     return;
 #endif /* HAVE_NS */
 
+#ifdef HAVE_OHOS_GUI
+  if (FRAME_OHOS_P (f))
+    return;
+#endif
+
 #ifdef HAVE_HAIKU
   if (FRAME_HAIKU_P (f))
     return;

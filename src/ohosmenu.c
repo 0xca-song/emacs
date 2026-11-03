@@ -630,12 +630,8 @@ set_frame_menubar (struct frame *f, bool deep_p)
   /* The recomputation redisplay itself performs for a glyph menu bar
      (xdisp.c: fset_menu_bar_items + menu_bar_items) and nothing more:
      specbind, buffer switching and the menu hooks are what crashed here.  */
-  /* The redisplay call (deep_p == false) does nothing at all: even
-     publishing there crashed, so the host is updated from the deep calls
-     only (menu show and the initial build).  */
-  if (!deep_p)
-    return;
-  fset_menu_bar_items (f, menu_bar_items (FRAME_MENU_BAR_ITEMS (f)));
+  if (deep_p)
+    fset_menu_bar_items (f, menu_bar_items (FRAME_MENU_BAR_ITEMS (f)));
 
   /* No fset_redisplay here: this runs inside redisplay, and asking for
      another redisplay from there recursed and corrupted the specpdl
