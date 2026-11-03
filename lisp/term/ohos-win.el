@@ -206,18 +206,58 @@ COMMAND is a raw host command string, for example \"resize 640 480\"."
               (format "cursor err-%s" (car err)))))))
 
 (defun ohos-menu-bar-open ()
-  "Pop up the menu bar (F10)."
+  "Pop up the menu bar (F10, S-F10 or the menu key)."
   (interactive)
+  ;; This Emacs has no `menu-bar-map'; the menu bar is built on demand by
+  ;; `mouse-menu-bar-map'.
   (condition-case err
-      (if (and (boundp 'menu-bar-map) (keymapp menu-bar-map))
-          (x-popup-menu t menu-bar-map)
-        (ohos-frame-host-operation "cursor err-no-menubar"))
+      (x-popup-menu t (mouse-menu-bar-map))
     (error (ohos-frame-host-operation
             (format "cursor err-%s" (car err))))))
 
-(global-set-key [down-mouse-3] #'ohos-context-menu)
-;; F10 opens the menu bar, like other GUI backends do.
+;; F10 opens the menu bar, like other GUI backends do.  Some window
+;; managers reserve F10, so bind the alternatives as well.
 (global-set-key [f10] #'ohos-menu-bar-open)
+(global-set-key [S-f10] #'ohos-menu-bar-open)
+(global-set-key [menu] #'ohos-menu-bar-open)
+
+;;; Development hook.
+
+;; A writable file that is reloaded whenever it changes, so Lisp experiments
+;; cost one `hdc file send' instead of a rebuild + reinstall of the runtime.
+;; The file is created here because the application sandbox only allows
+;; overwriting existing files from outside.
+(defvar ohos-dev-file (expand-file-name "ohos-dev.el" (getenv "HOME")))
+(defvar ohos-dev-stamp nil)
+
+(defun ohos-dev-poll ()
+  "Load the development file when it changed since the last poll."
+  (when (file-readable-p ohos-dev-file)
+    (let ((stamp (file-attribute-modification-time
+                  (file-attributes ohos-dev-file))))
+      (unless (equal stamp ohos-dev-stamp)
+        (setq ohos-dev-stamp stamp)
+        (condition-case err
+            (load ohos-dev-file t t)
+          (error
+           (ohos-frame-host-operation
+            (format "cursor dev-err-%s" (car err)))))))))
+
+(defun ohos-dev-watch ()
+  "Start polling the development file."
+  (unless (file-exists-p ohos-dev-file)
+    (ignore-errors
+      (write-region ";; ohos-dev.el: reloaded automatically when changed.\n"
+                    nil ohos-dev-file nil 'silent)))
+  (setq ohos-dev-stamp nil)
+  (ohos-dev-poll)
+  (run-with-timer 0.5 0.5 #'ohos-dev-poll))
+
+;; Start right away: in this CANNOT_DUMP build after-init-hook is not a
+;; reliable trigger, but timers run once the command loop is up.
+(condition-case err
+    (ohos-dev-watch)
+  (error (message "ohos-dev-watch: %S" err)))
 
 (provide 'ohos-win)
 ;;; ohos-win.el ends here
