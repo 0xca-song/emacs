@@ -332,6 +332,11 @@ struct ohos_draw_command
 typedef void (*ohos_draw_batch_fn) (const struct ohos_draw_command *, int);
 
 void ohos_set_draw_batch_sink (ohos_draw_batch_fn fn);
+
+/* Called once after the pump drained the queue, so the host can present
+   at most once per tick instead of once per batch.  */
+typedef void (*ohos_pump_done_fn) (void);
+void ohos_set_pump_done_sink (ohos_pump_done_fn fn);
 unsigned ohos_draw_epoch (void);
 unsigned long ohos_draw_dropped_count (void);
 void ohos_draw_begin (unsigned epoch);

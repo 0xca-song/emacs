@@ -41,6 +41,7 @@ static ohos_draw_cursor_fn draw_cursor_sink;
 static ohos_draw_scroll_fn draw_scroll_sink;
 static ohos_draw_present_fn draw_present_sink;
 static ohos_draw_batch_fn draw_batch_sink;
+static ohos_pump_done_fn pump_done_sink;
 static unsigned draw_epoch;
 
 void
@@ -123,6 +124,12 @@ void
 ohos_set_draw_batch_sink (ohos_draw_batch_fn fn)
 {
   draw_batch_sink = fn;
+}
+
+void
+ohos_set_pump_done_sink (ohos_pump_done_fn fn)
+{
+  pump_done_sink = fn;
 }
 
 unsigned
@@ -239,7 +246,11 @@ ohos_pump_draw_commands (void)
       pthread_mutex_unlock (&draw_lock);
 
       if (n == 0)
-	break;
+	{
+	  if (pump_done_sink)
+	    pump_done_sink ();
+	  break;
+	}
 
       if (draw_batch_sink)
 	{
