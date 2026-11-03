@@ -206,7 +206,6 @@ extern Lisp_Object ohos_get_selection_value (Lisp_Object, Lisp_Object,
 extern Lisp_Object Fxw_display_color_p (Lisp_Object);
 extern Lisp_Object Fx_display_grayscale_p (Lisp_Object);
 extern void image_sync_to_pixmaps (struct frame *, struct image *);
-extern void image_pixmap_draw_cross (struct image *, int, int);
 extern char *get_keysym_name (int);
 extern struct font *ohosfont_make_default (struct frame *);
 extern Lisp_Object ohosfont_make_default_object (struct frame *);

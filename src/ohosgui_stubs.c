@@ -130,8 +130,15 @@ image_sync_to_pixmaps (struct frame *f, struct image *img)
   (void) f; (void) img;
 }
 
-void
-image_pixmap_draw_cross (struct image *img, int x, int y)
+/* image.c defines this only for the toolkits in its own #if list; with the
+   OHOS configuration that block is compiled out, yet the drawing code still
+   references it.  Provide a no-op with the same signature (weak, so a real
+   definition would win if the guards ever change). */
+__attribute__((weak)) void
+image_pixmap_draw_cross (struct frame *f, Emacs_Pixmap pixmap,
+			 int x, int y, int width, int height,
+			 unsigned long color)
 {
-  (void) img; (void) x; (void) y;
+  (void) f; (void) pixmap; (void) x; (void) y;
+  (void) width; (void) height; (void) color;
 }
