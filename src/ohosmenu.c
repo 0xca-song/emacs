@@ -650,6 +650,18 @@ set_frame_menubar (struct frame *f, bool deep_p)
   ohos_publish_menu_bar (f);
 }
 
+DEFUN ("ohos-menu-bar-refresh", Fohos_menu_bar_refresh,
+       Sohos_menu_bar_refresh, 0, 0, 0,
+       doc: /* Recompute and publish the menu bar of the selected frame.  */)
+  (void)
+{
+  struct frame *f = SELECTED_FRAME ();
+
+  if (f && FRAME_LIVE_P (f) && FRAME_OHOS_P (f))
+    set_frame_menubar (f, true);
+  return Qnil;
+}
+
 /* The host asks for menu bar item INDEX to be opened.  The request is
    stored here and picked up by a Lisp timer, so the popup runs from a Lisp
    context rather than from the ArkUI thread.  */
@@ -714,6 +726,7 @@ Fx_hide_tip (Lisp_Object tip)
 void
 syms_of_ohosmenu (void)
 {
+  defsubr (&Sohos_menu_bar_refresh);
   defsubr (&Sohos_menu_bar_take_request);
   defsubr (&Sohos_menu_bar_open_index);
 }

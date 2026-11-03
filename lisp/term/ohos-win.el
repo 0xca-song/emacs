@@ -189,6 +189,12 @@ COMMAND is a raw host command string, for example \"resize 640 480\"."
 
 (run-with-timer 0.1 0.1 #'ohos-menu-bar-poll)
 
+;; The menu bar content depends on the buffer and its modes.  Polling it
+;; once a second keeps the native bar in sync without depending on when
+;; update_menu_bar decides to run; the backend only talks to the host when
+;; the item list actually changed.
+(run-with-timer 1 1 #'ohos-menu-bar-refresh)
+
 (defun ohos-menu-bar-open (&optional frame)
   "Open the menu bar of FRAME, the ArkUI bar counterpart of menu-bar-open."
   (interactive)
