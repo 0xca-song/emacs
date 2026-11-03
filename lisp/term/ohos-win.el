@@ -182,14 +182,16 @@ COMMAND is a raw host command string, for example \"resize 640 480\"."
 (defun ohos-context-menu (&optional event)
   "Open the context menu for EVENT (a mouse click)."
   (interactive "e")
-  (condition-case err
-      (let* ((click (or event last-command-event))
-             (map (context-menu-map click)))
-        (if (keymapp map)
-            (x-popup-menu click map)
-          (ohos-frame-host-operation "cursor none")))
-    (error (ohos-frame-host-operation
-            (format "cursor err-%s" (car err))))))
+  (let ((click (or event last-command-event)))
+    (condition-case err
+        ;; Keymap form plus position t: bisects "menu argument" from
+        ;; "position argument" while the popup path is being brought up.
+        (let ((menu (make-sparse-keymap "Test")))
+          (define-key menu [alpha] '(menu-item "Alpha" alpha))
+          (define-key menu [beta] '(menu-item "Beta" beta))
+          (x-popup-menu t menu))
+      (error (ohos-frame-host-operation
+              (format "cursor err-%s" (car err)))))))
 
 (global-set-key [down-mouse-3] #'ohos-context-menu)
 
