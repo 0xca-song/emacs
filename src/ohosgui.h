@@ -105,6 +105,8 @@ struct ohos_output
   /* Redisplay / interaction state.  */
   bool complete_p;		/* frame fully drawn in this update */
   bool update_in_progress;
+  bool need_flip;		/* END queued but present deferred */
+  unsigned epoch;		/* current redisplay pass number */
   bool hourglass;		/* busy indicator active */
   /* Cursor handles, see ohos_init_frame_cursors.  */
   Emacs_Cursor invisible_cursor;
@@ -296,6 +298,53 @@ void ohos_font_metrics (int ascent, int descent, int height,
 			int underline_thickness);
 void ohos_set_clipboard (const char *b64);
 
+/* ------------------------------------------------------------------ */
+/* Draw command stream shared with the ArkUI host.
+
+   Emacs redisplay only enqueues commands; the host thread drains them in
+   batches so it can apply a whole batch with a single lock.  BEGIN/END
+   bracket one redisplay pass so the host can detect lost commands (the
+   epoch sequence has a gap) and ask for a full repaint.  */
+
+enum ohos_draw_opcode
+{
+  OHOS_OP_CLEAR = 1,
+  OHOS_OP_FILL,
+  OHOS_OP_TEXT,
+  OHOS_OP_CURSOR,
+  OHOS_OP_SCROLL,
+  OHOS_OP_PRESENT,
+  OHOS_OP_BEGIN,
+  OHOS_OP_END
+};
+
+struct ohos_draw_command
+{
+  int op;
+  int x, y, w, h;
+  int to_y;
+  unsigned code;
+  uint32_t fg, bg;
+  uint32_t flags;
+  unsigned epoch;
+};
+
+typedef void (*ohos_draw_batch_fn) (const struct ohos_draw_command *, int);
+
+void ohos_set_draw_batch_sink (ohos_draw_batch_fn fn);
+unsigned ohos_draw_epoch (void);
+unsigned long ohos_draw_dropped_count (void);
+void ohos_draw_begin (unsigned epoch);
+void ohos_draw_end (unsigned epoch);
+
+/* Frame geometry published to the host so it can allocate a bitmap of
+   exactly the frame pixels instead of guessing from a cell grid.  */
+typedef void (*ohos_frame_metrics_fn) (int width, int height, int cell_width,
+				       int cell_height, int ascent,
+				       int descent);
+void ohos_set_frame_metrics_sink (ohos_frame_metrics_fn fn);
+void ohos_publish_frame_metrics (struct frame *f);
+
 void ohos_draw_clear (uint32_t bg);
 void ohos_draw_fill (int x, int y, int w, int h, uint32_t color);
 void ohos_draw_text (int x, int y, int w, int h, unsigned code,
@@ -312,6 +361,7 @@ void ohos_pump_draw_commands (void);
 #define OHOS_INPUT_RAW_FLAG  0x40000000u
 #define OHOS_INPUT_FOCUS_FLAG 0x20000000u
 #define OHOS_INPUT_RESIZE_FLAG 0x10000000u
+#define OHOS_INPUT_EXPOSE_FLAG 0x08000000u
 void ohos_create_input_pipe (void);
 void ohos_input_raw (const char *data, size_t len);
 int ohos_input_wait_fd (void);
@@ -325,6 +375,9 @@ void ohos_input_focus (int focused);
 /* UI thread: the XComponent surface now has WIDTH x HEIGHT pixels.
    Emacs adopts that geometry so the native frame fills the surface.  */
 void ohos_input_resize (int width, int height);
+/* Host thread: the surface was rebuilt or re-exposed, so the frame must
+   be repainted.  Emacs marks the frame garbaged and redisplays.  */
+void ohos_input_expose (int x, int y, int width, int height);
 
 #ifdef __cplusplus
 }

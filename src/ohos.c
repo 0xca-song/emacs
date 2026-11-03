@@ -18,30 +18,14 @@
 #include "lisp.h"
 #include "ohosgui.h"
 
-enum ohos_draw_op
-{
-  OHOS_OP_CLEAR = 1,
-  OHOS_OP_FILL,
-  OHOS_OP_TEXT,
-  OHOS_OP_CURSOR,
-  OHOS_OP_SCROLL,
-  OHOS_OP_PRESENT
-};
-
-struct ohos_draw_cmd
-{
-  int op;
-  int x, y, w, h;
-  int to_y;
-  unsigned code;
-  uint32_t fg, bg;
-  uint32_t flags;
-};
-
-#define OHOS_DRAW_CMD_CAP 4096
+#define OHOS_DRAW_CMD_CAP 16384
 #define OHOS_DRAW_CMD_MASK (OHOS_DRAW_CMD_CAP - 1)
 
-static struct ohos_draw_cmd draw_ring[OHOS_DRAW_CMD_CAP];
+/* One pump pass hands at most this many commands to the host, so a long
+   redisplay cannot monopolise the UI thread.  */
+#define OHOS_DRAW_BATCH_MAX 256
+
+static struct ohos_draw_command draw_ring[OHOS_DRAW_CMD_CAP];
 static unsigned draw_head, draw_tail, draw_count;
 static unsigned long draw_dropped;
 static pthread_mutex_t draw_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -56,6 +40,8 @@ static ohos_draw_text_fn draw_text_sink;
 static ohos_draw_cursor_fn draw_cursor_sink;
 static ohos_draw_scroll_fn draw_scroll_sink;
 static ohos_draw_present_fn draw_present_sink;
+static ohos_draw_batch_fn draw_batch_sink;
+static unsigned draw_epoch;
 
 void
 ohos_set_log_sink (ohos_log_fn fn)
@@ -133,8 +119,26 @@ ohos_set_draw_present_sink (ohos_draw_present_fn fn)
   draw_present_sink = fn;
 }
 
+void
+ohos_set_draw_batch_sink (ohos_draw_batch_fn fn)
+{
+  draw_batch_sink = fn;
+}
+
+unsigned
+ohos_draw_epoch (void)
+{
+  return draw_epoch;
+}
+
+unsigned long
+ohos_draw_dropped_count (void)
+{
+  return draw_dropped;
+}
+
 static void
-enqueue (const struct ohos_draw_cmd *cmd)
+enqueue (const struct ohos_draw_command *cmd)
 {
   pthread_mutex_lock (&draw_lock);
   if (draw_count == OHOS_DRAW_CMD_CAP)
@@ -151,14 +155,14 @@ enqueue (const struct ohos_draw_cmd *cmd)
 void
 ohos_draw_clear (uint32_t bg)
 {
-  struct ohos_draw_cmd cmd = { .op = OHOS_OP_CLEAR, .bg = bg };
+  struct ohos_draw_command cmd = { .op = OHOS_OP_CLEAR, .bg = bg };
   enqueue (&cmd);
 }
 
 void
 ohos_draw_fill (int x, int y, int w, int h, uint32_t color)
 {
-  struct ohos_draw_cmd cmd = { .op = OHOS_OP_FILL,
+  struct ohos_draw_command cmd = { .op = OHOS_OP_FILL,
 			       .x = x, .y = y, .w = w, .h = h,
 			       .bg = color };
   enqueue (&cmd);
@@ -168,7 +172,7 @@ void
 ohos_draw_text (int x, int y, int w, int h, unsigned code,
 		uint32_t fg, uint32_t bg, uint32_t flags)
 {
-  struct ohos_draw_cmd cmd = { .op = OHOS_OP_TEXT,
+  struct ohos_draw_command cmd = { .op = OHOS_OP_TEXT,
 			       .x = x, .y = y, .w = w, .h = h,
 			       .code = code, .fg = fg, .bg = bg,
 			       .flags = flags };
@@ -179,7 +183,7 @@ void
 ohos_draw_cursor (int x, int y, int w, int h, uint32_t fg, uint32_t bg,
 		  uint32_t flags)
 {
-  struct ohos_draw_cmd cmd = { .op = OHOS_OP_CURSOR,
+  struct ohos_draw_command cmd = { .op = OHOS_OP_CURSOR,
 			       .x = x, .y = y, .w = w, .h = h,
 			       .fg = fg, .bg = bg, .flags = flags };
   enqueue (&cmd);
@@ -188,7 +192,7 @@ ohos_draw_cursor (int x, int y, int w, int h, uint32_t fg, uint32_t bg,
 void
 ohos_draw_scroll (int x, int from_y, int width, int height, int to_y)
 {
-  struct ohos_draw_cmd cmd = { .op = OHOS_OP_SCROLL,
+  struct ohos_draw_command cmd = { .op = OHOS_OP_SCROLL,
 			       .x = x, .y = from_y, .w = width,
 			       .h = height, .to_y = to_y };
   enqueue (&cmd);
@@ -197,28 +201,57 @@ ohos_draw_scroll (int x, int from_y, int width, int height, int to_y)
 void
 ohos_draw_present (void)
 {
-  struct ohos_draw_cmd cmd = { .op = OHOS_OP_PRESENT };
+  struct ohos_draw_command cmd = { .op = OHOS_OP_PRESENT };
+  enqueue (&cmd);
+}
+
+void
+ohos_draw_begin (unsigned epoch)
+{
+  struct ohos_draw_command cmd = { .op = OHOS_OP_BEGIN, .epoch = epoch };
+  draw_epoch = epoch;
+  enqueue (&cmd);
+}
+
+void
+ohos_draw_end (unsigned epoch)
+{
+  struct ohos_draw_command cmd = { .op = OHOS_OP_END, .epoch = epoch };
   enqueue (&cmd);
 }
 
 void
 ohos_pump_draw_commands (void)
 {
+  struct ohos_draw_command batch[OHOS_DRAW_BATCH_MAX];
+
   for (;;)
     {
-      struct ohos_draw_cmd cmd;
+      int n = 0, i;
+
       pthread_mutex_lock (&draw_lock);
-      if (draw_count == 0)
+      while (draw_count != 0 && n < OHOS_DRAW_BATCH_MAX)
 	{
-	  pthread_mutex_unlock (&draw_lock);
-	  break;
+	  batch[n++] = draw_ring[draw_head];
+	  draw_head = (draw_head + 1) & OHOS_DRAW_CMD_MASK;
+	  draw_count--;
 	}
-      cmd = draw_ring[draw_head];
-      draw_head = (draw_head + 1) & OHOS_DRAW_CMD_MASK;
-      draw_count--;
       pthread_mutex_unlock (&draw_lock);
 
-      switch (cmd.op)
+      if (n == 0)
+	break;
+
+      if (draw_batch_sink)
+	{
+	  draw_batch_sink (batch, n);
+	  continue;
+	}
+
+      for (i = 0; i < n; i++)
+	{
+	  struct ohos_draw_command cmd = batch[i];
+
+	  switch (cmd.op)
 	{
 	case OHOS_OP_CLEAR:
 	  if (draw_clear_sink)
@@ -246,6 +279,10 @@ ohos_pump_draw_commands (void)
 	  if (draw_present_sink)
 	    draw_present_sink ();
 	  break;
+	case OHOS_OP_BEGIN:
+	case OHOS_OP_END:
+	  break;
+	}
 	}
     }
 }
@@ -419,6 +456,32 @@ ohos_input_text (const char *text)
       pthread_mutex_unlock (&input_lock);
       p += n;
     }
+  if (input_pipe[1] >= 0)
+    {
+      char byte = 1;
+      (void) write (input_pipe[1], &byte, 1);
+    }
+}
+
+void
+ohos_input_expose (int x, int y, int width, int height)
+{
+  pthread_mutex_lock (&input_lock);
+  if (input_count == OHOS_INPUT_CAP)
+    input_dropped++;
+  else
+    {
+      input_ring[input_tail].key = OHOS_INPUT_EXPOSE_FLAG;
+      input_ring[input_tail].modifiers = 0;
+      input_ring[input_tail].mouse = 0;
+      input_ring[input_tail].button = width;
+      input_ring[input_tail].x = x;
+      input_ring[input_tail].y = y;
+      input_ring[input_tail].press = height;
+      input_tail = (input_tail + 1) & OHOS_INPUT_MASK;
+      input_count++;
+    }
+  pthread_mutex_unlock (&input_lock);
   if (input_pipe[1] >= 0)
     {
       char byte = 1;

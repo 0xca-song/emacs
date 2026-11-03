@@ -190,16 +190,20 @@ ohos_clear_frame (struct frame *f)
 static void
 ohos_flush (struct frame *f)
 {
-  static int calls;
-  if ((calls++ % 20) == 0)
+  struct ohos_output *o = FRAME_OUTPUT_DATA (f);
+
+  ohos_draw_end (o->epoch);
+  o->need_flip = true;
+
+  /* Redisplay blocks buffer flips while it runs; presenting inside that
+     window could show a frame Emacs is still mutating.  Defer the
+     present to ohos_buffer_flipping_unblocked, exactly like the Android
+     backend does with android_flip_and_flush.  */
+  if (!buffer_flipping_blocked_p ())
     {
-      char buf[160];
-      struct frame *sf = SELECTED_FRAME ();
-      snprintf (buf, sizeof buf, "ohos_flush frame=%p selected=%p live=%d",
-		(void *) f, (void *) sf, FRAME_LIVE_P (f));
-      ohos_log (buf);
+      ohos_draw_present ();
+      o->need_flip = false;
     }
-  ohos_draw_present ();
 }
 
 static void
@@ -266,18 +270,15 @@ ohos_draw_window_cursor (struct window *w, struct glyph_row *row,
   fx = WINDOW_TEXT_TO_FRAME_PIXEL_X (w, x);
   fy = WINDOW_TOP_EDGE_Y (w) + y;
 
-  if (!on_p)
-    {
-      /* Paint the cursor cell background so the previous glyph shows
-	 through again.  The glyph itself is redrawn by redisplay.  */
-      ohos_draw_fill (fx, fy, cw, line_height,
-		      (uint32_t) FRAME_BACKGROUND_PIXEL (f));
-      return;
-    }
+  /* The host composites the cursor on top of the bitmap, so turning it
+     off only updates that overlay.  Filling the cell here would erase
+     the character underneath, because the bitmap *is* the screen
+     content (unlike Android, which keeps the glyph in its back buffer
+     and simply stops flipping the cursor in).  */
   ohos_draw_cursor (fx, fy, cw, line_height,
 		    (uint32_t) FRAME_FOREGROUND_PIXEL (f),
 		    (uint32_t) FRAME_BACKGROUND_PIXEL (f),
-		    1u);
+		    on_p ? 1u : 0u);
 }
 
 static void
@@ -1054,7 +1055,14 @@ ohos_toggle_invisible_pointer (struct frame *f, bool invisible)
 static void
 ohos_update_begin (struct frame *f)
 {
-  FRAME_OUTPUT_DATA (f)->complete_p = false;
+  struct ohos_output *o = FRAME_OUTPUT_DATA (f);
+
+  o->complete_p = false;
+  o->epoch++;
+  /* Open a new redisplay pass: the host uses the epoch to detect lost
+     commands (a gap means the queue overflowed) and to discard commands
+     that belong to a geometry it no longer has.  */
+  ohos_draw_begin (o->epoch);
 }
 
 static void
@@ -1076,8 +1084,13 @@ ohos_frame_up_to_date (struct frame *f)
 static void
 ohos_buffer_flipping_unblocked (struct frame *f)
 {
-  /* ohos_flush presents synchronously, so no flip can be pending.  */
-  (void) f;
+  struct ohos_output *o = FRAME_OUTPUT_DATA (f);
+
+  if (!o->need_flip)
+    return;
+  o->need_flip = false;
+  if (!buffer_flipping_blocked_p ())
+    ohos_draw_present ();
 }
 
 static void
@@ -1266,7 +1279,15 @@ ohos_handle_surface_resize (struct frame *f, int width, int height)
 
   if (cols == FRAME_COLS (f) && lines == FRAME_LINES (f))
     return;
-  change_frame_size (f, cols, lines, false, false, false);
+  /* change_frame_size takes PIXEL dimensions (it subtracts the
+     decorations and passes the result to adjust_frame_size).  Passing
+     columns and lines made the frame 232x73 *pixels*.  */
+  change_frame_size (f, cols * FRAME_COLUMN_WIDTH (f),
+		     lines * FRAME_LINE_HEIGHT (f), false, false, false);
+  /* change_frame_size does not go through set_window_size_hook when the
+     size came from the host, so publish the new pixel geometry here or
+     the host would keep its old bitmap.  */
+  ohos_publish_frame_metrics (f);
 }
 
 /* ------------------------------------------------------------------ */
@@ -1398,6 +1419,22 @@ ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
       struct input_event ev;
       int emods = 0;
       unsigned char_code = ohos_char_from_key (key);
+
+      if (key & OHOS_INPUT_EXPOSE_FLAG)
+	{
+	  /* The host rebuilt its surface (resize, surface loss, menu
+	     dismissal): the bitmap content is gone, so ask redisplay to
+	     paint the frame again.  */
+	  struct frame *f = SELECTED_FRAME ();
+
+	  if (f && FRAME_LIVE_P (f) && FRAME_OHOS_P (f))
+	    {
+	      fset_redisplay (f);
+	      SET_FRAME_GARBAGED (f);
+	    }
+	  count++;
+	  continue;
+	}
 
       if (key & OHOS_INPUT_RESIZE_FLAG)
 	{
@@ -1679,6 +1716,33 @@ ohos_set_clipboard (const char *b64)
 {
   if (ohos_clipboard_sink)
     ohos_clipboard_sink (b64);
+}
+
+static ohos_frame_metrics_fn ohos_frame_metrics_sink;
+
+void
+ohos_set_frame_metrics_sink (ohos_frame_metrics_fn fn)
+{
+  ohos_frame_metrics_sink = fn;
+}
+
+/* Publish the exact pixel geometry of F so the host can allocate a
+   bitmap of that size instead of deriving it from a cell grid.  */
+
+void
+ohos_publish_frame_metrics (struct frame *f)
+{
+  struct font *font;
+  int ascent, descent;
+
+  if (!f || !FRAME_LIVE_P (f) || !FRAME_OHOS_P (f) || !ohos_frame_metrics_sink)
+    return;
+  font = FRAME_FONT (f);
+  ascent = font ? font->ascent : FRAME_LINE_HEIGHT (f) * 3 / 4;
+  descent = font ? font->descent : FRAME_LINE_HEIGHT (f) - ascent;
+  ohos_frame_metrics_sink (FRAME_PIXEL_WIDTH (f), FRAME_PIXEL_HEIGHT (f),
+			   FRAME_COLUMN_WIDTH (f), FRAME_LINE_HEIGHT (f),
+			   ascent, descent);
 }
 
 struct redisplay_interface *

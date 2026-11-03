@@ -374,8 +374,9 @@ ohos_set_window_size (struct frame *f, bool change_gravity,
   {
     char buf[160];
     snprintf (buf, sizeof buf,
-	      "set_window_size px=%dx%d cols=%d lines=%d cell=%dx%d",
-	      width, height, FRAME_COLS (f), FRAME_LINES (f),
+	      "set_window_size req=%dx%d frame_px=%dx%d cols=%d lines=%d cell=%dx%d",
+	      width, height, FRAME_PIXEL_WIDTH (f), FRAME_PIXEL_HEIGHT (f),
+	      FRAME_COLS (f), FRAME_LINES (f),
 	      FRAME_COLUMN_WIDTH (f), FRAME_LINE_HEIGHT (f));
     ohos_log (buf);
   }
@@ -410,6 +411,7 @@ ohos_set_window_size (struct frame *f, bool change_gravity,
 
   o->geometry_serial++;
   ohos_host_command ("resize %d %d", width, height);
+  ohos_publish_frame_metrics (f);
 }
 
 void
@@ -563,6 +565,7 @@ ohos_set_new_font (struct frame *f, Lisp_Object font_object, int fontset)
   ohos_font_metrics (font->ascent, font->descent, font->height,
 		     font->space_width, font->underline_position,
 		     font->underline_thickness);
+  ohos_publish_frame_metrics (f);
   return font_object;
 }
 
@@ -767,10 +770,13 @@ ohos_create_frame (struct terminal *terminal, Lisp_Object parms)
 	f->explicit_name = false;
       }
   }
-  /* adjust_frame_size takes TEXT dimensions (columns and lines), not
-     pixels.  Passing pixels here made the frame collapse to the
-     default 10x6 text size.  */
-  adjust_frame_size (f, 80, 24, 5, true, Qnil);
+  /* adjust_frame_size takes PIXEL dimensions: FRAME_TEXT_TO_PIXEL_WIDTH
+     adds the decorations to its argument without multiplying by the
+     column width, and xfns.c passes FRAME_COLS * FRAME_COLUMN_WIDTH.
+     Passing 80x24 here made the frame 80x24 *pixels* (~10x6 cells), so
+     everything was drawn into a tiny corner.  */
+  adjust_frame_size (f, 80 * 9, 24 * 18, 5, true, Qnil);
+  ohos_publish_frame_metrics (f);
   ohos_log ("ohos_create_frame size done");
 
   f->terminal->reference_count++;
