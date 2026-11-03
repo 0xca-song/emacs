@@ -169,5 +169,13 @@ COMMAND is a raw host command string, for example \"resize 640 480\"."
 (when (fboundp 'context-menu-mode)
   (context-menu-mode 1))
 
+;; context-menu-mode installs its binding through its minor-mode map; when
+;; the event position cannot be resolved to a window Emacs falls back to the
+;; global map, so bind the command there as well.  This is what makes a long
+;; press (delivered as down-mouse-3) reliably open a menu.
+(with-eval-after-load 'mouse
+  (when (fboundp 'context-menu-open)
+    (global-set-key [down-mouse-3] #'context-menu-open)))
+
 (provide 'ohos-win)
 ;;; ohos-win.el ends here
