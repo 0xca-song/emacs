@@ -162,64 +162,19 @@ COMMAND is a raw host command string, for example \"resize 640 480\"."
 
 ;;; Menus.
 
-;; Without the menu bar mode there is no menu-bar-map, so F10 and the menu
-;; bar have nothing to show.
+;; Use Emacs' own menu machinery.  `menu-bar-mode' gives the frame a menu
+;; bar row, and `menu-bar-open' (already bound to [f10] in menu-bar.el) has
+;; a generic branch for non-toolkit frames: it looks the item up in the
+;; global map and calls `popup-menu' with a position, which ends up in the
+;; backend's menu_show_hook.  `context-menu-mode' likewise provides the
+;; right-click / long-press context menu through `context-menu-entry'.
+;; Nothing here re-binds keys: doing that shadowed the standard bindings and
+;; hid the fact that the menu bar row was empty.
 (when (fboundp 'menu-bar-mode)
   (menu-bar-mode 1))
 
-;; The backend turns a touch long press into mouse-3, and right click is
-;; the natural way to reach the context menu on both PC and phone.  Enable
-;; it here (rather than in a user init file) so it also works with the
-;; stock runtime and without ~/.emacs.
-;; context-menu-mode would install its own [down-mouse-3] binding through a
-;; minor-mode map, which shadows the global binding below; the backend opens
-;; the menu itself, so leave the mode alone.
-
-;; context-menu-mode installs its binding through its minor-mode map; when
-;; the event position cannot be resolved to a window Emacs falls back to the
-;; global map, so bind the command there as well.  This is what makes a long
-;; press (delivered as down-mouse-3) reliably open a menu.
-;; Right click (or a long press, which the backend turns into mouse-3) opens
-;; the context menu.  context-menu-mode cannot be used for this: it installs
-;; [down-mouse-3] in its minor-mode map, which shadows this binding, and its
-;; menu-item filter needs machinery the plain event path does not have.
-;; Building the map and popping it up ourselves keeps one code path.
-(defun ohos-write-backtrace (&rest args)
-  "Write ARGS and the current backtrace to a file, then let the error signal."
-  (ignore-errors
-    (with-temp-file (expand-file-name "menu-error.txt" (getenv "HOME"))
-      (insert (format "%S\n\n" args))
-      (insert (if (fboundp 'backtrace-to-string)
-                  (backtrace-to-string)
-                (format "%S" (backtrace))))))
-  nil)
-
-(defun ohos-context-menu (&optional event)
-  "Open the context menu for EVENT (a mouse click)."
-  (interactive "e")
-  (let ((click (or event last-command-event)))
-    (condition-case err
-        (let ((map (context-menu-map click)))
-          (when (keymapp map)
-            (x-popup-menu click map)))
-      (error (ohos-frame-host-operation
-              (format "cursor err-%s" (car err)))))))
-
-(defun ohos-menu-bar-open ()
-  "Pop up the menu bar (F10, S-F10 or the menu key)."
-  (interactive)
-  ;; This Emacs has no `menu-bar-map'; the menu bar is built on demand by
-  ;; `mouse-menu-bar-map'.
-  (condition-case err
-      (x-popup-menu t (mouse-menu-bar-map))
-    (error (ohos-frame-host-operation
-            (format "cursor err-%s" (car err))))))
-
-;; F10 opens the menu bar, like other GUI backends do.  Some window
-;; managers reserve F10, so bind the alternatives as well.
-(global-set-key [f10] #'ohos-menu-bar-open)
-(global-set-key [S-f10] #'ohos-menu-bar-open)
-(global-set-key [menu] #'ohos-menu-bar-open)
+(when (fboundp 'context-menu-mode)
+  (context-menu-mode 1))
 
 ;;; Development hook.
 
