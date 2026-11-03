@@ -166,16 +166,32 @@ COMMAND is a raw host command string, for example \"resize 640 480\"."
 ;; the natural way to reach the context menu on both PC and phone.  Enable
 ;; it here (rather than in a user init file) so it also works with the
 ;; stock runtime and without ~/.emacs.
-(when (fboundp 'context-menu-mode)
-  (context-menu-mode 1))
+;; context-menu-mode would install its own [down-mouse-3] binding through a
+;; minor-mode map, which shadows the global binding below; the backend opens
+;; the menu itself, so leave the mode alone.
 
 ;; context-menu-mode installs its binding through its minor-mode map; when
 ;; the event position cannot be resolved to a window Emacs falls back to the
 ;; global map, so bind the command there as well.  This is what makes a long
 ;; press (delivered as down-mouse-3) reliably open a menu.
-(with-eval-after-load 'mouse
-  (when (fboundp 'context-menu-open)
-    (global-set-key [down-mouse-3] #'context-menu-open)))
+;; Right click (or a long press, which the backend turns into mouse-3) opens
+;; the context menu.  context-menu-mode cannot be used for this: it installs
+;; [down-mouse-3] in its minor-mode map, which shadows this binding, and its
+;; menu-item filter needs machinery the plain event path does not have.
+;; Building the map and popping it up ourselves keeps one code path.
+(defun ohos-context-menu (&optional event)
+  "Open the context menu for EVENT (a mouse click)."
+  (interactive "e")
+  (condition-case err
+      (let* ((click (or event last-command-event))
+             (map (context-menu-map click)))
+        (if (keymapp map)
+            (x-popup-menu click map)
+          (ohos-frame-host-operation "cursor none")))
+    (error (ohos-frame-host-operation
+            (format "cursor err-%s" (car err))))))
+
+(global-set-key [down-mouse-3] #'ohos-context-menu)
 
 (provide 'ohos-win)
 ;;; ohos-win.el ends here
