@@ -314,11 +314,9 @@ ohos_set_menu_bar_lines (struct frame *f, Lisp_Object value,
   /* Make sure we redisplay all windows in this frame.  */
   fset_redisplay (f);
 
-  /* Stable path: keep the glyph menu bar row and let redisplay own it.
-     Enabling the external bar (FRAME_EXTERNAL_MENU_BAR) makes redisplay
-     call set_frame_menubar, which evaluates Lisp inside the redisplay and
-     crashes the CANNOT_DUMP build; that has to be wired from a safe point
-     first (see the menu design document).  */
+  /* Keep the glyph menu bar: the external bar publishes correctly but the
+     display path that follows it crashes in this build, so it stays off
+     until that path is understood.  */
   FRAME_MENU_BAR_LINES (f) = nlines;
   FRAME_MENU_BAR_HEIGHT (f) = nlines * FRAME_LINE_HEIGHT (f);
   FRAME_EXTERNAL_MENU_BAR (f) = 0;

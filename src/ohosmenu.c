@@ -579,50 +579,72 @@ ohos_activate_menubar (struct frame *f)
    lisp.h), never from set_menu_bar_lines: at frame creation the selected
    window and buffer are not ready yet.  */
 
+/* Publish the menu bar labels to the host.  Pure C, no Lisp evaluation:
+   this is the only work done on the redisplay path (deep_p == false).  */
+
+static void
+ohos_publish_menu_bar (struct frame *f)
+{
+  struct ohos_json json;
+  Lisp_Object items = FRAME_MENU_BAR_ITEMS (f);
+  int n = 0;
+
+  ohos_json_init (&json);
+  ohos_json_puts (&json, "{\"bar\":[");
+  for (size_t i = 0; i + 3 < ASIZE (items); i += 4)
+    {
+      Lisp_Object name = AREF (items, i + 1);
+
+      if (!STRINGP (name))
+	continue;
+      if (n++)
+	ohos_json_puts (&json, ",");
+      {
+	char buf[24];
+
+	snprintf (buf, sizeof buf, "{\"index\":%d,\"label\":", (int) (i / 4));
+	ohos_json_puts (&json, buf);
+      }
+      ohos_json_string (&json, name);
+      ohos_json_puts (&json, "}");
+    }
+  ohos_json_puts (&json, "]}");
+  ohos_host_command ("menubar %s", json.data);
+  xfree (json.data);
+}
+
+/* Rebuild the menu bar content for F.
+
+   Mirrors the toolkit ports (pgtkmenu.c:233): the redisplay calls this with
+   deep_p == false and must not evaluate Lisp, while the menu-show path and
+   the initial build use deep_p == true.  Doing the Lisp part on the
+   redisplay path crashed this CANNOT_DUMP build in set_match_data.  */
+
 void
 set_frame_menubar (struct frame *f, bool deep_p)
 {
-  Lisp_Object items;
-
-  /* Keep this minimal: exactly the recomputation redisplay itself does for
-     a glyph menu bar (xdisp.c: fset_menu_bar_items + menu_bar_items).
-     Anything more (specbind, set_buffer_internal_1, running hooks) runs
-     inside redisplay and crashed in set_match_data here.  */
   if (!f || !FRAME_LIVE_P (f) || !FRAME_OHOS_P (f)
       || !WINDOWP (FRAME_SELECTED_WINDOW (f)))
     return;
-  (void) deep_p;
-  items = menu_bar_items (FRAME_MENU_BAR_ITEMS (f));
-  fset_menu_bar_items (f, items);
 
-  /* Tell the host which items exist; the bar is drawn by ArkUI.  */
-  {
-    struct ohos_json json;
-    int n = 0;
+  /* The recomputation redisplay itself performs for a glyph menu bar
+     (xdisp.c: fset_menu_bar_items + menu_bar_items) and nothing more:
+     specbind, buffer switching and the menu hooks are what crashed here.  */
+  if (deep_p)
+    fset_menu_bar_items (f, menu_bar_items (FRAME_MENU_BAR_ITEMS (f)));
 
-    ohos_json_init (&json);
-    ohos_json_puts (&json, "{\"bar\":[");
-    for (size_t i = 0; i + 3 < ASIZE (items); i += 4)
-      {
-	Lisp_Object name = AREF (items, i + 1);
+  ohos_publish_menu_bar (f);
+  fset_redisplay (f);
+}
 
-	if (!STRINGP (name))
-	  continue;
-	if (n++)
-	  ohos_json_puts (&json, ",");
-	{
-	  char buf[24];
+/* Initial build, called once the frame is complete (pgtkfns.c:1648).  */
 
-	  snprintf (buf, sizeof buf, "{\"index\":%d,\"label\":", (int) (i / 4));
-	  ohos_json_puts (&json, buf);
-	}
-	ohos_json_string (&json, name);
-	ohos_json_puts (&json, "}");
-      }
-    ohos_json_puts (&json, "]}");
-    ohos_host_command ("menubar %s", json.data);
-    xfree (json.data);
-  }
+void
+ohos_initialize_frame_menubar (struct frame *f)
+{
+  if (f && FRAME_LIVE_P (f) && FRAME_OHOS_P (f)
+      && FRAME_EXTERNAL_MENU_BAR (f))
+    set_frame_menubar (f, true);
 }
 
 Lisp_Object
