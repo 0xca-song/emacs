@@ -504,8 +504,13 @@ ohos_menu_show (struct frame *f, int x, int y, int menuflags,
 
   ohos_log ("menu_show json built");
   popup_activated_flag = 1;
-  ohos_host_command ("menu-open %d %s %s", id,
-		     dialog ? "dialog" : "menu", json);
+  /* A chunked menu was already announced with its `menu-part' stream and
+     the host opened it when the last chunk arrived; sending `menu-open'
+     again made the page build the same popup twice and report the same id
+     twice, so the second open could not be matched to an answer.  */
+  if (strlen (json) <= 4000)
+    ohos_host_command ("menu-open %d %s %s", id,
+		       dialog ? "dialog" : "menu", json);
 
   answered = ohos_host_wait_result (id, OHOS_MENU_TIMEOUT_MS, &index,
 				    NULL, 0);
@@ -685,13 +690,21 @@ DEFUN ("ohos-menu-bar-take-request", Fohos_menu_bar_take_request,
   return index < 0 ? Qnil : make_fixnum (index);
 }
 
-DEFUN ("ohos-menu-bar-open-index", Fohos_menu_bar_open_index,
-       Sohos_menu_bar_open_index, 1, 1, 0,
-       doc: /* Pop up menu bar item INDEX of the selected frame.  */)
+/* Return the definition (menu keymap) of menu bar item INDEX.
+
+   The popup itself is driven from Lisp (`ohos-menu-bar-open-index' in
+   term/ohos-win.el) because choosing an item must also *run* the command
+   it is bound to: `x-popup-menu' only returns the key sequence.  That
+   means: x-popup-menu -> lookup-key in the item's keymap -> call
+   interactively, which is what `popup-menu' does for tty menus.  */
+
+DEFUN ("ohos-menu-bar-item", Fohos_menu_bar_item,
+       Sohos_menu_bar_item, 1, 1, 0,
+       doc: /* Return the menu definition of menu bar item INDEX, or nil.  */)
   (Lisp_Object index)
 {
   struct frame *f = SELECTED_FRAME ();
-  Lisp_Object items, def;
+  Lisp_Object items;
 
   CHECK_FIXNUM (index);
   if (!f || !FRAME_LIVE_P (f) || !FRAME_OHOS_P (f))
@@ -700,10 +713,7 @@ DEFUN ("ohos-menu-bar-open-index", Fohos_menu_bar_open_index,
   if (XFIXNUM (index) < 0
       || (size_t) (XFIXNUM (index) * 4 + 2) >= ASIZE (items))
     return Qnil;
-  def = AREF (items, XFIXNUM (index) * 4 + 2);
-  if (NILP (def))
-    return Qnil;
-  return Fx_popup_menu (Qt, def);
+  return AREF (items, XFIXNUM (index) * 4 + 2);
 }
 
 /* Initial build, called once the frame is complete (pgtkfns.c:1648).  */
@@ -728,5 +738,5 @@ syms_of_ohosmenu (void)
 {
   defsubr (&Sohos_menu_bar_refresh);
   defsubr (&Sohos_menu_bar_take_request);
-  defsubr (&Sohos_menu_bar_open_index);
+  defsubr (&Sohos_menu_bar_item);
 }

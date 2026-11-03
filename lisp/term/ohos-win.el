@@ -162,6 +162,45 @@ COMMAND is a raw host command string, for example \"resize 640 480\"."
 
 ;;; Menus.
 
+(declare-function ohos-menu-bar-item "ohosmenu.c" (index))
+
+;; Choosing an item in the native menu bar must *run* its command.  The
+;; tty backend gets that from `popup-menu': `x-popup-menu' returns the
+;; key sequence of the selected item, `lookup-key' turns it into the
+;; binding, and `call-interactively' runs it.  The OHOS backend had the
+;; C side call `x-popup-menu' and hand the returned binding to a timer
+;; that threw it away, so clicking a menu item never did anything
+;; (task book M-2).  Do the same three steps here instead.
+(defun ohos-menu-bar-open-index (index)
+  "Pop up menu bar item INDEX of the selected frame and run its command.
+Return the chosen command when it was executed."
+  (let* ((def (ohos-menu-bar-item index))
+         (map (and def (indirect-function def)))
+         (value (and def (x-popup-menu t def))))
+    (when value
+      (let* ((event (if (vectorp value) value (apply #'vector value)))
+             (keys (and (> (length event) 0) event))
+             (cmd
+              (cond
+               ((keymapp map)
+                (lookup-key map event))
+               ((and (listp map) (keymapp (car map)))
+                (catch 'ohos-menu-item
+                  (dolist (m map)
+                    (let ((binding (lookup-key m event)))
+                      (when binding (throw 'ohos-menu-item binding))))
+                  nil))
+               ((fboundp 'key-binding)
+                (ignore-errors (key-binding event))))))
+        (when (and keys (commandp cmd))
+          ;; Several menu commands (mouse-yank-at-click, isearch) read
+          ;; `last-command-event'.
+          (setq last-command-event (aref keys (1- (length keys))))
+          (let ((from--tty-menu-p t))
+            (call-interactively cmd))
+          cmd)))))
+
+
 ;; Use Emacs' own menu machinery.  `menu-bar-mode' gives the frame a menu
 ;; bar row, and `menu-bar-open' (already bound to [f10] in menu-bar.el) has
 ;; a generic branch for non-toolkit frames: it looks the item up in the
