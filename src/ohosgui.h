@@ -352,6 +352,8 @@ void ohos_publish_frame_metrics (struct frame *f);
 void ohos_menubar_mark_ready (void);
 bool ohos_menubar_ready_p (void);
 
+void ohos_initialize_frame_menubar (struct frame *f);
+
 void ohos_draw_clear (uint32_t bg);
 void ohos_draw_fill (int x, int y, int w, int h, uint32_t color);
 void ohos_draw_text (int x, int y, int w, int h, unsigned code,

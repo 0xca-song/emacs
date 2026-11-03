@@ -314,12 +314,14 @@ ohos_set_menu_bar_lines (struct frame *f, Lisp_Object value,
   /* Make sure we redisplay all windows in this frame.  */
   fset_redisplay (f);
 
-  /* Keep the glyph menu bar: the external bar publishes correctly but the
-     display path that follows it crashes in this build, so it stays off
-     until that path is understood.  */
+  /* External menu bar (xfns.c:1708) would set 0 here and mark the bar
+     external; with FRAME_EXTERNAL_MENU_BAR = 1 this build crashes inside
+     try_window, even when our set_frame_menubar does nothing at all, so the
+     crash is in the core display path for external bars and has to be
+     debugged there.  Keep the glyph row meanwhile.  */
   FRAME_MENU_BAR_LINES (f) = nlines;
   FRAME_MENU_BAR_HEIGHT (f) = nlines * FRAME_LINE_HEIGHT (f);
-  FRAME_EXTERNAL_MENU_BAR (f) = 0;
+  FRAME_EXTERNAL_MENU_BAR (f) = nlines ? 1 : 0;
 
   if (nlines != olines)
     {
@@ -417,6 +419,7 @@ ohos_set_window_size (struct frame *f, bool change_gravity,
   o->geometry_serial++;
   ohos_host_command ("resize %d %d", width, height);
   ohos_publish_frame_metrics (f);
+  ohos_initialize_frame_menubar (f);
 }
 
 void
