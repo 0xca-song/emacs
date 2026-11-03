@@ -171,6 +171,20 @@ COMMAND is a raw host command string, for example \"resize 640 480\"."
 ;; C side call `x-popup-menu' and hand the returned binding to a timer
 ;; that threw it away, so clicking a menu item never did anything
 ;; (task book M-2).  Do the same three steps here instead.
+(defun ohos-menu-bar-command (event map)
+  "Return the command bound to menu EVENT in keymap MAP, or nil."
+  (cond
+   ((keymapp map)
+    (lookup-key map event))
+   ((and (listp map) (keymapp (car map)))
+    (catch 'ohos-menu-item
+      (dolist (m map)
+        (let ((binding (lookup-key m event)))
+          (when binding (throw 'ohos-menu-item binding))))
+      nil))
+   (t
+    (ignore-errors (key-binding event)))))
+
 (defun ohos-menu-bar-open-index (index)
   "Pop up menu bar item INDEX of the selected frame and run its command.
 Return the chosen command when it was executed."
@@ -179,27 +193,14 @@ Return the chosen command when it was executed."
          (value (and def (x-popup-menu t def))))
     (when value
       (let* ((event (if (vectorp value) value (apply #'vector value)))
-             (keys (and (> (length event) 0) event))
-             (cmd
-              (cond
-               ((keymapp map)
-                (lookup-key map event))
-               ((and (listp map) (keymapp (car map)))
-                (catch 'ohos-menu-item
-                  (dolist (m map)
-                    (let ((binding (lookup-key m event)))
-                      (when binding (throw 'ohos-menu-item binding))))
-                  nil))
-               ((fboundp 'key-binding)
-                (ignore-errors (key-binding event))))))
-        (when (and keys (commandp cmd))
+             (cmd (ohos-menu-bar-command event map)))
+        (when (and (> (length event) 0) (commandp cmd))
           ;; Several menu commands (mouse-yank-at-click, isearch) read
           ;; `last-command-event'.
-          (setq last-command-event (aref keys (1- (length keys))))
+          (setq last-command-event (aref event (1- (length event))))
           (let ((from--tty-menu-p t))
             (call-interactively cmd))
           cmd)))))
-
 
 ;; Use Emacs' own menu machinery.  `menu-bar-mode' gives the frame a menu
 ;; bar row, and `menu-bar-open' (already bound to [f10] in menu-bar.el) has
