@@ -654,7 +654,10 @@ int
 ohos_host_wait_result (int id, int timeout_ms, int *index,
 		       char *text, int cap)
 {
-  int remaining = timeout_ms;
+  /* A negative timeout waits forever: menus stay open until the host
+     answers or sends menu-close.  */
+  bool infinite = timeout_ms < 0;
+  int remaining = infinite ? 20 : timeout_ms;
 
   ohos_host_queue_init ();
   for (;;)
@@ -690,14 +693,15 @@ ohos_host_wait_result (int id, int timeout_ms, int *index,
       if (result_pipe[0] < 0)
 	{
 	  struct timespec ts = { 0, 5 * 1000 * 1000 };
-	  if (remaining <= 0)
+	  if (!infinite && remaining <= 0)
 	    return 0;
 	  nanosleep (&ts, NULL);
-	  remaining -= 5;
+	  if (!infinite)
+	    remaining -= 5;
 	  continue;
 	}
 
-      int wait = remaining < 20 ? remaining : 20;
+      int wait = infinite ? 20 : (remaining < 20 ? remaining : 20);
       if (wait < 0)
 	wait = 0;
       struct pollfd pfd;
@@ -711,9 +715,10 @@ ohos_host_wait_result (int id, int timeout_ms, int *index,
 	  while (read (result_pipe[0], buf, sizeof buf) > 0)
 	    ;
 	}
-      if (remaining <= 20 && rc == 0)
+      if (!infinite && remaining <= 20 && rc == 0)
 	return 0;
-      remaining -= wait;
+      if (!infinite)
+	remaining -= wait;
     }
 }
 

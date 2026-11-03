@@ -25,8 +25,14 @@
 #include "coding.h"
 #include "ohosgui.h"
 
-/* How long to wait for the ArkUI page to answer a menu request.  */
-#define OHOS_MENU_TIMEOUT_MS 600000
+/* The host always answers (selection, cancel, error) or sends
+   menu-close, so the wait is unbounded, like the Android and X11
+   backends.  A negative timeout means "wait forever".  */
+#define OHOS_MENU_TIMEOUT_MS (-1)
+
+/* Refuse to send a menu whose JSON would be truncated by the host
+   command channel (OHOS_HOST_CMD_MAX).  */
+#define OHOS_MENU_JSON_MAX 6000
 
 /* A growable JSON buffer.  */
 
@@ -139,6 +145,17 @@ ohos_clear_popup_flag (int value)
   popup_activated_flag = value;
 }
 
+/* Unwind-protect handler: if the menu is still up when Emacs leaves
+   (C-g, quit, error), ask the host to dismiss the panel.  */
+static void
+ohos_cancel_menu (int id)
+{
+  if (!popup_activated_flag)
+    return;
+  popup_activated_flag = 0;
+  ohos_host_command ("menu-close %d", id);
+}
+
 int
 popup_activated (void)
 {
@@ -148,6 +165,10 @@ popup_activated (void)
 /* Serial number for the pending menu request.  Menu IDs live in a
    range disjoint from the selection request IDs.  */
 static int next_menu_id = 1;
+
+/* Set while a dialog is being turned into a menu by x-popup-menu, so
+   ohos_menu_show tells the host to render a dialog instead of a menu.  */
+static bool pending_dialog;
 
 /* Write the menu described by the global `menu_items' vector into
    JSON.  *I is the current index, DEPTH the submenu nesting depth.  */
@@ -260,6 +281,13 @@ ohos_menu_json_items (struct ohos_json *json, size_t *i, int depth,
       ohos_json_string (json, item_name);
       ohos_json_puts (json, ",\"enabled\":");
       ohos_json_bool (json, !NILP (enable));
+      if (STRINGP (AREF (menu_items, *i + MENU_ITEMS_ITEM_EQUIV_KEY)))
+	{
+	  ohos_json_puts (json, ",\"keys\":");
+	  ohos_json_string (json,
+			    AREF (menu_items,
+				  *i + MENU_ITEMS_ITEM_EQUIV_KEY));
+	}
       ohos_json_puts (json, ",\"selected\":");
       ohos_json_bool (json, !NILP (selected));
       ohos_json_puts (json, ",\"toggle\":");
@@ -380,7 +408,9 @@ ohos_menu_show (struct frame *f, int x, int y, int menuflags,
   Lisp_Object value = Qnil;
   char *json;
   int id, index;
-  bool answered;
+  bool answered, dialog = pending_dialog;
+
+  pending_dialog = false;
 
   (void) f; (void) x; (void) y;
   if (error_name)
@@ -398,12 +428,26 @@ ohos_menu_show (struct frame *f, int x, int y, int menuflags,
   id = next_menu_id++;
   if (next_menu_id <= 0)
     next_menu_id = 1;
-  json = ohos_menu_json (title, menuflags, false);
+  json = ohos_menu_json (title, menuflags, dialog);
   record_unwind_protect_ptr (xfree, json);
-  record_unwind_protect_int (ohos_clear_popup_flag, 0);
+
+  /* The host command channel truncates at OHOS_HOST_CMD_MAX: never send
+     a menu that would arrive as broken JSON.  */
+  if (strlen (json) >= OHOS_MENU_JSON_MAX)
+    {
+      if (error_name)
+	*error_name = "Menu too large";
+      xfree (json);
+      unblock_input ();
+      return Qnil;
+    }
+
+  /* Dismiss the panel if Emacs leaves this function abnormally.  */
+  record_unwind_protect_int (ohos_cancel_menu, id);
 
   popup_activated_flag = 1;
-  ohos_host_command ("menu %d %s", id, json);
+  ohos_host_command ("menu-open %d %s %s", id,
+		     dialog ? "dialog" : "menu", json);
 
   answered = ohos_host_wait_result (id, OHOS_MENU_TIMEOUT_MS, &index,
 				    NULL, 0);
@@ -441,7 +485,15 @@ ohos_popup_dialog (struct frame *f, Lisp_Object header, Lisp_Object contents)
   XSETINT (x, x_coord / 2);
   XSETINT (y, y_coord / 2);
   newpos = list2 (list2 (x, y), frame);
-  return Fx_popup_menu (newpos, list2 (prompt, contents));
+  /* x-popup-menu still builds the item list for us; the flag makes
+     ohos_menu_show ask the host for a dialog instead of a menu.  */
+  {
+    specpdl_ref count = SPECPDL_INDEX ();
+    record_unwind_protect_int (ohos_clear_popup_flag, 0);
+    pending_dialog = true;
+    return unbind_to (count, Fx_popup_menu (newpos,
+					    list2 (prompt, contents)));
+  }
 }
 
 /* The menu bar is a glyph row drawn by redisplay, so activating it only
