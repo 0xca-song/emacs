@@ -321,7 +321,7 @@ ohos_set_menu_bar_lines (struct frame *f, Lisp_Object value,
      debugged there.  Keep the glyph row meanwhile.  */
   FRAME_MENU_BAR_LINES (f) = nlines;
   FRAME_MENU_BAR_HEIGHT (f) = nlines * FRAME_LINE_HEIGHT (f);
-  FRAME_EXTERNAL_MENU_BAR (f) = nlines ? 1 : 0;
+  FRAME_EXTERNAL_MENU_BAR (f) = 0;
 
   if (nlines != olines)
     {
