@@ -1460,6 +1460,13 @@ ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
 	  ev.kind = MOUSE_CLICK_EVENT;
 	  ev.code = button & 3;
 	  ev.modifiers = press ? down_modifier : up_modifier;
+	  {
+	    char dbg[128];
+	    snprintf (dbg, sizeof dbg,
+		      "mouse event button=%d code=%d press=%d x=%d y=%d",
+		      button, (int) ev.code, press ? 1 : 0, mx, my);
+	    ohos_log (dbg);
+	  }
 	  if (modifiers & OHOS_MOD_CTRL)
 	    ev.modifiers |= ctrl_modifier;
 	  if (modifiers & OHOS_MOD_SHIFT)

@@ -160,5 +160,14 @@ The values come from the ArkUI host, which reads BatteryInfo."
 COMMAND is a raw host command string, for example \"resize 640 480\"."
   (ohos-frame-host-operation command))
 
+;;; Menus.
+
+;; The backend turns a touch long press into mouse-3, and right click is
+;; the natural way to reach the context menu on both PC and phone.  Enable
+;; it here (rather than in a user init file) so it also works with the
+;; stock runtime and without ~/.emacs.
+(when (fboundp 'context-menu-mode)
+  (context-menu-mode 1))
+
 (provide 'ohos-win)
 ;;; ohos-win.el ends here

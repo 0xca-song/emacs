@@ -415,6 +415,13 @@ ohos_menu_show (struct frame *f, int x, int y, int menuflags,
   (void) f; (void) x; (void) y;
   if (error_name)
     *error_name = NULL;
+  {
+    char dbg[160];
+    snprintf (dbg, sizeof dbg, "menu_show title=%s items=%d panes=%d",
+	      STRINGP (title) ? SSDATA (ENCODE_UTF_8 (title)) : "(none)",
+	      (int) menu_items_used, menu_items_n_panes);
+    ohos_log (dbg);
+  }
   if (menu_items_used == 0)
     {
       if (error_name)
