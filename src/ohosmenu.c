@@ -72,56 +72,89 @@ ohos_json_puts (struct ohos_json *json, const char *text)
   ohos_json_put (json, text, strlen (text));
 }
 
-/* Append STRING as a JSON string literal.  STRING is UTF-8.  */
+/* Append STRING as a JSON string literal.
+
+   This must never signal.  Menu titles and item names can contain raw
+   bytes (a multibyte string is not guaranteed to hold valid UTF-8), and
+   ENCODE_UTF_8 raises a coding-system error on those; that used to abort
+   the whole popup before the host was told to open anything.  Bytes that
+   do not form a valid UTF-8 sequence are replaced with '?'.  */
 
 static void
 ohos_json_string (struct ohos_json *json, Lisp_Object string)
 {
   static const char hex[] = "0123456789abcdef";
   const unsigned char *p;
-  ptrdiff_t n;
+  ptrdiff_t n, i;
 
-  if (NILP (string) || !STRINGP (string))
+  if (!STRINGP (string))
     {
       ohos_json_puts (json, "\"\"");
       return;
     }
-  string = ENCODE_UTF_8 (string);
   p = SDATA (string);
   n = SBYTES (string);
   ohos_json_put (json, "\"", 1);
-  for (ptrdiff_t i = 0; i < n; i++)
+  for (i = 0; i < n; i++)
     {
       unsigned char c = p[i];
+      int len = 0;
 
-      switch (c)
+      if (c < 0x80)
 	{
-	case '"':
-	  ohos_json_puts (json, "\\\"");
-	  break;
-	case '\\':
-	  ohos_json_puts (json, "\\\\");
-	  break;
-	case '\n':
-	  ohos_json_puts (json, "\\n");
-	  break;
-	case '\r':
-	  ohos_json_puts (json, "\\r");
-	  break;
-	case '\t':
-	  ohos_json_puts (json, "\\t");
-	  break;
-	default:
-	  if (c < 0x20)
+	  switch (c)
 	    {
-	      char buf[8] = { '\\', 'u', '0', '0', hex[c >> 4],
-			      hex[c & 0xf], '\0' };
-	      ohos_json_puts (json, buf);
+	    case '"':
+	      ohos_json_puts (json, "\\\"");
+	      break;
+	    case '\\':
+	      ohos_json_puts (json, "\\\\");
+	      break;
+	    case '\n':
+	      ohos_json_puts (json, "\\n");
+	      break;
+	    case '\r':
+	      ohos_json_puts (json, "\\r");
+	      break;
+	    case '\t':
+	      ohos_json_puts (json, "\\t");
+	      break;
+	    default:
+	      if (c < 0x20)
+		{
+		  char buf[8] = { '\\', 'u', '0', '0', hex[c >> 4],
+				  hex[c & 0xf], '\0' };
+		  ohos_json_puts (json, buf);
+		}
+	      else
+		ohos_json_put (json, (const char *) &c, 1);
+	      break;
 	    }
-	  else
-	    ohos_json_put (json, (const char *) &c, 1);
-	  break;
+	  continue;
 	}
+
+      if ((c & 0xe0) == 0xc0)
+	len = 2;
+      else if ((c & 0xf0) == 0xe0)
+	len = 3;
+      else if ((c & 0xf8) == 0xf0)
+	len = 4;
+
+      if (len > 0 && i + len <= n)
+	{
+	  int k, ok = 1;
+
+	  for (k = 1; k < len; k++)
+	    if ((p[i + k] & 0xc0) != 0x80)
+	      ok = 0;
+	  if (ok)
+	    {
+	      ohos_json_put (json, (const char *) &p[i], len);
+	      i += len - 1;
+	      continue;
+	    }
+	}
+      ohos_json_puts (json, "?");
     }
   ohos_json_put (json, "\"", 1);
 }
@@ -316,9 +349,12 @@ ohos_menu_json (Lisp_Object title, int menuflags, bool dialog)
   ohos_json_puts (&json, "{\"dialog\":");
   ohos_json_bool (&json, dialog);
   ohos_json_puts (&json, ",\"title\":");
+  ohos_log ("menu_json title start");
   ohos_json_string (&json, title);
+  ohos_log ("menu_json title ok");
   ohos_json_puts (&json, ",\"items\":[");
   ohos_menu_json_items (&json, &i, 0, menuflags);
+  ohos_log ("menu_json items ok");
   ohos_json_puts (&json, "]}");
   return json.data;
 }
@@ -415,13 +451,9 @@ ohos_menu_show (struct frame *f, int x, int y, int menuflags,
   (void) f; (void) x; (void) y;
   if (error_name)
     *error_name = NULL;
-  {
-    char dbg[160];
-    snprintf (dbg, sizeof dbg, "menu_show title=%s items=%d panes=%d",
-	      STRINGP (title) ? SSDATA (ENCODE_UTF_8 (title)) : "(none)",
-	      (int) menu_items_used, menu_items_n_panes);
-    ohos_log (dbg);
-  }
+  /* Plain ASCII only: no string conversion, so this cannot itself fail
+     with a coding-system error.  */
+  ohos_log ("menu_show enter");
   if (menu_items_used == 0)
     {
       if (error_name)
@@ -452,6 +484,7 @@ ohos_menu_show (struct frame *f, int x, int y, int menuflags,
   /* Dismiss the panel if Emacs leaves this function abnormally.  */
   record_unwind_protect_int (ohos_cancel_menu, id);
 
+  ohos_log ("menu_show json built");
   popup_activated_flag = 1;
   ohos_host_command ("menu-open %d %s %s", id,
 		     dialog ? "dialog" : "menu", json);

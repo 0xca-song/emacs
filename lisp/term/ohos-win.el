@@ -179,21 +179,40 @@ COMMAND is a raw host command string, for example \"resize 640 480\"."
 ;; [down-mouse-3] in its minor-mode map, which shadows this binding, and its
 ;; menu-item filter needs machinery the plain event path does not have.
 ;; Building the map and popping it up ourselves keeps one code path.
+(defun ohos-write-backtrace (&rest args)
+  "Write ARGS and the current backtrace to a file, then let the error signal."
+  (ignore-errors
+    (with-temp-file (expand-file-name "menu-error.txt" (getenv "HOME"))
+      (insert (format "%S\n\n" args))
+      (insert (if (fboundp 'backtrace-to-string)
+                  (backtrace-to-string)
+                (format "%S" (backtrace))))))
+  nil)
+
 (defun ohos-context-menu (&optional event)
   "Open the context menu for EVENT (a mouse click)."
   (interactive "e")
   (let ((click (or event last-command-event)))
     (condition-case err
-        ;; Keymap form plus position t: bisects "menu argument" from
-        ;; "position argument" while the popup path is being brought up.
-        (let ((menu (make-sparse-keymap "Test")))
-          (define-key menu [alpha] '(menu-item "Alpha" alpha))
-          (define-key menu [beta] '(menu-item "Beta" beta))
-          (x-popup-menu t menu))
+        (let ((map (context-menu-map click)))
+          (when (keymapp map)
+            (x-popup-menu click map)))
       (error (ohos-frame-host-operation
               (format "cursor err-%s" (car err)))))))
 
+(defun ohos-menu-bar-open ()
+  "Pop up the menu bar (F10)."
+  (interactive)
+  (condition-case err
+      (if (and (boundp 'menu-bar-map) (keymapp menu-bar-map))
+          (x-popup-menu t menu-bar-map)
+        (ohos-frame-host-operation "cursor err-no-menubar"))
+    (error (ohos-frame-host-operation
+            (format "cursor err-%s" (car err))))))
+
 (global-set-key [down-mouse-3] #'ohos-context-menu)
+;; F10 opens the menu bar, like other GUI backends do.
+(global-set-key [f10] #'ohos-menu-bar-open)
 
 (provide 'ohos-win)
 ;;; ohos-win.el ends here
