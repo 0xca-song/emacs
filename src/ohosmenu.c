@@ -609,7 +609,18 @@ ohos_publish_menu_bar (struct frame *f)
       ohos_json_puts (&json, "}");
     }
   ohos_json_puts (&json, "]}");
-  ohos_host_command ("menubar %s", json.data);
+
+  /* Publish only on change: redisplay calls this for every frame update and
+     the host does not need to rebuild the bar for identical contents.  */
+  {
+    static char last[4096];
+
+    if (strcmp (last, json.data) != 0)
+      {
+	snprintf (last, sizeof last, "%s", json.data);
+	ohos_host_command ("menubar %s", json.data);
+      }
+  }
   xfree (json.data);
 }
 
@@ -639,6 +650,50 @@ set_frame_menubar (struct frame *f, bool deep_p)
   ohos_publish_menu_bar (f);
 }
 
+/* The host asks for menu bar item INDEX to be opened.  The request is
+   stored here and picked up by a Lisp timer, so the popup runs from a Lisp
+   context rather than from the ArkUI thread.  */
+
+static int ohos_menu_bar_pending = -1;
+
+void
+ohos_menu_bar_request (int index)
+{
+  ohos_menu_bar_pending = index;
+}
+
+DEFUN ("ohos-menu-bar-take-request", Fohos_menu_bar_take_request,
+       Sohos_menu_bar_take_request, 0, 0, 0,
+       doc: /* Return the menu bar item the host asked to open, or nil.  */)
+  (void)
+{
+  int index = ohos_menu_bar_pending;
+
+  ohos_menu_bar_pending = -1;
+  return index < 0 ? Qnil : make_fixnum (index);
+}
+
+DEFUN ("ohos-menu-bar-open-index", Fohos_menu_bar_open_index,
+       Sohos_menu_bar_open_index, 1, 1, 0,
+       doc: /* Pop up menu bar item INDEX of the selected frame.  */)
+  (Lisp_Object index)
+{
+  struct frame *f = SELECTED_FRAME ();
+  Lisp_Object items, def;
+
+  CHECK_FIXNUM (index);
+  if (!f || !FRAME_LIVE_P (f) || !FRAME_OHOS_P (f))
+    return Qnil;
+  items = FRAME_MENU_BAR_ITEMS (f);
+  if (XFIXNUM (index) < 0
+      || (size_t) (XFIXNUM (index) * 4 + 2) >= ASIZE (items))
+    return Qnil;
+  def = AREF (items, XFIXNUM (index) * 4 + 2);
+  if (NILP (def))
+    return Qnil;
+  return Fx_popup_menu (Qt, def);
+}
+
 /* Initial build, called once the frame is complete (pgtkfns.c:1648).  */
 
 void
@@ -659,5 +714,6 @@ Fx_hide_tip (Lisp_Object tip)
 void
 syms_of_ohosmenu (void)
 {
-
+  defsubr (&Sohos_menu_bar_take_request);
+  defsubr (&Sohos_menu_bar_open_index);
 }
