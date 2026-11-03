@@ -162,6 +162,11 @@ COMMAND is a raw host command string, for example \"resize 640 480\"."
 
 ;;; Menus.
 
+;; Without the menu bar mode there is no menu-bar-map, so F10 and the menu
+;; bar have nothing to show.
+(when (fboundp 'menu-bar-mode)
+  (menu-bar-mode 1))
+
 ;; The backend turns a touch long press into mouse-3, and right click is
 ;; the natural way to reach the context menu on both PC and phone.  Enable
 ;; it here (rather than in a user init file) so it also works with the
