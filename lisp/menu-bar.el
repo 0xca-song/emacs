@@ -2679,6 +2679,7 @@ See `menu-bar-mode' for more information."
 (declare-function w32-menu-bar-open "term/w32-win" (&optional frame))
 (declare-function pgtk-menu-bar-open "term/pgtk-win" (&optional frame))
 (declare-function haiku-menu-bar-open "haikumenu.c" (&optional frame))
+(declare-function ohos-menu-bar-open "term/ohos-win" (&optional frame))
 
 (defun lookup-key-ignore-too-long (map key)
   "Call `lookup-key' and convert numeric values to nil."
@@ -2860,6 +2861,7 @@ If FRAME is nil or not given, use the selected frame."
      ((eq type 'x) (x-menu-bar-open frame))
      ((eq type 'w32) (w32-menu-bar-open frame))
      ((eq type 'haiku) (haiku-menu-bar-open frame))
+     ((eq type 'ohos) (ohos-menu-bar-open frame))
      ((eq type 'pgtk) (pgtk-menu-bar-open frame))
      ((and (null tty-menu-open-use-tmm)
 	   (not (zerop (or (frame-parameter frame 'menu-bar-lines) 0))))

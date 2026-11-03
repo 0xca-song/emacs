@@ -176,6 +176,25 @@ COMMAND is a raw host command string, for example \"resize 640 480\"."
 (when (fboundp 'context-menu-mode)
   (context-menu-mode 1))
 
+;; The host's native menu bar asks for item N to be opened; the request is
+;; picked up here so the popup runs from a Lisp context (the backend only
+;; stores the index).
+(defun ohos-menu-bar-poll ()
+  "Open the menu bar item the host asked for, if any."
+  (let ((index (ohos-menu-bar-take-request)))
+    (when (integerp index)
+      (condition-case nil
+          (ohos-menu-bar-open-index index)
+        (error nil)))))
+
+(run-with-timer 0.1 0.1 #'ohos-menu-bar-poll)
+
+(defun ohos-menu-bar-open (&optional frame)
+  "Open the menu bar of FRAME, the ArkUI bar counterpart of menu-bar-open."
+  (interactive)
+  (with-selected-frame (or frame (selected-frame))
+    (ohos-menu-bar-open-index 0)))
+
 ;;; Development hook.
 
 ;; A writable file that is reloaded whenever it changes, so Lisp experiments
