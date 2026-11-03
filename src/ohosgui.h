@@ -348,6 +348,9 @@ typedef void (*ohos_frame_metrics_fn) (int width, int height, int cell_width,
 				       int descent);
 void ohos_set_frame_metrics_sink (ohos_frame_metrics_fn fn);
 void ohos_publish_frame_metrics (struct frame *f);
+/* Called once the first redisplay of a frame finished.  */
+void ohos_menubar_mark_ready (void);
+bool ohos_menubar_ready_p (void);
 
 void ohos_draw_clear (uint32_t bg);
 void ohos_draw_fill (int x, int y, int w, int h, uint32_t color);

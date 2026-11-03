@@ -1072,6 +1072,20 @@ ohos_update_end (struct frame *f)
     MOUSE_HL_INFO (f)->mouse_face_defer = false;
 }
 
+static bool ohos_menubar_ready;
+
+void
+ohos_menubar_mark_ready (void)
+{
+  ohos_menubar_ready = true;
+}
+
+bool
+ohos_menubar_ready_p (void)
+{
+  return ohos_menubar_ready;
+}
+
 static void
 ohos_frame_up_to_date (struct frame *f)
 {
