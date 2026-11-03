@@ -313,14 +313,21 @@ ohos_set_menu_bar_lines (struct frame *f, Lisp_Object value,
 
   /* Make sure we redisplay all windows in this frame.  */
   fset_redisplay (f);
-  FRAME_MENU_BAR_LINES (f) = nlines;
-  FRAME_MENU_BAR_HEIGHT (f) = nlines * FRAME_LINE_HEIGHT (f);
+
+  /* The menu bar is an external one: ArkUI draws it, so the frame itself
+     must not reserve a glyph row for it (this is what the toolkit ports
+     do in their set_menu_bar_lines).  */
+  FRAME_MENU_BAR_LINES (f) = 0;
+  FRAME_MENU_BAR_HEIGHT (f) = 0;
+  FRAME_EXTERNAL_MENU_BAR (f) = nlines ? 1 : 0;
 
   if (nlines != olines)
     {
       adjust_frame_size (f, -1, -1, 3, true, Qmenu_bar_lines);
       FRAME_TERMINAL (f)->rif->clear_under_internal_border (f);
     }
+  if (nlines)
+    set_frame_menubar (f, true);
 }
 
 static void
