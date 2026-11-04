@@ -330,8 +330,11 @@ Return the chosen command when it was executed."
   "Start polling the development file."
   (unless (file-exists-p ohos-dev-file)
     (ignore-errors
-      (write-region ";; ohos-dev.el: reloaded automatically when changed.\n"
-                    nil ohos-dev-file nil 'silent)))
+      ;; The cookie matters: Emacs 30 warns for every .el loaded without
+      ;; `lexical-binding', and this file is reloaded on every change.
+      (write-region
+       ";;; ohos-dev.el --- development overlay  -*- lexical-binding: t; -*-\n;; Reloaded automatically when changed.\n"
+       nil ohos-dev-file nil 'silent)))
   (setq ohos-dev-stamp nil)
   (ohos-dev-poll)
   (run-with-idle-timer 1.0 t #'ohos-dev-poll))
