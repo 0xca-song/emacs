@@ -402,6 +402,13 @@ ohos_define_frame_cursor (struct frame *f, Emacs_Cursor cursor)
     return;
   if (o->current_cursor == cursor)
     return;
+  {
+    char dbg[128];
+    snprintf (dbg, sizeof dbg, "cursor req name=%s raw=%d cur=%d ptr_inv=%d",
+	      ohos_cursor_name (cursor), (int) (intptr_t) cursor,
+	      (int) (intptr_t) o->current_cursor, (int) f->pointer_invisible);
+    ohos_log (dbg);
+  }
   o->current_cursor = cursor;
   ohos_host_command ("cursor %s", ohos_cursor_name (cursor));
 }
@@ -1045,6 +1052,11 @@ ohos_toggle_invisible_pointer (struct frame *f, bool invisible)
   struct ohos_output *o = FRAME_OUTPUT_DATA (f);
 
   block_input ();
+  {
+    char dbg[64];
+    snprintf (dbg, sizeof dbg, "toggle pointer invisible=%d", (int) invisible);
+    ohos_log (dbg);
+  }
   f->pointer_invisible = invisible;
   o->current_cursor = invisible ? (Emacs_Cursor) OHOS_CURSOR_NONE
     : (Emacs_Cursor) OHOS_CURSOR_TEXT;
