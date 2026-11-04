@@ -210,6 +210,38 @@ Return the chosen command when it was executed."
 ;; right-click / long-press context menu through `context-menu-entry'.
 ;; Nothing here re-binds keys: doing that shadowed the standard bindings and
 ;; hid the fact that the menu bar row was empty.
+;;; Display capabilities.
+
+;; The OHOS backend has C stubs for `xw-display-color-p' and
+;; `x-display-grayscale-p' (ohosgui_stubs.c) but never registers them as
+;; Lisp subrs, so `display-color-p' could not classify the frame.  Without
+;; that classification every `(class color)' / `(min-colors 88)' /
+;; `(background light)' face spec is skipped and faces such as `highlight'
+;; or `mode-line-highlight' stay unspecified -- no hover highlight, no
+;; coloured mode line (task book B-15).
+(defun ohos-setup-frame-faces (frame)
+  "Classify FRAME as a light, full-colour graphical frame and rebuild faces.
+Every step is guarded: this runs while the first frame is being created,
+and an error here aborts the frame (observed: Emacs fell back to the
+terminal frame, i.e. a black window)."
+  (when (and (frame-live-p frame) (display-graphic-p frame))
+    (with-selected-frame frame
+      (condition-case nil
+          (progn
+            (set-frame-parameter frame 'background-mode 'light)
+            (when (fboundp 'xw-display-color-p)
+              (frame-set-background-mode frame))
+            (dolist (face (face-list))
+              (condition-case nil
+                  (face-spec-recalc face frame)
+                (error nil))))
+        (error nil)))))
+
+(add-hook 'after-make-frame-functions #'ohos-setup-frame-faces)
+(condition-case nil
+    (ohos-setup-frame-faces (selected-frame))
+  (error nil))
+
 ;; Emacs' pointer auto-hide is a one-way trip on this backend: the hook
 ;; that shows the pointer again runs from the mouse-motion path, which the
 ;; OHOS terminal does not implement yet, so the window lost its pointer for

@@ -1436,16 +1436,50 @@ ohos_keysym_from_key (unsigned code)
     }
 }
 
+/* Pointer moved to frame pixel (X, Y).
+
+   Mirrors android_note_mouse_movement: remember the position, and when the
+   pointer leaves the glyph it was on, let redisplay work out the
+   `mouse-face' (link and mode line highlight, hand pointer) and mark the
+   frame as moved so `frame_make_pointer_visible' can run.  */
+
+static bool
+ohos_note_mouse_movement (struct frame *f, int x, int y)
+{
+  struct ohos_display_info *dpyinfo;
+  Emacs_Rectangle *r;
+
+  if (!f || !FRAME_LIVE_P (f) || !FRAME_OHOS_P (f))
+    return false;
+  dpyinfo = FRAME_DISPLAY_INFO (f);
+  dpyinfo->last_mouse_motion_frame = f;
+  dpyinfo->last_mouse_motion_x = x;
+  dpyinfo->last_mouse_motion_y = y;
+
+  r = &dpyinfo->last_mouse_glyph;
+  if (f != dpyinfo->last_mouse_glyph_frame
+      || x < r->x || x >= r->x + (int) r->width
+      || y < r->y || y >= r->y + (int) r->height)
+    {
+      f->mouse_moved = true;
+      note_mouse_highlight (f, x, y);
+      remember_mouse_glyph (f, x, y, r);
+      dpyinfo->last_mouse_glyph_frame = f;
+      return true;
+    }
+  return false;
+}
+
 static int
 ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
 {
   unsigned key, modifiers;
   int count = 0;
-  int mouse, button, mx, my, press;
+  int mouse, button, mx, my, press, motion;
   (void) hold_quit;
 
   while (ohos_pop_input (&key, &modifiers, &mouse, &button, &mx, &my,
-			 &press))
+			 &press, &motion))
     {
       struct input_event ev;
       int emods = 0;
@@ -1479,6 +1513,26 @@ ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
 	  continue;
 	}
 
+      if (mouse && motion)
+	{
+	  /* No EVENT: motion only updates the highlight state.  */
+	  bool moved = ohos_note_mouse_movement (SELECTED_FRAME (), mx, my);
+	  {
+	    struct frame *df = SELECTED_FRAME ();
+	    Mouse_HLInfo *hl = df ? MOUSE_HL_INFO (df) : NULL;
+	    char dbg[192];
+	    snprintf (dbg, sizeof dbg,
+		      "motion x=%d y=%d highlight=%d inv=%d glyphs=%d defer=%d",
+		      mx, my, (int) moved,
+		      df ? (int) df->pointer_invisible : -1,
+		      df ? (int) df->glyphs_initialized_p : -1,
+		      hl ? (int) hl->mouse_face_defer : -1);
+	    ohos_log (dbg);
+	  }
+	  if (moved)
+	    count++;
+	  continue;
+	}
       if (mouse)
 	{
 	  struct ohos_display_info *dpyinfo = terminal->display_info.ohos;
@@ -1487,6 +1541,7 @@ ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
 	      dpyinfo->last_mouse_motion_x = mx;
 	      dpyinfo->last_mouse_motion_y = my;
 	    }
+	  ohos_note_mouse_movement (SELECTED_FRAME (), mx, my);
 	  EVENT_INIT (ev);
 	  ev.kind = MOUSE_CLICK_EVENT;
 	  ev.code = button & 3;
@@ -1821,9 +1876,36 @@ static struct redisplay_interface ohos_redisplay_interface =
     ohos_default_font_parameter,
   };
 
+/* Colour capability predicates.
+
+   Registered as subrs because `display-color-p' and
+   `frame-set-background-mode' call them while the first frame is created,
+   i.e. before any Lisp file could define them.  The OHOS display is 24-bit
+   RGB and never grayscale (task book B-15).  */
+
+DEFUN ("xw-display-color-p", Fxw_display_color_p, Sxw_display_color_p,
+       0, 1, 0,
+       doc: /* Return t: OHOS frames are full colour.  */)
+  (Lisp_Object display)
+{
+  (void) display;
+  return Qt;
+}
+
+DEFUN ("x-display-grayscale-p", Fx_display_grayscale_p,
+       Sx_display_grayscale_p, 0, 1, 0,
+       doc: /* Return nil: OHOS frames are not grayscale-only.  */)
+  (Lisp_Object display)
+{
+  (void) display;
+  return Qnil;
+}
+
 void
 syms_of_ohosgui (void)
 {
+  defsubr (&Sxw_display_color_p);
+  defsubr (&Sx_display_grayscale_p);
   DEFSYM (Qohos, "ohos");
   DEFSYM (Qohos_scroll_bar_foreground, "scroll-bar-foreground");
   DEFSYM (Qohos_scroll_bar_background, "scroll-bar-background");

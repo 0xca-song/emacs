@@ -309,6 +309,9 @@ struct ohos_input_cmd
   unsigned key;
   unsigned modifiers;
   int mouse;
+  /* A pointer move with no button transition: feeds note_mouse_highlight
+     (mouse-face, hand pointer) and `frame->mouse_moved'.  */
+  int motion;
   int button, x, y, press;
 };
 
@@ -360,6 +363,7 @@ ohos_input_key (unsigned key, unsigned modifiers, int pressed)
       input_ring[input_tail].key = key;
       input_ring[input_tail].modifiers = modifiers;
       input_ring[input_tail].mouse = 0;
+      input_ring[input_tail].motion = 0;
       input_tail = (input_tail + 1) & OHOS_INPUT_MASK;
       input_count++;
     }
@@ -381,6 +385,7 @@ ohos_input_mouse (int button, int x, int y, unsigned modifiers, int press)
   else
     {
       input_ring[input_tail].mouse = 1;
+      input_ring[input_tail].motion = 0;
       input_ring[input_tail].button = button;
       input_ring[input_tail].x = x;
       input_ring[input_tail].y = y;
@@ -397,9 +402,39 @@ ohos_input_mouse (int button, int x, int y, unsigned modifiers, int press)
     }
 }
 
+/* Pointer motion without a button change.  Mirrors android_input_motion:
+   without this the backend never calls note_mouse_highlight, so there is
+   no `mouse-face` (link / mode line highlight), no hand pointer, and
+   Emacs' `frame_make_pointer_visible' can never run (task book B-11).  */
+void
+ohos_input_motion (int x, int y, unsigned modifiers)
+{
+  pthread_mutex_lock (&input_lock);
+  if (input_count == OHOS_INPUT_CAP)
+    input_dropped++;
+  else
+    {
+      input_ring[input_tail].mouse = 1;
+      input_ring[input_tail].motion = 1;
+      input_ring[input_tail].button = -1;
+      input_ring[input_tail].x = x;
+      input_ring[input_tail].y = y;
+      input_ring[input_tail].modifiers = modifiers;
+      input_ring[input_tail].press = 0;
+      input_tail = (input_tail + 1) & OHOS_INPUT_MASK;
+      input_count++;
+    }
+  pthread_mutex_unlock (&input_lock);
+  if (input_pipe[1] >= 0)
+    {
+      char byte = 1;
+      (void) write (input_pipe[1], &byte, 1);
+    }
+}
+
 int
 ohos_pop_input (unsigned *key, unsigned *modifiers, int *mouse,
-		int *button, int *x, int *y, int *press)
+		int *button, int *x, int *y, int *press, int *motion)
 {
   int found = 0;
   pthread_mutex_lock (&input_lock);
@@ -408,6 +443,8 @@ ohos_pop_input (unsigned *key, unsigned *modifiers, int *mouse,
       *key = input_ring[input_head].key;
       *modifiers = input_ring[input_head].modifiers;
       *mouse = input_ring[input_head].mouse;
+      if (motion)
+	*motion = input_ring[input_head].motion;
       *button = input_ring[input_head].button;
       *x = input_ring[input_head].x;
       *y = input_ring[input_head].y;
@@ -461,6 +498,8 @@ ohos_input_text (const char *text)
 	{
 	  input_ring[input_tail].key = cp | OHOS_INPUT_TEXT_FLAG;
 	  input_ring[input_tail].modifiers = 0;
+	  input_ring[input_tail].mouse = 0;
+	  input_ring[input_tail].motion = 0;
 	  input_tail = (input_tail + 1) & OHOS_INPUT_MASK;
 	  input_count++;
 	}

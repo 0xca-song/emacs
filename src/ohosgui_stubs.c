@@ -64,20 +64,6 @@ frame_set_mouse_pixel_position (struct frame *f, int x, int y)
   ohos_host_command ("pointer-warp %d %d", x, y);
 }
 
-Lisp_Object
-Fxw_display_color_p (Lisp_Object display)
-{
-  (void) display;
-  return Qt;
-}
-
-Lisp_Object
-Fx_display_grayscale_p (Lisp_Object display)
-{
-  (void) display;
-  return Qnil;
-}
-
 /* Names for the keysyms the OHOS key bridge produces (see
    ohos_keysym_from_key in ohosgui.c).  `key-description' and the help
    echo area use these.  */

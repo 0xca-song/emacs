@@ -376,9 +376,12 @@ void ohos_input_raw (const char *data, size_t len);
 int ohos_input_wait_fd (void);
 int ohos_input_key (unsigned key, unsigned modifiers, int pressed);
 int ohos_pop_input (unsigned *key, unsigned *modifiers, int *mouse,
-		    int *button, int *x, int *y, int *press);
+		    int *button, int *x, int *y, int *press, int *motion);
 void ohos_input_mouse (int button, int x, int y, unsigned modifiers,
 		       int press);
+/* Pointer motion only: drives note_mouse_highlight (mouse-face, hand
+   pointer) and `frame->mouse_moved'.  Coordinates are frame pixels.  */
+void ohos_input_motion (int x, int y, unsigned modifiers);
 void ohos_input_text (const char *text);
 void ohos_input_focus (int focused);
 /* UI thread: the XComponent surface now has WIDTH x HEIGHT pixels.

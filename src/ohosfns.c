@@ -1042,6 +1042,49 @@ ohos_frame_parm_init (void)
   eassert (countof (ohos_frame_parm_handlers) == 63);
 }
 
+/* The colour / display-capability predicates every GUI backend provides.
+   Without them `display-color-p', `display-color-cells' and
+   `frame-set-background-mode' cannot classify an OHOS frame, so every
+   `(class color)' / `(min-colors 88)' / `(background light)' face spec was
+   skipped and faces such as `highlight' stayed unspecified (task book
+   B-15).  Mirrors androidfns.c.  */
+
+static struct ohos_display_info *
+ohos_check_display_info (Lisp_Object object)
+{
+  struct frame *f;
+  struct terminal *t;
+
+  if (NILP (object))
+    f = SELECTED_FRAME ();
+  else if (FRAMEP (object))
+    f = XFRAME (object);
+  else
+    f = NULL;
+
+  if (f && FRAME_LIVE_P (f) && FRAME_OHOS_P (f))
+    return FRAME_DISPLAY_INFO (f);
+
+  for (t = terminal_list; t; t = t->next_terminal)
+    if (t->type == output_ohos && t->display_info.ohos)
+      return t->display_info.ohos;
+
+  error ("No OHOS display found");
+  return NULL;
+}
+
+DEFUN ("x-display-color-cells", Fx_display_color_cells,
+       Sx_display_color_cells, 0, 1, 0,
+       doc: /* SKIP: real doc in xfns.c.  */)
+  (Lisp_Object terminal)
+{
+  int nr_planes = ohos_check_display_info (terminal)->n_planes;
+
+  if (nr_planes > 24)
+    nr_planes = 24;
+  return make_fixnum (1 << nr_planes);
+}
+
 void
 syms_of_ohosfns (void)
 {
@@ -1052,6 +1095,7 @@ syms_of_ohosfns (void)
   defsubr (&Sohos_notify);
   defsubr (&Sohos_battery);
   defsubr (&Sohos_debug_rif);
+  defsubr (&Sx_display_color_cells);
 
   DEFVAR_LISP ("x-cursor-fore-pixel", Vx_cursor_fore_pixel,
 	       doc: /* Pixel color of the text cursor foreground.
