@@ -210,6 +210,12 @@ Return the chosen command when it was executed."
 ;; right-click / long-press context menu through `context-menu-entry'.
 ;; Nothing here re-binds keys: doing that shadowed the standard bindings and
 ;; hid the fact that the menu bar row was empty.
+;; Emacs' pointer auto-hide is a one-way trip on this backend: the hook
+;; that shows the pointer again runs from the mouse-motion path, which the
+;; OHOS terminal does not implement yet, so the window lost its pointer for
+;; good (task book B-10).  Keep it visible until motion lands.
+(setq make-pointer-invisible nil)
+
 (when (fboundp 'menu-bar-mode)
   (menu-bar-mode 1))
 

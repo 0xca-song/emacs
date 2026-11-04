@@ -372,8 +372,11 @@ ohos_cursor_name (Emacs_Cursor cursor)
   switch ((int) (intptr_t) cursor)
     {
     case OHOS_CURSOR_TEXT: return "text";
-    case OHOS_CURSOR_NONTEXT: return "text";
-    case OHOS_CURSOR_MODELINE: return "text";
+    /* Non-text areas (fringe, scroll bar, tool/tab bar) and the mode line
+       get the ordinary arrow; mapping them to "text" made the pointer look
+       like an I-beam over the whole window.  */
+    case OHOS_CURSOR_NONTEXT: return "default";
+    case OHOS_CURSOR_MODELINE: return "default";
     case OHOS_CURSOR_HAND: return "hand";
     case OHOS_CURSOR_HOURGLASS: return "hourglass";
     case OHOS_CURSOR_HDRAG: return "hdrag";
@@ -398,7 +401,9 @@ ohos_define_frame_cursor (struct frame *f, Emacs_Cursor cursor)
 {
   struct ohos_output *o = FRAME_OUTPUT_DATA (f);
 
-  if (f->pointer_invisible || o->hourglass)
+  /* The page keeps the system pointer visible (task book B-10), so
+     `f->pointer_invisible' no longer has to block shape updates.  */
+  if (o->hourglass)
     return;
   if (o->current_cursor == cursor)
     return;
