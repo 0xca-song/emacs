@@ -349,27 +349,3 @@ Return the chosen command when it was executed."
 
 (provide 'ohos-win)
 ;;; ohos-win.el ends here
-
-;; The frame only gets its real size once the host reports the surface
-;; geometry, which happens after `command-line-1' has decided about the
-;; startup screen: it saw the default height and found that the logo would
-;; not fit, so it built the plain screen.  Postpone that decision and
-;; display the startup screen once the frame really has its size.
-(defvar ohos-startup-screen-pending nil)
-
-(unless (or noninteractive inhibit-startup-screen)
-  (setq ohos-startup-screen-pending t
-        inhibit-startup-screen t))
-
-(defun ohos-startup-screen-when-sized ()
-  "Display the startup screen once the frame has its real size."
-  (when (and ohos-startup-screen-pending (> (frame-height) 30))
-    (setq ohos-startup-screen-pending nil
-          inhibit-startup-screen nil)
-    (when (and (display-graphic-p) (use-fancy-splash-screens-p))
-      (when (get-buffer "*GNU Emacs*")
-        (kill-buffer "*GNU Emacs*"))
-      (delete-other-windows)
-      (display-startup-screen t))))
-
-(run-with-timer 0.3 0.3 #'ohos-startup-screen-when-sized)
