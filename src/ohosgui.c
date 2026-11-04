@@ -305,13 +305,6 @@ ohos_draw_window_cursor (struct window *w, struct glyph_row *row,
   (void) active_p;
   if (!w || !row)
     return;
-  /* redisplay calls this with on_p true even on the blink-off tick; the
-     visibility flag lives in w->cursor_off_p (internal-show-cursor sets
-     it).  Other backends get on_p == false there and skip the draw; do
-     the same explicitly, otherwise the cursor is painted on every tick
-     and never appears to blink.  */
-  if (w->cursor_off_p)
-    on_p = false;
   f = WINDOW_XFRAME (w);
   line_height = FRAME_LINE_HEIGHT (f);
   cell_width = FRAME_COLUMN_WIDTH (f);
@@ -322,6 +315,18 @@ ohos_draw_window_cursor (struct window *w, struct glyph_row *row,
   color = (FRAME_OUTPUT_DATA (f)->cursor_pixel >= 0
            ? (uint32_t) FRAME_OUTPUT_DATA (f)->cursor_pixel
            : (uint32_t) FRAME_FOREGROUND_PIXEL (f));
+
+  /* redisplay calls this with on_p true even on the blink-off tick; the
+     visibility flag lives in w->cursor_off_p (internal-show-cursor sets
+     it), and because `on' stays true Emacs never runs erase_phys_cursor
+     for us.  So the hide half is our job: clear the cell and redraw the
+     glyph, exactly what erase_phys_cursor would have done.  */
+  if (w->cursor_off_p)
+    {
+      ohos_clear_frame_area (f, fx, fy, cell_width, line_height);
+      draw_phys_cursor_glyph (w, row, DRAW_NORMAL_TEXT);
+      return;
+    }
 
   /* Every window draws its own cursor here (the contract: redisplay calls
      this for each window, selected or not).  The shapes are painted into
