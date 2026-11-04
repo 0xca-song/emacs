@@ -100,22 +100,26 @@ ohos_get_pixel (struct ohos_pixmap *p, int x, int y)
 static Lisp_Object Qohos_image_file;
 static Lisp_Object Qohos_image_data;
 
-/* The image spec may name the file relative to `image-load-path' (the
-   startup screen passes "splash.svg"), so resolve it exactly the way
-   png_load does before opening it.  */
-extern Lisp_Object image_find_image_fd (Lisp_Object, int *);
-
+/* The image spec may name the file relative to the image directory (the
+   startup screen passes "splash.svg"), so try data-directory/images
+   before the name as given.  Resolving here avoids the openp path, which
+   is not safe to drive from the image loader.  */
 static unsigned char *
 ohos_read_whole_file (const char *name, size_t *len)
 {
-  int fd = -1;
-  Lisp_Object found = image_find_image_fd (build_string (name), &fd);
   FILE *fp = NULL;
 
-  if (STRINGP (found))
-    fp = fopen (SSDATA (found), "rb");
-  else if (fd >= 0)
-    fp = fdopen (fd, "rb");
+  /* Image loaders run inside redisplay, where evaluating Lisp (which can
+     allocate and collect) is not allowed, so the candidate path is built
+     with plain C from the data directory string.  */
+  if (name[0] != '/' && STRINGP (Vdata_directory))
+    {
+      char path[1024];
+
+      snprintf (path, sizeof path, "%simages/%s",
+		SSDATA (Vdata_directory), name);
+      fp = fopen (path, "rb");
+    }
   if (!fp)
     fp = fopen (name, "rb");
 

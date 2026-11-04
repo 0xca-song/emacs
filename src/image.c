@@ -769,7 +769,7 @@ typedef int image_fd;
 #if defined HAVE_HAIKU || defined HAVE_NS || defined HAVE_PGTK	\
   || defined HAVE_ANDROID || defined HAVE_NTGUI
 static char *slurp_file (image_fd, ptrdiff_t *);
-Lisp_Object image_find_image_fd (Lisp_Object, image_fd *);
+static Lisp_Object image_find_image_fd (Lisp_Object, image_fd *);
 static bool xbm_read_bitmap_data (struct frame *, char *, char *,
 				  int *, int *, char **, bool);
 #endif
@@ -4490,7 +4490,7 @@ image_unget_x_image (struct image *img, bool mask_p, Emacs_Pix_Container ximg)
    readable file descriptor for the file, opened in binary mode.  If
    PFD is null, do not open the file.  */
 
-Lisp_Object
+static Lisp_Object
 image_find_image_fd (Lisp_Object file, image_fd *pfd)
 {
   Lisp_Object file_found, search_path;
