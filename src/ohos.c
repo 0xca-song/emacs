@@ -201,9 +201,14 @@ ohos_draw_image (int x, int y, int w, int h, const void *rgba, unsigned len)
     snprintf (dbg, sizeof dbg, "image draw x=%d y=%d w=%d h=%d len=%u",
 	      x, y, w, h, len);
     ohos_log (dbg); }
+  /* The command must own its pixels: it is consumed later, on the UI
+     thread, while the caller's buffer is already gone.  */
+  void *owned = xmalloc (len);
+
+  memcpy (owned, rgba, len);
   struct ohos_draw_command cmd = { .op = OHOS_OP_IMAGE,
 			       .x = x, .y = y, .w = w, .h = h,
-			       .ptr = rgba, .ptr_len = len };
+			       .ptr = owned, .ptr_len = len };
   enqueue (&cmd);
 }
 
@@ -278,6 +283,9 @@ ohos_pump_draw_commands (void)
       if (draw_batch_sink)
 	{
 	  draw_batch_sink (batch, n);
+	  for (i = 0; i < n; i++)
+	    if (batch[i].op == OHOS_OP_IMAGE && batch[i].ptr)
+	      xfree ((void *) batch[i].ptr);
 	  continue;
 	}
 

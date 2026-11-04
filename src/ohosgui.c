@@ -200,7 +200,18 @@ ohos_draw_glyph_string (struct glyph_string *s)
 	  int tw = img->width, th = img->height;
 	  size_t n = (size_t) tw * th * 4;
 	  unsigned char *rgba = xmalloc (n);
-	  int dx, dy;
+	  int dx, dy, has_alpha = 0;
+	  size_t k;
+
+	  /* image.c writes RGB_TO_ULONG for images without an alpha channel,
+	     which leaves the high byte zero; only treat the pixmap as
+	     transparent when some pixel actually carries alpha.  */
+	  for (k = 0; k < (size_t) bmp->width * bmp->height; k++)
+	    if ((((const unsigned char *) bmp->data)[k * 4 + 3]) != 0)
+	      {
+		has_alpha = 1;
+		break;
+	      }
 
 	  /* The pixmap stores ARGB32 (image.c's PUT_PIXEL layout) while the
 	     draw protocol carries RGBA, and redisplay laid the glyph out at
@@ -221,7 +232,7 @@ ohos_draw_glyph_string (struct glyph_string *s)
 		  d[0] = (px >> 16) & 0xff;
 		  d[1] = (px >> 8) & 0xff;
 		  d[2] = px & 0xff;
-		  d[3] = (px >> 24) & 0xff;
+		  d[3] = has_alpha ? ((px >> 24) & 0xff) : 0xff;
 		}
 	    }
 	  ohos_draw_image (s->x, y, tw, th, rgba, (unsigned) n);

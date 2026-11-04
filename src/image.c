@@ -76,16 +76,6 @@ typedef struct x_bitmap_record Bitmap_Record;
 #endif	/* !USE_CAIRO */
 #endif /* HAVE_X_WINDOWS */
 
-#if defined HAVE_OHOS_GUI
-#define RGB_TO_ULONG(r, g, b) (((r) << 16) | ((g) << 8) | (b))
-#define ARGB_TO_ULONG(a, r, g, b) (((a) << 24) | ((r) << 16) | ((g) << 8) | (b))
-#define GET_PIXEL(p, x, y) ohos_get_pixel ((struct ohos_pixmap *) (p), (x), (y))
-#define PUT_PIXEL(p, x, y, c) ohos_put_pixel ((struct ohos_pixmap *) (p), (x), (y), (c))
-#define NO_PIXMAP NULL
-#define PIX_MASK_RETAIN 0
-#define PIX_MASK_DRAW 255
-#endif
-
 #if defined(USE_CAIRO) || defined(HAVE_NS)
 #define RGB_TO_ULONG(r, g, b) (((r) << 16) | ((g) << 8) | (b))
 #ifndef HAVE_NS
@@ -184,12 +174,18 @@ typedef struct pgtk_bitmap_record Bitmap_Record;
 
 #ifdef HAVE_OHOS_GUI
 typedef struct ohos_bitmap_record Bitmap_Record;
-#define GET_PIXEL(img, x, y) 0
-#define PUT_PIXEL(img, x, y, pixel) ((void) 0)
+/* Pixels live in the backend pixmap (struct ohos_pixmap), which is also
+   the x_image, so decoders read and write it directly.  */
+#define GET_PIXEL(img, x, y) \
+  ohos_get_pixel ((struct ohos_pixmap *) (img), (x), (y))
+#define PUT_PIXEL(img, x, y, pixel) \
+  ohos_put_pixel ((struct ohos_pixmap *) (img), (x), (y), (pixel))
 #define NO_PIXMAP 0
 #define PIX_MASK_RETAIN 0
 #define PIX_MASK_DRAW 1
 #define RGB_TO_ULONG(r, g, b) (((r) << 16) | ((g) << 8) | (b))
+#define ARGB_TO_ULONG(a, r, g, b) \
+  (((a) << 24) | ((r) << 16) | ((g) << 8) | (b))
 #define RED_FROM_ULONG(color) (((color) >> 16) & 0xff)
 #define GREEN_FROM_ULONG(color) (((color) >> 8) & 0xff)
 #define BLUE_FROM_ULONG(color) ((color) & 0xff)
@@ -7422,7 +7418,7 @@ lookup_rgb_color (struct frame *f, int r, int g, int b)
 #ifdef HAVE_NTGUI
   return PALETTERGB (r >> 8, g >> 8, b >> 8);
 #elif defined USE_CAIRO || defined HAVE_NS || defined HAVE_HAIKU	\
-  || defined HAVE_ANDROID
+  || defined HAVE_ANDROID || defined HAVE_OHOS_GUI
   return RGB_TO_ULONG (r >> 8, g >> 8, b >> 8);
 #else
   xsignal1 (Qfile_error,
