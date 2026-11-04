@@ -265,12 +265,12 @@ Return the chosen command when it was executed."
 
 (add-hook 'window-setup-hook #'ohos-refresh-frame-faces)
 
-;; Image support is not implemented for OHOS frames: the backend is
-;; graphical but has no image drawing path, so `display-images-p' is true
-;; and the splash screen asks image.c for an image, which logs
-;; "Invalid image size" on every redisplay until the app dies.  Declared
-;; as a backend limitation, like the missing tool bar.
-(setq image-types nil)
+;; Image support: PNG only.  The backend decodes PNG itself (zlib is in
+;; the sysroot, no image library is enabled in this build) and blits the
+;; pixels through the draw protocol.  The other types Emacs knows about
+;; (pbm, xbm, canvas) have no drawing path here, so only PNG is offered:
+;; claiming them would silently produce empty boxes.
+(setq image-types '(png))
 
 
 (when (fboundp 'menu-bar-mode)

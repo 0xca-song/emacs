@@ -13446,6 +13446,11 @@ initialize_image_type (struct image_type const *type)
 
 /* Array of supported image types.  */
 
+#ifdef HAVE_OHOS_GUI
+extern bool ohos_png_image_p (Lisp_Object);
+extern bool ohos_png_load (struct frame *, struct image *);
+#endif
+
 static struct image_type const image_types[] =
 {
 #ifdef HAVE_GHOSTSCRIPT
@@ -13485,6 +13490,9 @@ static struct image_type const image_types[] =
    IMAGE_TYPE_INIT (init_webp_functions) },
 #endif
  { SYMBOL_INDEX (Qxbm), xbm_image_p, xbm_load, image_clear_image },
+#ifdef HAVE_OHOS_GUI
+ { SYMBOL_INDEX (Qpng), ohos_png_image_p, ohos_png_load, image_clear_image },
+#endif
  { SYMBOL_INDEX (Qpbm), pbm_image_p, pbm_load, image_clear_image },
  { SYMBOL_INDEX (Qcanvas), canvas_image_p, canvas_load, image_clear_image },
 };
@@ -13670,6 +13678,10 @@ non-numeric, there is no explicit limit on the size of images.  */);
 #if defined (HAVE_GIF) || defined (HAVE_NATIVE_IMAGE_API)
   DEFSYM (Qgif, "gif");
   add_image_type (Qgif);
+#endif
+
+#ifdef HAVE_OHOS_GUI
+  add_image_type (Qpng);
 #endif
 
 #if defined (HAVE_PNG) || defined (HAVE_NATIVE_IMAGE_API)

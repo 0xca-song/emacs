@@ -161,6 +161,22 @@ ohos_draw_glyph_string (struct glyph_string *s)
       && !(s->first_glyph->type == COMPOSITE_GLYPH
 	   && s->first_glyph->u.cmp.automatic))
     return;
+  if (s->first_glyph->type == IMAGE_GLYPH)
+    {
+      struct image *img = s->img;
+
+      if (img && STRINGP (img->lisp_data)
+	  && img->width > 0 && img->height > 0
+	  && SBYTES (img->lisp_data) >= (ptrdiff_t) img->width * img->height * 4)
+	{
+	  int y = s->ybase - image_ascent (img, s->face, &s->slice);
+
+	  ohos_draw_image (s->x, y, img->width, img->height,
+			   SDATA (img->lisp_data),
+			   (unsigned) SBYTES (img->lisp_data));
+	}
+      return;
+    }
   if (s->font && s->font->driver && s->font->driver->draw)
     s->font->driver->draw (s, 0, s->nchars, s->x, s->y, true);
 }
@@ -1957,9 +1973,18 @@ DEFUN ("x-display-grayscale-p", Fx_display_grayscale_p,
   return Qnil;
 }
 
+extern void syms_of_ohosimage (void);
+
 void
 syms_of_ohosgui (void)
 {
+  {
+    char d[80];
+    snprintf (d, sizeof d, "sizeof ohos_draw_command=%d",
+	      (int) sizeof (struct ohos_draw_command));
+    ohos_log (d);
+  }
+  syms_of_ohosimage ();
   defsubr (&Sxw_display_color_p);
   defsubr (&Sx_display_grayscale_p);
   DEFSYM (Qohos, "ohos");

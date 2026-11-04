@@ -316,6 +316,7 @@ enum ohos_draw_opcode
   OHOS_OP_CURSOR,
   OHOS_OP_SCROLL,
   OHOS_OP_PRESENT,
+  OHOS_OP_IMAGE,
   OHOS_OP_BEGIN,
   OHOS_OP_END
 };
@@ -329,6 +330,9 @@ struct ohos_draw_command
   uint32_t fg, bg;
   uint32_t flags;
   unsigned epoch;
+  /* IMAGE op: RGBA pixels (same process, valid during the pump).  */
+  const void *ptr;
+  unsigned ptr_len;
 };
 
 typedef void (*ohos_draw_batch_fn) (const struct ohos_draw_command *, int);
@@ -361,6 +365,8 @@ void ohos_draw_clear (uint32_t bg);
 void ohos_draw_fill (int x, int y, int w, int h, uint32_t color);
 void ohos_draw_text (int x, int y, int w, int h, unsigned code,
 		     uint32_t fg, uint32_t bg, uint32_t flags);
+void ohos_draw_image (int x, int y, int w, int h, const void *rgba,
+		      unsigned len);
 void ohos_draw_cursor (int x, int y, int w, int h, int bar,
 		       uint32_t fg, uint32_t bg, uint32_t flags, int kind);
 void ohos_draw_scroll (int x, int from_y, int width, int height,

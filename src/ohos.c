@@ -187,6 +187,29 @@ ohos_draw_text (int x, int y, int w, int h, unsigned code,
 }
 
 void
+ohos_draw_image (int x, int y, int w, int h, const void *rgba, unsigned len)
+{
+  { static int once;
+    if (!once++) { char d[64]; snprintf (d, sizeof d, "sizeof cmd=%d", (int) sizeof (struct ohos_draw_command)); ohos_log (d); } }
+  if (w <= 0 || h <= 0 || len == 0)
+    {
+      char dbg[128];
+      snprintf (dbg, sizeof dbg, "image draw skipped x=%d y=%d w=%d h=%d len=%u",
+		x, y, w, h, len);
+      ohos_log (dbg);
+      return;
+    }
+  { char dbg[128];
+    snprintf (dbg, sizeof dbg, "image draw x=%d y=%d w=%d h=%d len=%u",
+	      x, y, w, h, len);
+    ohos_log (dbg); }
+  struct ohos_draw_command cmd = { .op = OHOS_OP_IMAGE,
+			       .x = x, .y = y, .w = w, .h = h,
+			       .ptr = rgba, .ptr_len = len };
+  enqueue (&cmd);
+}
+
+void
 ohos_draw_cursor (int x, int y, int w, int h, int bar, uint32_t fg,
 		  uint32_t bg, uint32_t flags, int kind)
 {
