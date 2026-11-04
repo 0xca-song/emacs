@@ -754,11 +754,7 @@ ohos_create_frame (struct terminal *terminal, Lisp_Object parms)
      `f != FRAME_DISPLAY_INFO (f)->highlight_frame'.  */
   FRAME_DISPLAY_INFO (f)->focus_frame = frame;
   FRAME_DISPLAY_INFO (f)->highlight_frame = f;
-  /* The host's own focus callback fires before this frame exists, so the
-     event would be lost.  Report it again through the normal input
-     channel, which is the contract every backend follows: focus is
-     delivered as an input event, never simulated from Lisp.  */
-  ohos_input_focus (1);
+
 
 
   gui_default_parameter (f, parms, Qmenu_bar_lines,
