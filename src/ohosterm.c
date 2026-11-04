@@ -50,6 +50,39 @@ ohos_defined_color (struct frame *f, const char *color_name,
     }
   else
     {
+      Lisp_Object tem;
+      /* `f' may be nil (or a non-OHOS frame) on the face realization
+	 path; fall back to any OHOS display so the colour table is
+	 always reachable.  */
+      struct ohos_display_info *dpyinfo = NULL;
+
+      if (f && FRAME_OHOS_P (f))
+	dpyinfo = FRAME_DISPLAY_INFO (f);
+      else
+	for (struct terminal *t = terminal_list; t; t = t->next_terminal)
+	  if (t->type == output_ohos && t->display_info.ohos)
+	    {
+	      dpyinfo = t->display_info.ohos;
+	      break;
+	    }
+
+      if (dpyinfo && CONSP (dpyinfo->color_map))
+	for (tem = dpyinfo->color_map; CONSP (tem); tem = XCDR (tem))
+	  {
+	    Lisp_Object entry = XCAR (tem);
+
+	    if (CONSP (entry) && STRINGP (XCAR (entry))
+		&& FIXNUMP (XCDR (entry))
+		&& !strcasecmp (SSDATA (XCAR (entry)), color_name))
+	      {
+		rgb = (uint32_t) XFIXNUM (XCDR (entry));
+		color_def->pixel = rgb;
+		color_def->red = ((rgb >> 16) & 0xff) * 0x101;
+		color_def->green = ((rgb >> 8) & 0xff) * 0x101;
+		color_def->blue = (rgb & 0xff) * 0x101;
+		return true;
+	      }
+	  }
       size_t i;
       for (i = 0; i < sizeof colors / sizeof colors[0]; i++)
 	if (!strcasecmp (color_name, colors[i].name))
@@ -84,6 +117,7 @@ ohos_term_init (void)
   dpyinfo->resy = 96.0;
   dpyinfo->n_planes = 24;
   dpyinfo->color_p = 1;
+
   dpyinfo->smallest_font_height = 18;
   dpyinfo->smallest_char_width = 9;
   dpyinfo->next = NULL;

@@ -219,6 +219,52 @@ Return the chosen command when it was executed."
 ;; `(background light)' face spec is skipped and faces such as `highlight'
 ;; or `mode-line-highlight' stay unspecified -- no hover highlight, no
 ;; coloured mode line (task book B-15).
+;; Startup contract: after a frame exists the standard init runs
+;; (startup.el: frame-notice-user-settings, frame-set-background-mode,
+;; face-set-after-frame-default) to classify the frame and realize every
+;; face from its spec.  On this port the initial frame is created outside
+;; that path, so the parameters `display-type'/`background-mode' stayed
+;; nil and the mouse-feedback faces kept the mono fallback (B-17).  Run the
+;; same two initializers as soon as the frame exists -- before the user's
+;; init file touches the faces.
+(defun ohos-init-frame-faces (frame)
+  "Run the standard face initializers for FRAME."
+  (when (and (frame-live-p frame) (display-graphic-p frame))
+    (with-selected-frame frame
+      (condition-case nil
+          (frame-set-background-mode frame)
+        (error nil))
+      (condition-case nil
+          (face-set-after-frame-default frame)
+        (error nil)))))
+
+(add-hook 'after-make-frame-functions #'ohos-init-frame-faces)
+(condition-case nil
+    (progn
+      (ohos-init-frame-faces (selected-frame))
+      (when (fboundp 'frame-notice-user-settings)
+        (frame-notice-user-settings)))
+  (error nil))
+
+;; The shipped init file (`~/.emacs') runs `internal-make-lisp-face' for
+;; every face on the frame, and that call resets all the frame-local face
+;; attributes to `unspecified' (xfaces.c, internal-make-lisp-face).  The
+;; faces therefore lose what the startup initialization had just realized,
+;; which is why `highlight' and `mode-line-highlight' fell back to
+;; `(t :inverse-video t)': no colour on hover, no mode-line box (B-17).
+;; Re-run the standard initializer after the init file, instead of editing
+;; the init file itself.
+(defun ohos-refresh-frame-faces (&rest _)
+  "Realize every face of the OHOS frames from its spec."
+  (dolist (frame (frame-list))
+    (when (and (frame-live-p frame) (display-graphic-p frame))
+      (condition-case nil
+          (with-selected-frame frame
+            (face-set-after-frame-default frame))
+        (error nil)))))
+
+(add-hook 'window-setup-hook #'ohos-refresh-frame-faces)
+
 ;; Image support is not implemented for OHOS frames: the backend is
 ;; graphical but has no image drawing path, so `display-images-p' is true
 ;; and the splash screen asks image.c for an image, which logs

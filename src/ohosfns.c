@@ -742,6 +742,15 @@ ohos_create_frame (struct terminal *terminal, Lisp_Object parms)
 			 "rightFringe", "RightFringe", RES_TYPE_NUMBER);
   gui_default_parameter (f, parms, Qno_special_glyphs, Qnil,
 			 NULL, NULL, RES_TYPE_BOOLEAN);
+  /* Emacs' faces name X11 colours (grey75, Firebrick, RoyalBlue3, ...).
+     `defined_color_hook' can only look colours up - it must not evaluate
+     Lisp - so the standard table is loaded here, once, before the first
+     face is realized.  Same contract as androidterm.c.  */
+  if (NILP (FRAME_DISPLAY_INFO (f)->color_map))
+    FRAME_DISPLAY_INFO (f)->color_map
+      = Fx_load_color_file (Fexpand_file_name (build_string ("rgb.txt"),
+					       Vdata_directory));
+
   /* The default face is realized from the frame parameters, so all the
      color parameters must be in place before init_frame_faces: it calls
      realize_basic_faces, which aborts when they are missing.  */
@@ -1042,6 +1051,40 @@ ohos_frame_parm_init (void)
   eassert (countof (ohos_frame_parm_handlers) == 63);
 }
 
+/* RGB lookup for a colour name on an OHOS frame.
+
+   `frame--current-background-mode' (used by `frame-set-background-mode' and
+   therefore by every face spec that says `(background light)') calls
+   `xw-color-values' to measure the frame background.  The subr did not exist
+   for this backend, the Lisp signalled `void-function', and every face kept
+   the `(t :inverse-video t)' fallback: no colour on hover and no mode-line
+   box (B-17).  Mirrors androidfns.c.  */
+
+DEFUN ("xw-color-values", Fxw_color_values, Sxw_color_values, 1, 2, 0,
+       doc: /* Return the RGB values of COLOR on FRAME as 16-bit integers.  */)
+  (Lisp_Object color, Lisp_Object frame)
+{
+  Emacs_Color c;
+  struct frame *f = decode_window_system_frame (frame);
+
+  CHECK_STRING (color);
+  if (ohos_defined_color (f, SSDATA (color), &c, false, false))
+    return list3i (c.red, c.green, c.blue);
+  return Qnil;
+}
+
+DEFUN ("xw-color-defined-p", Fxw_color_defined_p, Sxw_color_defined_p,
+       1, 2, 0,
+       doc: /* Return t if COLOR is defined on FRAME.  */)
+  (Lisp_Object color, Lisp_Object frame)
+{
+  Emacs_Color c;
+  struct frame *f = decode_window_system_frame (frame);
+
+  CHECK_STRING (color);
+  return ohos_defined_color (f, SSDATA (color), &c, false, false) ? Qt : Qnil;
+}
+
 /* The colour / display-capability predicates every GUI backend provides.
    Without them `display-color-p', `display-color-cells' and
    `frame-set-background-mode' cannot classify an OHOS frame, so every
@@ -1095,6 +1138,8 @@ syms_of_ohosfns (void)
   defsubr (&Sohos_notify);
   defsubr (&Sohos_battery);
   defsubr (&Sohos_debug_rif);
+  defsubr (&Sxw_color_values);
+  defsubr (&Sxw_color_defined_p);
   defsubr (&Sx_display_color_cells);
 
   DEFVAR_LISP ("x-cursor-fore-pixel", Vx_cursor_fore_pixel,
