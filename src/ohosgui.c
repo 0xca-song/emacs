@@ -188,18 +188,6 @@ ohos_draw_glyph_string (struct glyph_string *s)
       && !(s->first_glyph->type == COMPOSITE_GLYPH
 	   && s->first_glyph->u.cmp.automatic))
     return;
-  /* A redraw of the cell the cursor sits on is how redisplay erases the
-     cursor (blink off, or an ordinary redraw before the next draw).  */
-  if (ohos_cursor_shown && s->x == ohos_cursor_x
-      && s->y >= ohos_cursor_y - 2 && s->y <= ohos_cursor_y + 2)
-    {
-      ohos_cursor_shown = false;
-      ohos_draw_cursor (ohos_cursor_x, ohos_cursor_y,
-			FRAME_COLUMN_WIDTH (s->f), FRAME_LINE_HEIGHT (s->f),
-			2, (uint32_t) FRAME_FOREGROUND_PIXEL (s->f),
-			(uint32_t) FRAME_BACKGROUND_PIXEL (s->f), 0u, 0);
-    }
-
   if (s->first_glyph->type == IMAGE_GLYPH)
     {
       struct image *img = s->img;
@@ -334,7 +322,20 @@ ohos_draw_window_cursor (struct window *w, struct glyph_row *row,
      area and redraws the glyph.  Only a filled box goes through the glyph
      stream (DRAW_CURSOR), which is what makes it blink.  */
   if (type == NO_CURSOR)
-    return;
+    {
+      w->phys_cursor_width = 0;
+      return;
+    }
+  if (on_p)
+    {
+      /* erase_phys_cursor decides whether and how to undo the cursor from
+         these two fields; xterm and android set them here as well.  Without
+         them the erase is skipped and the block stays on the screen (typing
+         left reversed cells behind and inactive windows kept their old
+         cursor).  */
+      w->phys_cursor_type = type;
+      w->phys_cursor_on_p = true;
+    }
 
   switch (type)
     {
