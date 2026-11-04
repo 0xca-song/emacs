@@ -210,6 +210,9 @@ extern char *get_keysym_name (int);
 extern struct font *ohosfont_make_default (struct frame *);
 extern Lisp_Object ohosfont_make_default_object (struct frame *);
 extern void ohosfont_register_frame (struct frame *);
+extern Lisp_Object ohos_color_table;
+extern void ohos_set_color_table (Lisp_Object);
+extern void mark_ohosterm (void);
 extern bool ohos_defined_color (struct frame *, const char *, Emacs_Color *,
 				bool, bool);
 extern void ohos_query_frame_background_color (struct frame *, Emacs_Color *);

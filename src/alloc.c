@@ -5777,6 +5777,10 @@ garbage_collect (void)
   mark_xselect ();
 #endif
 
+#ifdef HAVE_OHOS_GUI
+  mark_ohosterm ();
+#endif
+
 #ifdef HAVE_ANDROID
   mark_androidterm ();
 #ifndef ANDROID_STUBIFY

@@ -16,6 +16,25 @@ typedef struct ohos_display_info Display_Info;
 #include "keyboard.h"
 #include "ohosgui.h"
 
+/* The display info of this terminal.  Its Lisp_Object members must be
+   marked by the GC exactly like androidterm marks its colour map: without
+   that the table (and the other Lisp values stored here) is collected and
+   every colour lookup starts returning nil.  */
+
+static struct ohos_display_info *ohos_display_list;
+
+void
+mark_ohosterm (void)
+{
+  if (!ohos_display_list)
+    return;
+  mark_object (ohos_display_list->color_map);
+  mark_object (ohos_display_list->focus_frame);
+  mark_object (ohos_display_list->name_list_element);
+  mark_object (ohos_display_list->rdb);
+  mark_object (ohos_display_list->default_name);
+}
+
 bool
 ohos_defined_color (struct frame *f, const char *color_name,
 		    Emacs_Color *color_def, bool alloc, bool make_index)
@@ -113,6 +132,7 @@ ohos_term_init (void)
 {
   ohos_log ("ohos_term_init enter");
   struct ohos_display_info *dpyinfo = xzalloc (sizeof *dpyinfo);
+  ohos_display_list = dpyinfo;
   dpyinfo->resx = 96.0;
   dpyinfo->resy = 96.0;
   dpyinfo->n_planes = 24;
@@ -129,6 +149,21 @@ ohos_term_init (void)
   dpyinfo->default_name = Qnil;
   dpyinfo->color_map = Qnil;
   reset_mouse_highlight (&dpyinfo->mouse_highlight);
+  {
+    char dbg[192];
+    snprintf (dbg, sizeof dbg, "color: data-directory=%s",
+	      STRINGP (Vdata_directory) ? SSDATA (Vdata_directory) : "(nil)");
+    ohos_log (dbg);
+  }
+  dpyinfo->color_map
+    = Fx_load_color_file (Fexpand_file_name (build_string ("rgb.txt"),
+					     Vdata_directory));
+  {
+    char dbg[128];
+    snprintf (dbg, sizeof dbg, "color: table entries=%d",
+	      CONSP (dpyinfo->color_map) ? (int) Flength (dpyinfo->color_map) : 0);
+    ohos_log (dbg);
+  }
   struct terminal *terminal = ohos_create_terminal (dpyinfo);
   if (current_kboard == initial_kboard)
     current_kboard = terminal->kboard;

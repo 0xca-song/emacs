@@ -271,13 +271,7 @@ Return the chosen command when it was executed."
 ;; "Invalid image size" on every redisplay until the app dies.  Declared
 ;; as a backend limitation, like the missing tool bar.
 (setq image-types nil)
-(setq fancy-splash-image nil)
 
-;; Emacs' pointer auto-hide is a one-way trip on this backend: the hook
-;; that shows the pointer again runs from the mouse-motion path, which the
-;; OHOS terminal does not implement yet, so the window lost its pointer for
-;; good (task book B-10).  Keep it visible until motion lands.
-(setq make-pointer-invisible nil)
 
 (when (fboundp 'menu-bar-mode)
   (menu-bar-mode 1))

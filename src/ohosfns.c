@@ -742,15 +742,6 @@ ohos_create_frame (struct terminal *terminal, Lisp_Object parms)
 			 "rightFringe", "RightFringe", RES_TYPE_NUMBER);
   gui_default_parameter (f, parms, Qno_special_glyphs, Qnil,
 			 NULL, NULL, RES_TYPE_BOOLEAN);
-  /* Emacs' faces name X11 colours (grey75, Firebrick, RoyalBlue3, ...).
-     `defined_color_hook' can only look colours up - it must not evaluate
-     Lisp - so the standard table is loaded here, once, before the first
-     face is realized.  Same contract as androidterm.c.  */
-  if (NILP (FRAME_DISPLAY_INFO (f)->color_map))
-    FRAME_DISPLAY_INFO (f)->color_map
-      = Fx_load_color_file (Fexpand_file_name (build_string ("rgb.txt"),
-					       Vdata_directory));
-
   /* The default face is realized from the frame parameters, so all the
      color parameters must be in place before init_frame_faces: it calls
      realize_basic_faces, which aborts when they are missing.  */
