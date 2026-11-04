@@ -221,16 +221,20 @@ Return the chosen command when it was executed."
 ;; coloured mode line (task book B-15).
 (defun ohos-setup-frame-faces (frame)
   "Classify FRAME as a light, full-colour graphical frame and rebuild faces.
-Every step is guarded: this runs while the first frame is being created,
-and an error here aborts the frame (observed: Emacs fell back to the
-terminal frame, i.e. a black window)."
+The `display-type' / `background-mode' frame parameters are what
+`(class color)' / `(background light)' face specs are matched against, and
+`frame-set-background-mode' skips them when it thinks nothing changed, so
+they are set explicitly here before the faces are recalculated."
   (when (and (frame-live-p frame) (display-graphic-p frame))
     (with-selected-frame frame
       (condition-case nil
           (progn
-            (set-frame-parameter frame 'background-mode 'light)
-            (when (fboundp 'xw-display-color-p)
-              (frame-set-background-mode frame))
+            (modify-frame-parameters
+             frame '((display-type . color) (background-mode . light)))
+            (when (fboundp 'frame-set-background-mode)
+              (condition-case nil
+                  (frame-set-background-mode frame)
+                (error nil)))
             (dolist (face (face-list))
               (condition-case nil
                   (face-spec-recalc face frame)
