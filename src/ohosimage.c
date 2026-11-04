@@ -126,6 +126,13 @@ ohos_png_load (struct frame *f, struct image *img)
   png_image png;
   struct ohos_image_bitmap *bmp;
 
+  {
+    char d[128];
+    snprintf (d, sizeof d, "png load: entry file=%d data=%d plist_len=%ld",
+              STRINGP (file) ? 1 : 0, STRINGP (data) ? 1 : 0,
+              (long) list_length (plist));
+    ohos_log (d);
+  }
   (void) f;
   if (STRINGP (file))
     {
@@ -199,6 +206,9 @@ ohos_svg_load (struct frame *f, struct image *img)
   int w, h;
   float scale;
 
+  {
+    ohos_log ("svg load: entry");
+  }
   (void) f;
   if (STRINGP (file))
     {
