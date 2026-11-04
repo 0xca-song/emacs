@@ -868,12 +868,35 @@ ohos_query_colors (struct frame *f, Emacs_Color *colors, int ncolors)
     }
 }
 
+/* Clear the `mouse_moved' flag of every OHOS frame.
+
+   `some_mouse_moved' (keyboard.c) reports a frame while its flag is set
+   and Emacs then builds a `mouse-movement' event from this hook.  The
+   hook is also the place that resets the flag -- android_mouse_position
+   does the same -- otherwise every iteration of the command loop looks
+   like fresh movement: drags (mode-line/divider) never settle and the
+   frame stops repainting.  */
+
+static void
+ohos_clear_mouse_moved (void)
+{
+  Lisp_Object tail, frame;
+
+  FOR_EACH_FRAME (tail, frame)
+    {
+      struct frame *f = XFRAME (frame);
+
+      if (FRAME_LIVE_P (f) && FRAME_OHOS_P (f))
+	f->mouse_moved = false;
+    }
+}
+
 static void
 ohos_mouse_position (struct frame **fp, int insist, Lisp_Object *bar_window,
 		     enum scroll_bar_part *part, Lisp_Object *x,
 		     Lisp_Object *y, Time *timestamp)
 {
-  struct frame *f = SELECTED_FRAME ();
+  struct frame *f = (*fp && FRAME_LIVE_P (*fp)) ? *fp : SELECTED_FRAME ();
   struct ohos_display_info *dpyinfo;
   int mx, my;
 
@@ -887,8 +910,11 @@ ohos_mouse_position (struct frame **fp, int insist, Lisp_Object *bar_window,
       return;
     }
   dpyinfo = FRAME_DISPLAY_INFO (f);
+  if (dpyinfo->last_mouse_motion_frame)
+    f = dpyinfo->last_mouse_motion_frame;
   mx = dpyinfo->last_mouse_motion_x;
   my = dpyinfo->last_mouse_motion_y;
+  ohos_clear_mouse_moved ();
 
   for (struct ohos_scroll_bar *bar = FRAME_OUTPUT_DATA (f)->scroll_bars;
        bar; bar = bar->next)
