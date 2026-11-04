@@ -76,6 +76,16 @@ typedef struct x_bitmap_record Bitmap_Record;
 #endif	/* !USE_CAIRO */
 #endif /* HAVE_X_WINDOWS */
 
+#if defined HAVE_OHOS_GUI
+#define RGB_TO_ULONG(r, g, b) (((r) << 16) | ((g) << 8) | (b))
+#define ARGB_TO_ULONG(a, r, g, b) (((a) << 24) | ((r) << 16) | ((g) << 8) | (b))
+#define GET_PIXEL(p, x, y) ohos_get_pixel ((struct ohos_pixmap *) (p), (x), (y))
+#define PUT_PIXEL(p, x, y, c) ohos_put_pixel ((struct ohos_pixmap *) (p), (x), (y), (c))
+#define NO_PIXMAP NULL
+#define PIX_MASK_RETAIN 0
+#define PIX_MASK_DRAW 255
+#endif
+
 #if defined(USE_CAIRO) || defined(HAVE_NS)
 #define RGB_TO_ULONG(r, g, b) (((r) << 16) | ((g) << 8) | (b))
 #ifndef HAVE_NS
@@ -4104,7 +4114,20 @@ image_create_x_image_and_pixmap_1 (struct frame *f, int width, int height, int d
                                    Emacs_Pix_Container *pimg,
                                    Emacs_Pixmap *pixmap, Picture *picture)
 {
-#ifdef USE_CAIRO
+#ifdef HAVE_OHOS_GUI
+  eassert (input_blocked_p ());
+
+  /* The pixmap is the x_image: decoders write into it directly.  */
+  *pixmap = ohos_create_pixmap (width, height, depth);
+  if (*pixmap == NO_PIXMAP)
+    {
+      *pimg = NULL;
+      image_error ("Unable to create pixmap");
+      return false;
+    }
+  *pimg = *pixmap;
+  return 1;
+#elif defined USE_CAIRO
   eassert (input_blocked_p ());
 
   /* Allocate a pixmap of the same size.  */
@@ -4268,11 +4291,12 @@ image_destroy_x_image (Emacs_Pix_Container pimg)
   eassert (input_blocked_p ());
   if (pimg)
     {
-#if defined USE_CAIRO || defined HAVE_HAIKU || defined HAVE_NS
+#if defined USE_CAIRO || defined HAVE_HAIKU || defined HAVE_NS \
+  || defined HAVE_OHOS_GUI
       /* On these systems, Emacs_Pix_Containers always point to the same
 	 data as pixmaps in `struct image', and therefore must never be
 	 freed separately.  */
-#endif	/* USE_CAIRO || HAVE_HAIKU || HAVE_NS */
+#endif	/* USE_CAIRO || HAVE_HAIKU || HAVE_NS || HAVE_OHOS_GUI */
 #ifdef HAVE_NTGUI
       /* Data will be freed by DestroyObject.  */
       pimg->data = NULL;
@@ -4291,7 +4315,8 @@ static void
 gui_put_x_image (struct frame *f, Emacs_Pix_Container pimg,
                  Emacs_Pixmap pixmap, int width, int height)
 {
-#if defined USE_CAIRO || defined HAVE_HAIKU || defined HAVE_NS
+#if defined USE_CAIRO || defined HAVE_HAIKU || defined HAVE_NS \
+  || defined HAVE_OHOS_GUI
   eassert (pimg == pixmap);
 #elif defined HAVE_X_WINDOWS
   GC gc;
@@ -4407,7 +4432,7 @@ image_unget_x_image_or_dc (struct image *img, bool mask_p,
 static Emacs_Pix_Container
 image_get_x_image (struct frame *f, struct image *img, bool mask_p)
 {
-#if defined USE_CAIRO || defined (HAVE_HAIKU)
+#if defined USE_CAIRO || defined (HAVE_HAIKU) || defined HAVE_OHOS_GUI
   return !mask_p ? img->pixmap : img->mask;
 #elif defined HAVE_X_WINDOWS || defined HAVE_ANDROID
   XImage *ximg_in_img = !mask_p ? img->ximg : img->mask_img;
@@ -4439,7 +4464,7 @@ image_get_x_image (struct frame *f, struct image *img, bool mask_p)
 static void
 image_unget_x_image (struct image *img, bool mask_p, Emacs_Pix_Container ximg)
 {
-#ifdef USE_CAIRO
+#if defined USE_CAIRO || defined HAVE_OHOS_GUI
 #elif defined HAVE_X_WINDOWS || defined HAVE_ANDROID
   XImage *ximg_in_img = !mask_p ? img->ximg : img->mask_img;
 
@@ -13447,8 +13472,15 @@ initialize_image_type (struct image_type const *type)
 /* Array of supported image types.  */
 
 #ifdef HAVE_OHOS_GUI
-extern bool ohos_png_image_p (Lisp_Object);
-extern bool ohos_png_load (struct frame *, struct image *);
+extern bool ohos_svg_image_p (Lisp_Object);
+extern bool ohos_svg_load (struct frame *, struct image *);
+
+#endif
+
+#ifdef HAVE_OHOS_GUI
+/* The port's SVG type: Emacs' own svg loader needs librsvg, which is not
+   available in this build, so the port decodes SVG itself (nanosvg) and
+   stores the pixels through the same pixmap primitives.  */
 extern bool ohos_svg_image_p (Lisp_Object);
 extern bool ohos_svg_load (struct frame *, struct image *);
 extern void ohos_image_free (struct frame *, struct image *);
@@ -13494,7 +13526,6 @@ static struct image_type const image_types[] =
 #endif
  { SYMBOL_INDEX (Qxbm), xbm_image_p, xbm_load, image_clear_image },
 #ifdef HAVE_OHOS_GUI
- { SYMBOL_INDEX (Qpng), ohos_png_image_p, ohos_png_load, ohos_image_free },
  { SYMBOL_INDEX (Qsvg), ohos_svg_image_p, ohos_svg_load, ohos_image_free },
 #endif
  { SYMBOL_INDEX (Qpbm), pbm_image_p, pbm_load, image_clear_image },

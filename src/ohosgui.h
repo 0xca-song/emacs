@@ -18,14 +18,19 @@ extern "C" {
 /* Native OHOS frame output.  The first implementation is cell based:
    the redisplay interface emits glyphs into a shared command buffer and
    ArkTS/OH_Drawing presents them.  */
-/* Decoded image pixels: the backend's opaque handle in `img->pixmap'.
-   image.c does not touch pixmap when it copies or scales an image, while
-   it resets `lisp_data' in image_clear_image.  */
-struct ohos_image_bitmap
+/* A pixmap is also the x_image (cairo/haiku model): the pixel buffer is
+   the image, so image.c can read and write it directly through
+   GET_PIXEL/PUT_PIXEL and nothing has to be uploaded separately.  */
+struct ohos_pixmap
 {
-  int width, height;
-  unsigned char *rgba;
+  int width, height, depth, bytes_per_line, bits_per_pixel;
+  char *data;			/* ARGB32, row-major, `bytes_per_line' each */
 };
+
+extern struct ohos_pixmap *ohos_create_pixmap (int, int, int);
+extern void ohos_free_image_pixmap (struct frame *, void *);
+extern void ohos_put_pixel (struct ohos_pixmap *, int, int, unsigned long);
+extern unsigned long ohos_get_pixel (struct ohos_pixmap *, int, int);
 
 struct ohos_bitmap_record
 {

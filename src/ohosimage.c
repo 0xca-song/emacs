@@ -1,14 +1,15 @@
-/* Image decoding for the OHOS GUI backend.
+/* Image support for the OHOS GUI backend.
 
-   PNG is handled by libpng through Emacs' own `png_load' (HAVE_PNG), so
-   this file only provides the SVG type: Emacs' svg loader needs librsvg,
-   which cannot be built here (GLib stack + meson), so the port parses and
-   rasterises SVG itself with the vendored nanosvg headers (zlib licence,
-   no dependencies).
+   Pixels live in a backend pixmap that is also the x_image (see
+   ohosgui.h), which is exactly the model cairo and haiku use: image.c
+   creates it, decoders write into it through PUT_PIXEL, and the backend
+   only has to blit it.  PNG therefore goes through Emacs' own png_load
+   (HAVE_PNG); this file provides the pixmap primitives and the SVG type,
+   which Emacs can only decode through librsvg (unavailable here), so the
+   port decodes it with the vendored nanosvg and stores the result with
+   the very same primitives.
 
-   Both paths end the same way: the decoded pixels are stored as an RGBA
-   string in `img->lisp_data', and the backend blits it when redisplay
-   hands it an IMAGE_GLYPH.  */
+   This branch is a local experiment and is not intended for upstream.  */
 
 #include <config.h>
 
@@ -22,43 +23,79 @@
 #include "dispextern.h"
 #include "ohosgui.h"
 
-/* The backend keeps decoded pixels in `img->pixmap', the opaque handle
-   image.c reserves for the display backend: it is not touched when Emacs
-   copies or scales an image, unlike `lisp_data' which image_clear_image
-   resets.  */
-void
-ohos_image_free (struct frame *f, struct image *img)
-{
-  struct ohos_image_bitmap *bmp = img->pixmap;
-
-  (void) f;
-  if (bmp)
-    {
-      xfree (bmp->rgba);
-      xfree (bmp);
-      img->pixmap = NULL;
-    }
-  img->lisp_data = Qnil;
-}
-
-static struct ohos_image_bitmap *
-ohos_bitmap_new (int w, int h)
-{
-  struct ohos_image_bitmap *bmp = xmalloc (sizeof *bmp);
-
-  bmp->width = w;
-  bmp->height = h;
-  bmp->rgba = xmalloc ((size_t) w * h * 4);
-  memset (bmp->rgba, 0, (size_t) w * h * 4);
-  return bmp;
-}
-
-#include <png.h>
-
 #define NANOSVG_IMPLEMENTATION
 #include "nanosvg.h"
 #define NANOSVGRAST_IMPLEMENTATION
 #include "nanosvgrast.h"
+
+struct ohos_pixmap *
+ohos_create_pixmap (int width, int height, int depth)
+{
+  struct ohos_pixmap *p;
+
+  if (width <= 0 || height <= 0)
+    return NULL;
+  if (depth == 0)
+    depth = 32;
+  if (depth != 32 && depth != 1)
+    return NULL;
+
+  p = xmalloc (sizeof *p);
+  memset (p, 0, sizeof *p);
+  p->width = width;
+  p->height = height;
+  p->depth = depth;
+  p->bits_per_pixel = depth;
+  p->bytes_per_line = depth == 32 ? width * 4 : (width + 7) / 8;
+  p->data = xmalloc ((size_t) p->bytes_per_line * height);
+  memset (p->data, 0, (size_t) p->bytes_per_line * height);
+  return p;
+}
+
+void
+ohos_free_image_pixmap (struct frame *f, void *pixmap)
+{
+  struct ohos_pixmap *p = pixmap;
+
+  (void) f;
+  if (p)
+    {
+      xfree (p->data);
+      xfree (p);
+    }
+}
+
+void
+ohos_put_pixel (struct ohos_pixmap *p, int x, int y, unsigned long color)
+{
+  if (!p || x < 0 || y < 0 || x >= p->width || y >= p->height)
+    return;
+  if (p->depth == 32)
+    ((unsigned int *) (p->data + (size_t) y * p->bytes_per_line))[x]
+      = (unsigned int) color;
+  else
+    {
+      char *byte = p->data + (size_t) y * p->bytes_per_line + x / 8;
+
+      if (color)
+	*byte |= 1 << (x % 8);
+      else
+	*byte &= ~(1 << (x % 8));
+    }
+}
+
+unsigned long
+ohos_get_pixel (struct ohos_pixmap *p, int x, int y)
+{
+  if (!p || x < 0 || y < 0 || x >= p->width || y >= p->height)
+    return 0;
+  if (p->depth == 32)
+    return ((unsigned int *) (p->data + (size_t) y * p->bytes_per_line))[x];
+  return ((unsigned char *) p->data)[(size_t) y * p->bytes_per_line + x / 8]
+	 >> (x % 8) & 1;
+}
+
+/* ---- SVG ---------------------------------------------------------- */
 
 static Lisp_Object Qohos_image_file;
 static Lisp_Object Qohos_image_data;
@@ -76,8 +113,6 @@ ohos_read_whole_file (const char *name, size_t *len)
     {
       size_t n;
 
-      /* Keep room for the terminating NUL: the SVG parser expects a C
-	 string.  */
       if (used + 65536 + 1 > cap)
 	{
 	  cap = cap ? cap * 2 : 131072;
@@ -96,9 +131,6 @@ ohos_read_whole_file (const char *name, size_t *len)
   return buf;
 }
 
-/* An image spec is `(image :type T :file F ...)`: the leading symbol has to
-   be dropped before the rest can be read as a property list.  */
-
 static Lisp_Object
 ohos_spec_plist (Lisp_Object spec)
 {
@@ -106,90 +138,12 @@ ohos_spec_plist (Lisp_Object spec)
 }
 
 bool
-ohos_png_image_p (Lisp_Object spec)
+ohos_svg_image_p (Lisp_Object spec)
 {
   Lisp_Object plist = ohos_spec_plist (spec);
 
   return (STRINGP (Fplist_get (plist, Qohos_image_file, Qnil))
 	  || STRINGP (Fplist_get (plist, Qohos_image_data, Qnil)));
-}
-
-bool
-ohos_png_load (struct frame *f, struct image *img)
-{
-  Lisp_Object plist = ohos_spec_plist (img->spec);
-  Lisp_Object file = Fplist_get (plist, Qohos_image_file, Qnil);
-  Lisp_Object data = Fplist_get (plist, Qohos_image_data, Qnil);
-  char *owned = NULL;
-  const unsigned char *bytes;
-  size_t len;
-  png_image png;
-  struct ohos_image_bitmap *bmp;
-
-  {
-    char d[128];
-    snprintf (d, sizeof d, "png load: entry file=%d data=%d plist_len=%ld",
-              STRINGP (file) ? 1 : 0, STRINGP (data) ? 1 : 0,
-              (long) list_length (plist));
-    ohos_log (d);
-  }
-  (void) f;
-  if (STRINGP (file))
-    {
-      owned = (char *) ohos_read_whole_file (SSDATA (file), &len);
-      if (!owned)
-	return false;
-      bytes = (unsigned char *) owned;
-    }
-  else if (STRINGP (data))
-    {
-      bytes = SDATA (data);
-      len = SBYTES (data);
-    }
-  else
-    return false;
-
-  memset (&png, 0, sizeof png);
-  png.version = PNG_IMAGE_VERSION;
-  if (!png_image_begin_read_from_memory (&png, bytes, len))
-    {
-      xfree (owned);
-      ohos_log ("png load: begin_read failed");
-      return false;
-    }
-  png.format = PNG_FORMAT_RGBA;
-  bmp = ohos_bitmap_new ((int) png.width, (int) png.height);
-  if (!png_image_finish_read (&png, NULL, bmp->rgba, 0, NULL))
-    {
-      xfree (owned);
-      xfree (bmp->rgba);
-      xfree (bmp);
-      png_image_free (&png);
-      return false;
-    }
-  png_image_free (&png);
-  xfree (owned);
-
-  img->pixmap = bmp;
-  img->width = bmp->width;
-  img->height = bmp->height;
-  {
-    char d[80];
-    snprintf (d, sizeof d, "png load ok img=%p %dx%d", (void *) img,
-              bmp->width, bmp->height);
-    ohos_log (d);
-  }
-  return true;
-}
-
-bool
-ohos_svg_image_p (Lisp_Object spec)
-{
-  Lisp_Object plist = ohos_spec_plist (spec);
-  bool ok = (STRINGP (Fplist_get (plist, Qohos_image_file, Qnil))
-             || STRINGP (Fplist_get (plist, Qohos_image_data, Qnil)));
-
-  return ok;
 }
 
 bool
@@ -203,12 +157,10 @@ ohos_svg_load (struct frame *f, struct image *img)
   NSVGimage *svg;
   NSVGrasterizer *rast;
   unsigned char *rgba;
-  int w, h;
+  struct ohos_pixmap *pix;
+  int w, h, x, y;
   float scale;
 
-  {
-    ohos_log ("svg load: entry");
-  }
   (void) f;
   if (STRINGP (file))
     {
@@ -216,7 +168,7 @@ ohos_svg_load (struct frame *f, struct image *img)
 
       owned = (char *) ohos_read_whole_file (SSDATA (file), &len);
       if (!owned)
-        return false;
+	return false;
       text = owned;
     }
   else if (STRINGP (data))
@@ -226,19 +178,13 @@ ohos_svg_load (struct frame *f, struct image *img)
 
   svg = nsvgParse ((char *) text, "px", 96.0f);
   xfree (owned);
-  if (!svg)
+  if (!svg || svg->width <= 0 || svg->height <= 0)
     {
-      ohos_log ("svg: parse failed");
-      return false;
-    }
-  if (svg->width <= 0 || svg->height <= 0)
-    {
-      nsvgDelete (svg);
+      if (svg)
+	nsvgDelete (svg);
       return false;
     }
 
-  /* Honour :width/:height when Emacs asked for a size; otherwise use the
-     document's own size.  */
   w = img->width > 0 ? img->width : (int) (svg->width + 0.5f);
   h = img->height > 0 ? img->height : (int) (svg->height + 0.5f);
   if (w <= 0 || h <= 0)
@@ -263,14 +209,41 @@ ohos_svg_load (struct frame *f, struct image *img)
   nsvgDeleteRasterizer (rast);
   nsvgDelete (svg);
 
-  ohos_log ("svg load ok");
-  img->pixmap = xmalloc (sizeof (struct ohos_image_bitmap));
-  ((struct ohos_image_bitmap *) img->pixmap)->width = w;
-  ((struct ohos_image_bitmap *) img->pixmap)->height = h;
-  ((struct ohos_image_bitmap *) img->pixmap)->rgba = rgba;
+  pix = ohos_create_pixmap (w, h, 32);
+  if (!pix)
+    {
+      xfree (rgba);
+      return false;
+    }
+  for (y = 0; y < h; y++)
+    for (x = 0; x < w; x++)
+      {
+	unsigned char *p = rgba + ((size_t) y * w + x) * 4;
+	unsigned long color
+	  = ((unsigned long) p[3] << 24) | ((unsigned long) p[0] << 16)
+	    | ((unsigned long) p[1] << 8) | p[2];
+
+	ohos_put_pixel (pix, x, y, color);
+      }
+  xfree (rgba);
+
+  img->pixmap = pix;
   img->width = w;
   img->height = h;
   return true;
+}
+
+/* free_img for the SVG type: the pixmap is released through the terminal's
+   free_pixmap hook, which is ohos_free_image_pixmap.  */
+void
+ohos_image_free (struct frame *f, struct image *img)
+{
+  img->lisp_data = Qnil;
+  if (img->pixmap)
+    {
+      ohos_free_image_pixmap (f, img->pixmap);
+      img->pixmap = NULL;
+    }
 }
 
 void

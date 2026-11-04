@@ -195,11 +195,37 @@ ohos_draw_glyph_string (struct glyph_string *s)
 
       if (img && img->pixmap && img->width > 0 && img->height > 0)
 	{
-	  struct ohos_image_bitmap *bmp = img->pixmap;
+	  struct ohos_pixmap *bmp = img->pixmap;
 	  int y = s->ybase - image_ascent (img, s->face, &s->slice);
+	  int tw = img->width, th = img->height;
+	  size_t n = (size_t) tw * th * 4;
+	  unsigned char *rgba = xmalloc (n);
+	  int dx, dy;
 
-	  ohos_draw_image (s->x, y, bmp->width, bmp->height, bmp->rgba,
-			   (unsigned) ((size_t) bmp->width * bmp->height * 4));
+	  /* The pixmap stores ARGB32 (image.c's PUT_PIXEL layout) while the
+	     draw protocol carries RGBA, and redisplay laid the glyph out at
+	     tw x th (the :width/:height/:scale result), so convert and scale
+	     in one pass: the blit then covers exactly the layout box.  */
+	  for (dy = 0; dy < th; dy++)
+	    {
+	      int sy = (int) ((long) dy * bmp->height / th);
+	      const unsigned int *row
+		= (const unsigned int *) (bmp->data + (size_t) sy * bmp->bytes_per_line);
+
+	      for (dx = 0; dx < tw; dx++)
+		{
+		  int sx = (int) ((long) dx * bmp->width / tw);
+		  unsigned int px = row[sx];
+		  unsigned char *d = rgba + ((size_t) dy * tw + dx) * 4;
+
+		  d[0] = (px >> 16) & 0xff;
+		  d[1] = (px >> 8) & 0xff;
+		  d[2] = px & 0xff;
+		  d[3] = (px >> 24) & 0xff;
+		}
+	    }
+	  ohos_draw_image (s->x, y, tw, th, rgba, (unsigned) n);
+	  xfree (rgba);
 	}
       return;
     }
@@ -1265,8 +1291,9 @@ ohos_buffer_flipping_unblocked (struct frame *f)
 static void
 ohos_free_pixmap (struct frame *f, Emacs_Pixmap pixmap)
 {
-  /* Bitmaps live on the ArkUI drawing surface; nothing to free.  */
-  (void) f; (void) pixmap;
+  /* Image pixmaps own their pixel buffer (struct ohos_pixmap); stipple
+     bitmaps live on the ArkUI surface and pass NULL.  */
+  ohos_free_image_pixmap (f, pixmap);
 }
 
 static void
