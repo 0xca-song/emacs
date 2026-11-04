@@ -410,6 +410,8 @@ void ohos_input_focus (int focused);
 /* UI thread: the XComponent surface now has WIDTH x HEIGHT pixels.
    Emacs adopts that geometry so the native frame fills the surface.  */
 void ohos_input_resize (int width, int height);
+void ohos_last_surface_size (int *width, int *height);
+bool ohos_wait_surface_size (int timeout_ms);
 /* Host thread: the surface was rebuilt or re-exposed, so the frame must
    be repainted.  Emacs marks the frame garbaged and redisplays.  */
 void ohos_input_expose (int x, int y, int width, int height);

@@ -9,6 +9,7 @@
 #include <fcntl.h>
 #include <poll.h>
 #include <pthread.h>
+#include <errno.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -580,12 +581,65 @@ ohos_input_expose (int x, int y, int width, int height)
   ohos_signal_input (was_empty);
 }
 
+static int ohos_last_surface_width;
+static int ohos_last_surface_height;
+static pthread_mutex_t surface_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t surface_ready = PTHREAD_COND_INITIALIZER;
+
+/* The host reports the surface size from the UI thread, usually while Emacs
+   is still starting and before any frame exists.  Remember it so frame
+   creation can adopt the real geometry instead of inventing one.  */
+void
+ohos_last_surface_size (int *width, int *height)
+{
+  pthread_mutex_lock (&surface_lock);
+  *width = ohos_last_surface_width;
+  *height = ohos_last_surface_height;
+  pthread_mutex_unlock (&surface_lock);
+}
+
+/* Wait until the host has reported a surface size, like the X11 backend
+   waiting for the window manager's ConfigureNotify during frame creation.
+   Returns false when the timeout expires.  */
+bool
+ohos_wait_surface_size (int timeout_ms)
+{
+  struct timespec deadline;
+  bool ready = false;
+
+  clock_gettime (CLOCK_REALTIME, &deadline);
+  deadline.tv_sec += timeout_ms / 1000;
+  deadline.tv_nsec += (long) (timeout_ms % 1000) * 1000000L;
+  if (deadline.tv_nsec >= 1000000000L)
+    {
+      deadline.tv_sec += 1;
+      deadline.tv_nsec -= 1000000000L;
+    }
+
+  pthread_mutex_lock (&surface_lock);
+  while (ohos_last_surface_width <= 0)
+    {
+      if (pthread_cond_timedwait (&surface_ready, &surface_lock, &deadline)
+	  == ETIMEDOUT)
+	break;
+    }
+  ready = ohos_last_surface_width > 0;
+  pthread_mutex_unlock (&surface_lock);
+  return ready;
+}
+
 void
 ohos_input_resize (int width, int height)
 {
   if (width <= 0 || height <= 0)
     return;
   int was_empty;
+
+  pthread_mutex_lock (&surface_lock);
+  ohos_last_surface_width = width;
+  ohos_last_surface_height = height;
+  pthread_cond_broadcast (&surface_ready);
+  pthread_mutex_unlock (&surface_lock);
 
   pthread_mutex_lock (&input_lock);
   was_empty = (input_count == 0);

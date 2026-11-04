@@ -168,6 +168,25 @@ ohos_term_init (void)
   if (current_kboard == initial_kboard)
     current_kboard = terminal->kboard;
   ohos_create_input_pipe ();
+  /* Give the frame that will be created its real geometry: the surface
+     size is known to the host before any frame exists, and
+     default-frame-alist is what Fmake_frame uses for width/height.  */
+  if (ohos_wait_surface_size (3000))
+    {
+      int sw = 0, sh = 0;
+
+      ohos_last_surface_size (&sw, &sh);
+      if (sw > 0 && sh > 0)
+	{
+	  int cols = sw / 9, lines = sh / 18;
+
+	  Vdefault_frame_alist
+	    = Fcons (Fcons (Qwidth, make_fixnum (cols)),
+		     Fcons (Fcons (Qheight, make_fixnum (lines)),
+			    Vdefault_frame_alist));
+	}
+    }
+
   /* Report the focus state right away, like a window manager sending
      FocusIn when the window is mapped: the event is queued before any
      Lisp runs, so it is processed during startup and blink-cursor finds

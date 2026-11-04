@@ -655,8 +655,13 @@ ohos_create_frame (struct terminal *terminal, Lisp_Object parms)
   f->output_method = output_ohos;
   f->output_data.ohos = xzalloc (sizeof *f->output_data.ohos);
   f->output_data.ohos->display_info = terminal->display_info.ohos;
-  f->output_data.ohos->width = 800;
-  f->output_data.ohos->height = 600;
+  {
+    int sw = 0, sh = 0;
+
+    ohos_last_surface_size (&sw, &sh);
+    f->output_data.ohos->width = sw > 0 ? sw : 800;
+    f->output_data.ohos->height = sh > 0 ? sh : 600;
+  }
   f->output_data.ohos->fontset = fs_query_fontset (build_string ("fontset-default"), 0);
   f->output_data.ohos->parent_desc = 0;
   f->output_data.ohos->root_window = 0;
