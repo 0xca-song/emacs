@@ -799,17 +799,36 @@ ohosfont_face_flags (struct glyph_string *s, bool with_background)
    the cursor is drawn exactly like plain text (invisible).  */
 
 static inline uint32_t
+ohosfont_cursor_bg (struct glyph_string *s)
+{
+  unsigned long px = FRAME_OUTPUT_DATA (s->f)->cursor_pixel;
+
+  return (uint32_t) (px >= 0 ? px : FRAME_FOREGROUND_PIXEL (s->f));
+}
+
+static inline uint32_t
 ohosfont_fg (struct glyph_string *s)
 {
-  return (uint32_t) (s->hl == DRAW_CURSOR
-                     ? s->face->background : s->face->foreground);
+  if (s->hl != DRAW_CURSOR)
+    return (uint32_t) s->face->foreground;
+  /* Cursor on a face: the character is drawn in the face background so it
+     stays readable on the cursor block (x_set_cursor_gc does the same).  */
+  {
+    uint32_t bg = ohosfont_cursor_bg (s);
+
+    if (s->face->background != bg)
+      return (uint32_t) s->face->background;
+    if (s->face->foreground != bg)
+      return (uint32_t) s->face->foreground;
+    return (uint32_t) FRAME_BACKGROUND_PIXEL (s->f);
+  }
 }
 
 static inline uint32_t
 ohosfont_bg (struct glyph_string *s)
 {
-  return (uint32_t) (s->hl == DRAW_CURSOR
-                     ? s->face->foreground : s->face->background);
+  return (s->hl == DRAW_CURSOR
+          ? ohosfont_cursor_bg (s) : (uint32_t) s->face->background);
 }
 
 /* Draw the glyphs of an automatic composition.  The characters to

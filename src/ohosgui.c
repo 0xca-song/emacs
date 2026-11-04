@@ -292,78 +292,65 @@ ohos_draw_window_cursor (struct window *w, struct glyph_row *row,
                          int x, int y, enum text_cursor_kinds type,
                          int width, bool on_p, bool active_p)
 {
-  (void) active_p;
-  if (!w)
-    return;
-  struct frame *f = WINDOW_XFRAME (w);
-  int line_height = FRAME_LINE_HEIGHT (f);
-  int cell_width = FRAME_COLUMN_WIDTH (f);
-  int bar = (width > 0 ? width : 2);
-  int kind = 0;
-  int fx, fy;
+  struct frame *f;
+  int line_height, cell_width, fx, fy;
+  uint32_t color;
 
-  if (line_height <= 0 || !row)
+  (void) active_p;
+  if (!w || !row)
+    return;
+  f = WINDOW_XFRAME (w);
+  line_height = FRAME_LINE_HEIGHT (f);
+  cell_width = FRAME_COLUMN_WIDTH (f);
+  if (line_height <= 0 || cell_width <= 0)
     return;
   fx = WINDOW_TEXT_TO_FRAME_PIXEL_X (w, x);
   fy = WINDOW_TOP_EDGE_Y (w) + y;
+  color = (FRAME_OUTPUT_DATA (f)->cursor_pixel >= 0
+           ? (uint32_t) FRAME_OUTPUT_DATA (f)->cursor_pixel
+           : (uint32_t) FRAME_FOREGROUND_PIXEL (f));
 
-  /* Cursor types are part of the redisplay contract: `cursor-type' can be
-     `box', `bar', `hbar' or nil, and unselected windows get a hollow box
-     (task book §2).  A filled box is drawn as reversed glyphs, like every
-     GUI backend; the other shapes are composited by the host.  */
+  /* Every window draws its own cursor here (the contract: redisplay calls
+     this for each window, selected or not).  The shapes are painted into
+     the frame bitmap, so `erase_phys_cursor' can undo them: it clears the
+     area and redraws the glyph.  Only a filled box goes through the glyph
+     stream (DRAW_CURSOR), which is what makes it blink.  */
+  if (type == NO_CURSOR)
+    return;
+
   switch (type)
     {
-    case NO_CURSOR:
-      kind = 0;
-      on_p = false;
-      break;
-    case DEFAULT_CURSOR:	/* -2: the frame's default cursor (a box) */
+    case DEFAULT_CURSOR:
     case FILLED_BOX_CURSOR:
-      /* Draw the glyph with the cursor face, like every GUI backend:
-         the cell is redrawn in reverse video, and hiding the cursor
-         (blink, or an unfocused window) is the ordinary redraw that
-         redisplay performs on its own.  */
       if (on_p)
-	draw_phys_cursor_glyph (w, row, DRAW_CURSOR);
-      kind = 0;
-      break;
+        draw_phys_cursor_glyph (w, row, DRAW_CURSOR);
+      return;
+
     case HOLLOW_BOX_CURSOR:
-      kind = 2;
-      break;
+      if (on_p)
+        {
+          int t = (width > 0 ? width : 1);
+
+          ohos_draw_fill (fx, fy, cell_width, t, color);
+          ohos_draw_fill (fx, fy + line_height - t, cell_width, t, color);
+          ohos_draw_fill (fx, fy, t, line_height, color);
+          ohos_draw_fill (fx + cell_width - t, fy, t, line_height, color);
+        }
+      return;
+
     case BAR_CURSOR:
-      kind = 3;
-      break;
+      if (on_p)
+        ohos_draw_fill (fx, fy, width > 0 ? width : 2, line_height, color);
+      return;
+
     case HBAR_CURSOR:
-      kind = 4;
-      break;
+      if (on_p)
+        ohos_draw_fill (fx, fy, cell_width, width > 0 ? width : 2, color);
+      return;
+
     default:
-      kind = 3;
-      break;
+      return;
     }
-
-  /* The host composites the cursor on top of the bitmap, so turning it
-     off only updates that overlay.  Filling the cell here would erase
-     the character underneath, because the bitmap *is* the screen
-     content.  */
-  {
-    /* Every window draws its own cursor; only the selected window's one
-       is the cursor.  Mark it so the host cannot be overwritten by the
-       hollow cursor of another window drawn later in the same batch.  */
-    uint32_t sel = (w == XWINDOW (FRAME_SELECTED_WINDOW (f))) ? 8u : 0u;
-
-    ohos_draw_cursor (fx, fy, cell_width, line_height, bar,
-		      (uint32_t) FRAME_FOREGROUND_PIXEL (f),
-		      (uint32_t) FRAME_BACKGROUND_PIXEL (f),
-		      on_p ? 1u : 0u, kind | (int) sel);
-    if (on_p && sel && kind)
-      {
-	ohos_cursor_x = fx;
-	ohos_cursor_y = fy;
-	ohos_cursor_shown = true;
-      }
-    else if (!on_p && fx == ohos_cursor_x && fy == ohos_cursor_y)
-      ohos_cursor_shown = false;
-  }
 }
 
 static void
