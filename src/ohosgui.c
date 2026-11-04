@@ -1597,7 +1597,10 @@ ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
 	      fset_redisplay (f);
 	      SET_FRAME_GARBAGED (f);
 	    }
-	  count++;
+	  /* No event is stored, so it must not be counted: a non-zero return
+	     value tells Emacs "an event is waiting", and it then spins in
+	     kbd_buffer_get_event instead of going idle (blink timers never
+	     run while that happens).  */
 	  continue;
 	}
 
@@ -1609,7 +1612,7 @@ ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
 
 	  if (!NILP (frame) && FRAME_LIVE_P (XFRAME (frame)))
 	    ohos_handle_surface_resize (XFRAME (frame), width, height);
-	  count++;
+	  /* Same rule as above: side effect only, no event stored.  */
 	  continue;
 	}
 
