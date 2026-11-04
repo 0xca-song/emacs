@@ -30,6 +30,24 @@ typedef struct ohos_display_info Display_Info;
 #include "blockinput.h"
 #include "ohosgui.h"
 
+/* Event timestamps.
+
+   Every backend stamps the events it stores (`xterm' uses the X server
+   time).  Emacs uses the timestamp for double-click detection, event
+   ordering and, through `last_input_event_time', for its idleness
+   bookkeeping: with 0 every event looks like it happened at the epoch and
+   idle timers behave erratically.  */
+
+static Time
+ohos_event_time (void)
+{
+  struct timespec ts;
+
+  clock_gettime (CLOCK_MONOTONIC, &ts);
+  return (Time) (ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
+}
+
+
 /* Cursor handles.  The drawing side only needs a stable identifier, so
    the values are small integers interpreted by the ArkUI page.  */
 
@@ -978,7 +996,7 @@ ohos_mouse_position (struct frame **fp, int insist, Lisp_Object *bar_window,
       *fp = NULL;
       *bar_window = Qnil;
       if (timestamp)
-	*timestamp = 0;
+	*timestamp = ohos_event_time ();
       return;
     }
   dpyinfo = FRAME_DISPLAY_INFO (f);
@@ -1016,7 +1034,7 @@ ohos_mouse_position (struct frame **fp, int insist, Lisp_Object *bar_window,
 	  *x = make_fixnum (pos);
 	  *y = make_fixnum (length);
 	  if (timestamp)
-	    *timestamp = 0;
+	    *timestamp = ohos_event_time ();
 	  return;
 	}
     }
@@ -1031,7 +1049,7 @@ ohos_mouse_position (struct frame **fp, int insist, Lisp_Object *bar_window,
   *x = make_fixnum (mx);
   *y = make_fixnum (my);
   if (timestamp)
-    *timestamp = 0;
+    *timestamp = ohos_event_time ();
 }
 
 /* Display-side frame highlight.  The mouse face is drawn by redisplay;
@@ -1666,7 +1684,7 @@ ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
 	  XSETINT (ev.y, my);
 	  ev.frame_or_window = selected_frame;
 	  ev.arg = Qnil;
-	  ev.timestamp = 0;
+	  ev.timestamp = ohos_event_time ();
 	  kbd_buffer_store_event (&ev);
 	  count++;
 	  continue;
@@ -1674,7 +1692,7 @@ ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
 
       EVENT_INIT (ev);
       ev.frame_or_window = selected_frame;
-      ev.timestamp = 0;
+      ev.timestamp = ohos_event_time ();
 
       if (key & OHOS_INPUT_FOCUS_FLAG)
 	{

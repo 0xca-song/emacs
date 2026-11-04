@@ -368,6 +368,19 @@ ohos_create_input_pipe (void)
   fcntl (input_pipe[1], F_SETFD, FD_CLOEXEC);
 }
 
+/* Wake the command loop only when the queue was empty: one byte per
+   batch is enough, and a byte per event keeps Emacs from ever going
+   idle while the pointer moves.  */
+static void
+ohos_signal_input (int was_empty)
+{
+  if (was_empty && input_pipe[1] >= 0)
+    {
+      char byte = 1;
+      (void) write (input_pipe[1], &byte, 1);
+    }
+}
+
 int
 ohos_input_wait_fd (void)
 {
@@ -379,7 +392,10 @@ ohos_input_key (unsigned key, unsigned modifiers, int pressed)
 {
   if (!pressed)
     return 0;
+  int was_empty;
+
   pthread_mutex_lock (&input_lock);
+  was_empty = (input_count == 0);
   if (input_count == OHOS_INPUT_CAP)
     input_dropped++;
   else
@@ -392,18 +408,17 @@ ohos_input_key (unsigned key, unsigned modifiers, int pressed)
       input_count++;
     }
   pthread_mutex_unlock (&input_lock);
-  if (input_pipe[1] >= 0)
-    {
-      char byte = 1;
-      (void) write (input_pipe[1], &byte, 1);
-    }
+  ohos_signal_input (was_empty);
   return 0;
 }
 
 void
 ohos_input_mouse (int button, int x, int y, unsigned modifiers, int press)
 {
+  int was_empty;
+
   pthread_mutex_lock (&input_lock);
+  was_empty = (input_count == 0);
   if (input_count == OHOS_INPUT_CAP)
     input_dropped++;
   else
@@ -419,11 +434,7 @@ ohos_input_mouse (int button, int x, int y, unsigned modifiers, int press)
       input_count++;
     }
   pthread_mutex_unlock (&input_lock);
-  if (input_pipe[1] >= 0)
-    {
-      char byte = 1;
-      (void) write (input_pipe[1], &byte, 1);
-    }
+  ohos_signal_input (was_empty);
 }
 
 /* Pointer motion without a button change.  Mirrors android_input_motion:
@@ -433,7 +444,10 @@ ohos_input_mouse (int button, int x, int y, unsigned modifiers, int press)
 void
 ohos_input_motion (int x, int y, unsigned modifiers)
 {
+  int was_empty;
+
   pthread_mutex_lock (&input_lock);
+  was_empty = (input_count == 0);
   if (input_count == OHOS_INPUT_CAP)
     input_dropped++;
   else
@@ -449,11 +463,7 @@ ohos_input_motion (int x, int y, unsigned modifiers)
       input_count++;
     }
   pthread_mutex_unlock (&input_lock);
-  if (input_pipe[1] >= 0)
-    {
-      char byte = 1;
-      (void) write (input_pipe[1], &byte, 1);
-    }
+  ohos_signal_input (was_empty);
 }
 
 int
@@ -540,7 +550,10 @@ ohos_input_text (const char *text)
 void
 ohos_input_expose (int x, int y, int width, int height)
 {
+  int was_empty;
+
   pthread_mutex_lock (&input_lock);
+  was_empty = (input_count == 0);
   if (input_count == OHOS_INPUT_CAP)
     input_dropped++;
   else
@@ -556,11 +569,7 @@ ohos_input_expose (int x, int y, int width, int height)
       input_count++;
     }
   pthread_mutex_unlock (&input_lock);
-  if (input_pipe[1] >= 0)
-    {
-      char byte = 1;
-      (void) write (input_pipe[1], &byte, 1);
-    }
+  ohos_signal_input (was_empty);
 }
 
 void
@@ -568,7 +577,10 @@ ohos_input_resize (int width, int height)
 {
   if (width <= 0 || height <= 0)
     return;
+  int was_empty;
+
   pthread_mutex_lock (&input_lock);
+  was_empty = (input_count == 0);
   if (input_count == OHOS_INPUT_CAP)
     input_dropped++;
   else
@@ -581,17 +593,16 @@ ohos_input_resize (int width, int height)
       input_count++;
     }
   pthread_mutex_unlock (&input_lock);
-  if (input_pipe[1] >= 0)
-    {
-      char byte = 1;
-      (void) write (input_pipe[1], &byte, 1);
-    }
+  ohos_signal_input (was_empty);
 }
 
 void
 ohos_input_focus (int focused)
 {
+  int was_empty;
+
   pthread_mutex_lock (&input_lock);
+  was_empty = (input_count == 0);
   if (input_count == OHOS_INPUT_CAP)
     input_dropped++;
   else
@@ -602,11 +613,7 @@ ohos_input_focus (int focused)
       input_count++;
     }
   pthread_mutex_unlock (&input_lock);
-  if (input_pipe[1] >= 0)
-    {
-      char byte = 1;
-      (void) write (input_pipe[1], &byte, 1);
-    }
+  ohos_signal_input (was_empty);
 }
 
 /* ------------------------------------------------------------------ */
