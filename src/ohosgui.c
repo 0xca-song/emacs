@@ -1515,7 +1515,8 @@ ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
 
       if (mouse && motion)
 	{
-	  /* No EVENT: motion only updates the highlight state.  */
+	  /* No EVENT: motion only updates the highlight state and must not
+	     add to the count of events read.  */
 	  bool moved = ohos_note_mouse_movement (SELECTED_FRAME (), mx, my);
 	  {
 	    struct frame *df = SELECTED_FRAME ();
@@ -1529,8 +1530,7 @@ ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
 		      hl ? (int) hl->mouse_face_defer : -1);
 	    ohos_log (dbg);
 	  }
-	  if (moved)
-	    count++;
+	  (void) moved;
 	  continue;
 	}
       if (mouse)
