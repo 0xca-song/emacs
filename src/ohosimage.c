@@ -100,10 +100,25 @@ ohos_get_pixel (struct ohos_pixmap *p, int x, int y)
 static Lisp_Object Qohos_image_file;
 static Lisp_Object Qohos_image_data;
 
+/* The image spec may name the file relative to `image-load-path' (the
+   startup screen passes "splash.svg"), so resolve it exactly the way
+   png_load does before opening it.  */
+extern Lisp_Object image_find_image_fd (Lisp_Object, int *);
+
 static unsigned char *
 ohos_read_whole_file (const char *name, size_t *len)
 {
-  FILE *fp = fopen (name, "rb");
+  int fd = -1;
+  Lisp_Object found = image_find_image_fd (build_string (name), &fd);
+  FILE *fp = NULL;
+
+  if (STRINGP (found))
+    fp = fopen (SSDATA (found), "rb");
+  else if (fd >= 0)
+    fp = fdopen (fd, "rb");
+  if (!fp)
+    fp = fopen (name, "rb");
+
   unsigned char *buf = NULL;
   size_t cap = 0, used = 0;
 

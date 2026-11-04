@@ -179,6 +179,18 @@ static bool ohos_cursor_shown;
 static void
 ohos_draw_glyph_string (struct glyph_string *s)
 {
+  if (s && s->first_glyph)
+    {
+      static int n;
+      if (s->first_glyph->type != CHAR_GLYPH && n < 40)
+	{
+	  char d[128];
+	  n++;
+	  snprintf (d, sizeof d, "glyphstr type=%d x=%d y=%d nchars=%d",
+		    (int) s->first_glyph->type, s->x, s->y, s->nchars);
+	  ohos_log (d);
+	}
+    }
   if (!s || !s->f || !s->first_glyph || !s->face)
     return;
   /* Image glyph strings carry no characters (nchars is 0), so this has
@@ -186,6 +198,13 @@ ohos_draw_glyph_string (struct glyph_string *s)
   if (s->first_glyph->type == IMAGE_GLYPH)
     {
       struct image *img = s->img;
+      { char d[192];
+	snprintf (d, sizeof d, "image glyph: img=%p pixmap=%p failed=%d w=%d h=%d spec_type=%s",
+		  (void *) img, img ? img->pixmap : NULL,
+		  img ? (int) img->load_failed_p : -1,
+		  img ? img->width : -1, img ? img->height : -1,
+		  (img && SYMBOLP (AREF (img->spec, 0))) ? "?" : "?");
+	ohos_log (d); }
       { char d[160];
         snprintf (d, sizeof d, "image glyph: img=%p pixmap=%p w=%d h=%d lisp=%d",
                   (void *) img, img ? img->pixmap : NULL,
