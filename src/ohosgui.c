@@ -255,30 +255,58 @@ ohos_draw_window_cursor (struct window *w, struct glyph_row *row,
                          int x, int y, enum text_cursor_kinds type,
                          int width, bool on_p, bool active_p)
 {
-  (void) row; (void) type; (void) active_p;
+  (void) active_p;
   if (!w)
     return;
   struct frame *f = WINDOW_XFRAME (w);
   int line_height = FRAME_LINE_HEIGHT (f);
-  int fx, fy, cw;
+  int cell_width = FRAME_COLUMN_WIDTH (f);
+  int bar = (width > 0 ? width : 2);
+  int kind = 0;
+  int fx, fy;
 
-  if (line_height <= 0)
+  if (line_height <= 0 || !row)
     return;
-  if (width <= 0)
-    width = FRAME_COLUMN_WIDTH (f);
-  cw = width;
   fx = WINDOW_TEXT_TO_FRAME_PIXEL_X (w, x);
   fy = WINDOW_TOP_EDGE_Y (w) + y;
+
+  /* Cursor types are part of the redisplay contract: `cursor-type' can be
+     `box', `bar', `hbar' or nil, and unselected windows get a hollow box
+     (task book §2).  A filled box is drawn as reversed glyphs, like every
+     GUI backend; the other shapes are composited by the host.  */
+  switch (type)
+    {
+    case NO_CURSOR:
+      kind = 0;
+      on_p = false;
+      break;
+    case FILLED_BOX_CURSOR:
+      if (on_p)
+	draw_phys_cursor_glyph (w, row, DRAW_CURSOR);
+      kind = 0;			/* the glyph itself carries the box */
+      break;
+    case HOLLOW_BOX_CURSOR:
+      kind = 2;
+      break;
+    case BAR_CURSOR:
+      kind = 3;
+      break;
+    case HBAR_CURSOR:
+      kind = 4;
+      break;
+    default:
+      kind = 3;
+      break;
+    }
 
   /* The host composites the cursor on top of the bitmap, so turning it
      off only updates that overlay.  Filling the cell here would erase
      the character underneath, because the bitmap *is* the screen
-     content (unlike Android, which keeps the glyph in its back buffer
-     and simply stops flipping the cursor in).  */
-  ohos_draw_cursor (fx, fy, cw, line_height,
+     content.  */
+  ohos_draw_cursor (fx, fy, cell_width, line_height, bar,
 		    (uint32_t) FRAME_FOREGROUND_PIXEL (f),
 		    (uint32_t) FRAME_BACKGROUND_PIXEL (f),
-		    on_p ? 1u : 0u);
+		    on_p ? 1u : 0u, kind);
 }
 
 static void

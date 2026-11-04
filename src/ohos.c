@@ -187,12 +187,14 @@ ohos_draw_text (int x, int y, int w, int h, unsigned code,
 }
 
 void
-ohos_draw_cursor (int x, int y, int w, int h, uint32_t fg, uint32_t bg,
-		  uint32_t flags)
+ohos_draw_cursor (int x, int y, int w, int h, int bar, uint32_t fg,
+		  uint32_t bg, uint32_t flags, int kind)
 {
   struct ohos_draw_command cmd = { .op = OHOS_OP_CURSOR,
 			       .x = x, .y = y, .w = w, .h = h,
-			       .fg = fg, .bg = bg, .flags = flags };
+			       .code = (unsigned) bar,
+			       .fg = fg, .bg = bg,
+			       .flags = flags | ((uint32_t) kind << 1) };
   enqueue (&cmd);
 }
 
@@ -279,8 +281,9 @@ ohos_pump_draw_commands (void)
 	  break;
 	case OHOS_OP_CURSOR:
 	  if (draw_cursor_sink)
-	    draw_cursor_sink (cmd.x, cmd.y, cmd.w, cmd.h,
-			      cmd.fg, cmd.bg, cmd.flags);
+	    draw_cursor_sink (cmd.x, cmd.y, cmd.w, cmd.h, (int) cmd.code,
+			      cmd.fg, cmd.bg, cmd.flags,
+			      (int) ((cmd.flags >> 1) & 7u));
 	  break;
 	case OHOS_OP_SCROLL:
 	  if (draw_scroll_sink)
