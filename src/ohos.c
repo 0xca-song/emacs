@@ -189,8 +189,6 @@ ohos_draw_text (int x, int y, int w, int h, unsigned code,
 void
 ohos_draw_image (int x, int y, int w, int h, const void *rgba, unsigned len)
 {
-  { static int once;
-    if (!once++) { char d[64]; snprintf (d, sizeof d, "sizeof cmd=%d", (int) sizeof (struct ohos_draw_command)); ohos_log (d); } }
   if (w <= 0 || h <= 0 || len == 0)
     {
       char dbg[128];

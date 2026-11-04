@@ -747,6 +747,13 @@ ohos_create_frame (struct terminal *terminal, Lisp_Object parms)
      realize_basic_faces, which aborts when they are missing.  */
   init_frame_faces (f);
   ohos_log ("ohos_create_frame faces done");
+  /* The window that just got a frame is the foreground window.  Focus
+     events from ArkUI can arrive before the frame exists, and without
+     `highlight_frame' redisplay draws the inactive (hollow) cursor for
+     ever: `get_window_cursor_type' marks a frame inactive when
+     `f != FRAME_DISPLAY_INFO (f)->highlight_frame'.  */
+  FRAME_DISPLAY_INFO (f)->focus_frame = frame;
+  FRAME_DISPLAY_INFO (f)->highlight_frame = f;
 
   gui_default_parameter (f, parms, Qmenu_bar_lines,
 			 NILP (Vmenu_bar_mode) ? make_fixnum (0) : make_fixnum (1),

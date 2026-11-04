@@ -296,10 +296,9 @@ ohos_draw_window_cursor (struct window *w, struct glyph_row *row,
       kind = 0;
       on_p = false;
       break;
+    case DEFAULT_CURSOR:	/* -2: the frame's default cursor (a box) */
     case FILLED_BOX_CURSOR:
-      if (on_p)
-	draw_phys_cursor_glyph (w, row, DRAW_CURSOR);
-      kind = 0;			/* the glyph itself carries the box */
+      kind = 1;			/* host inverts the cell */
       break;
     case HOLLOW_BOX_CURSOR:
       kind = 2;
@@ -319,10 +318,17 @@ ohos_draw_window_cursor (struct window *w, struct glyph_row *row,
      off only updates that overlay.  Filling the cell here would erase
      the character underneath, because the bitmap *is* the screen
      content.  */
-  ohos_draw_cursor (fx, fy, cell_width, line_height, bar,
-		    (uint32_t) FRAME_FOREGROUND_PIXEL (f),
-		    (uint32_t) FRAME_BACKGROUND_PIXEL (f),
-		    on_p ? 1u : 0u, kind);
+  {
+    /* Every window draws its own cursor; only the selected window's one
+       is the cursor.  Mark it so the host cannot be overwritten by the
+       hollow cursor of another window drawn later in the same batch.  */
+    uint32_t sel = (w == XWINDOW (FRAME_SELECTED_WINDOW (f))) ? 8u : 0u;
+
+    ohos_draw_cursor (fx, fy, cell_width, line_height, bar,
+		      (uint32_t) FRAME_FOREGROUND_PIXEL (f),
+		      (uint32_t) FRAME_BACKGROUND_PIXEL (f),
+		      on_p ? 1u : 0u, kind | (int) sel);
+  }
 }
 
 static void
@@ -1653,7 +1659,16 @@ ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
 	  ev.code = 0;
 	  ev.modifiers = 0;
 	  if (dpyinfo)
-	    dpyinfo->focus_event_frame = modifiers ? SELECTED_FRAME () : NULL;
+	    {
+	      dpyinfo->focus_event_frame = modifiers ? SELECTED_FRAME () : NULL;
+	      if (!modifiers)
+		{
+		  dpyinfo->focus_frame = Qnil;
+		  dpyinfo->highlight_frame = NULL;
+		  if (SELECTED_FRAME ())
+		    fset_redisplay (SELECTED_FRAME ());
+		}
+	    }
 	  if (modifiers && SELECTED_FRAME ())
 	    ohos_focus_frame (SELECTED_FRAME (), true);
 	  kbd_buffer_store_event (&ev);
@@ -1978,12 +1993,6 @@ extern void syms_of_ohosimage (void);
 void
 syms_of_ohosgui (void)
 {
-  {
-    char d[80];
-    snprintf (d, sizeof d, "sizeof ohos_draw_command=%d",
-	      (int) sizeof (struct ohos_draw_command));
-    ohos_log (d);
-  }
   syms_of_ohosimage ();
   defsubr (&Sxw_display_color_p);
   defsubr (&Sx_display_grayscale_p);
