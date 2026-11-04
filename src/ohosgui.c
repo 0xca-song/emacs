@@ -952,10 +952,12 @@ ohos_mouse_position (struct frame **fp, int insist, Lisp_Object *bar_window,
   *fp = f;
   *bar_window = Qnil;
   *part = scroll_bar_nowhere;
-  *x = make_fixnum (FRAME_COLUMN_WIDTH (f) > 0
-		    ? mx / FRAME_COLUMN_WIDTH (f) : 0);
-  *y = make_fixnum (FRAME_LINE_HEIGHT (f) > 0
-		    ? my / FRAME_LINE_HEIGHT (f) : 0);
+  /* Pixel coordinates, like every other GUI backend: `posn-x-y' feeds
+     the drag code (mouse-drag-line, mouse-drag-mode-line), which computes
+     the target window and row from them.  Dividing by the cell size here
+     made drags follow the wrong position.  */
+  *x = make_fixnum (mx);
+  *y = make_fixnum (my);
   if (timestamp)
     *timestamp = 0;
 }
