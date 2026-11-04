@@ -181,6 +181,29 @@ ohos_draw_glyph_string (struct glyph_string *s)
 {
   if (!s || !s->f || !s->first_glyph || !s->face)
     return;
+  /* Image glyph strings carry no characters (nchars is 0), so this has
+     to come before the character-count guard below.  */
+  if (s->first_glyph->type == IMAGE_GLYPH)
+    {
+      struct image *img = s->img;
+      { char d[160];
+        snprintf (d, sizeof d, "image glyph: img=%p pixmap=%p w=%d h=%d lisp=%d",
+                  (void *) img, img ? img->pixmap : NULL,
+                  img ? img->width : -1, img ? img->height : -1,
+                  (img && STRINGP (img->lisp_data)) ? 1 : 0);
+        ohos_log (d); }
+
+      if (img && img->pixmap && img->width > 0 && img->height > 0)
+	{
+	  struct ohos_image_bitmap *bmp = img->pixmap;
+	  int y = s->ybase - image_ascent (img, s->face, &s->slice);
+
+	  ohos_draw_image (s->x, y, bmp->width, bmp->height, bmp->rgba,
+			   (unsigned) ((size_t) bmp->width * bmp->height * 4));
+	}
+      return;
+    }
+
   /* Automatic compositions report NCHARS == 0: the glyph count lives in
      the composition, not in the string.  They still have to reach the
      font driver, which draws from s->first_glyph.  */
@@ -188,22 +211,6 @@ ohos_draw_glyph_string (struct glyph_string *s)
       && !(s->first_glyph->type == COMPOSITE_GLYPH
 	   && s->first_glyph->u.cmp.automatic))
     return;
-  if (s->first_glyph->type == IMAGE_GLYPH)
-    {
-      struct image *img = s->img;
-
-      if (img && STRINGP (img->lisp_data)
-	  && img->width > 0 && img->height > 0
-	  && SBYTES (img->lisp_data) >= (ptrdiff_t) img->width * img->height * 4)
-	{
-	  int y = s->ybase - image_ascent (img, s->face, &s->slice);
-
-	  ohos_draw_image (s->x, y, img->width, img->height,
-			   SDATA (img->lisp_data),
-			   (unsigned) SBYTES (img->lisp_data));
-	}
-      return;
-    }
   if (s->font && s->font->driver && s->font->driver->draw)
     s->font->driver->draw (s, 0, s->nchars, s->x, s->y, true);
 }

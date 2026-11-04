@@ -265,12 +265,12 @@ Return the chosen command when it was executed."
 
 (add-hook 'window-setup-hook #'ohos-refresh-frame-faces)
 
-;; Image support: PNG only.  The backend decodes PNG itself (zlib is in
-;; the sysroot, no image library is enabled in this build) and blits the
-;; pixels through the draw protocol.  The other types Emacs knows about
-;; (pbm, xbm, canvas) have no drawing path here, so only PNG is offered:
-;; claiming them would silently produce empty boxes.
-(setq image-types '(png))
+;; Image support: PNG (libpng, built with the OHOS NDK) and SVG (vendored
+;; nanosvg).  Both decode to RGBA and go through the backend's IMAGE_GLYPH
+;; blit.  The other types Emacs knows about (pbm, xbm, canvas) have no
+;; drawing path here, so they are not offered: claiming them would
+;; silently produce empty boxes.
+(setq image-types '(png svg))
 
 
 (when (fboundp 'menu-bar-mode)

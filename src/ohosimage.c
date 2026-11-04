@@ -1,19 +1,20 @@
-/* PNG images for the OHOS GUI backend.
+/* Image decoding for the OHOS GUI backend.
 
-   No image library is enabled in this build (HAVE_PNG and friends are
-   undefined) but zlib is available, so PNG is decoded here and the pixels
-   are handed to redisplay as an RGBA string in `img->lisp_data'.  The
-   backend blits that string through the draw protocol (IMAGE_GLYPH).
+   PNG is handled by libpng through Emacs' own `png_load' (HAVE_PNG), so
+   this file only provides the SVG type: Emacs' svg loader needs librsvg,
+   which cannot be built here (GLib stack + meson), so the port parses and
+   rasterises SVG itself with the vendored nanosvg headers (zlib licence,
+   no dependencies).
 
-   Supported: 8 and 16 bit samples, colour types 0/2/3/4/6, no
-   interlacing.  Larger PNGs work; interlaced ones are rejected.  */
+   Both paths end the same way: the decoded pixels are stored as an RGBA
+   string in `img->lisp_data', and the backend blits it when redisplay
+   hands it an IMAGE_GLYPH.  */
 
 #include <config.h>
 
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-#include <zlib.h>
 
 #include "lisp.h"
 #include "frame.h"
@@ -21,18 +22,49 @@
 #include "dispextern.h"
 #include "ohosgui.h"
 
-static Lisp_Object Qohos_png_file;
-static Lisp_Object Qohos_png_data;
-
-static unsigned
-be32 (const unsigned char *p)
+/* The backend keeps decoded pixels in `img->pixmap', the opaque handle
+   image.c reserves for the display backend: it is not touched when Emacs
+   copies or scales an image, unlike `lisp_data' which image_clear_image
+   resets.  */
+void
+ohos_image_free (struct frame *f, struct image *img)
 {
-  return ((unsigned) p[0] << 24) | ((unsigned) p[1] << 16)
-    | ((unsigned) p[2] << 8) | (unsigned) p[3];
+  struct ohos_image_bitmap *bmp = img->pixmap;
+
+  (void) f;
+  if (bmp)
+    {
+      xfree (bmp->rgba);
+      xfree (bmp);
+      img->pixmap = NULL;
+    }
+  img->lisp_data = Qnil;
 }
 
+static struct ohos_image_bitmap *
+ohos_bitmap_new (int w, int h)
+{
+  struct ohos_image_bitmap *bmp = xmalloc (sizeof *bmp);
+
+  bmp->width = w;
+  bmp->height = h;
+  bmp->rgba = xmalloc ((size_t) w * h * 4);
+  memset (bmp->rgba, 0, (size_t) w * h * 4);
+  return bmp;
+}
+
+#include <png.h>
+
+#define NANOSVG_IMPLEMENTATION
+#include "nanosvg.h"
+#define NANOSVGRAST_IMPLEMENTATION
+#include "nanosvgrast.h"
+
+static Lisp_Object Qohos_image_file;
+static Lisp_Object Qohos_image_data;
+
 static unsigned char *
-read_whole_file (const char *name, size_t *len)
+ohos_read_whole_file (const char *name, size_t *len)
 {
   FILE *fp = fopen (name, "rb");
   unsigned char *buf = NULL;
@@ -44,9 +76,13 @@ read_whole_file (const char *name, size_t *len)
     {
       size_t n;
 
-      if (used + 65536 > cap)
+      /* Keep room for the terminating NUL: the SVG parser expects a C
+	 string.  */
+      if (used + 65536 + 1 > cap)
 	{
 	  cap = cap ? cap * 2 : 131072;
+	  if (cap < used + 65536 + 1)
+	    cap = used + 65536 + 1;
 	  buf = xrealloc (buf, cap);
 	}
       n = fread (buf + used, 1, cap - used, fp);
@@ -55,224 +91,48 @@ read_whole_file (const char *name, size_t *len)
 	break;
     }
   fclose (fp);
+  buf[used] = '\0';
   *len = used;
   return buf;
 }
 
-/* Decode PNG DATA into a freshly allocated RGBA buffer.  */
+/* An image spec is `(image :type T :file F ...)`: the leading symbol has to
+   be dropped before the rest can be read as a property list.  */
 
-static bool
-png_decode (const unsigned char *data, size_t len, int *out_w, int *out_h,
-	    unsigned char **out_rgba)
+static Lisp_Object
+ohos_spec_plist (Lisp_Object spec)
 {
-  static const unsigned char sig[8] = { 137, 80, 78, 71, 13, 10, 26, 10 };
-  const unsigned char *p, *end;
-  int w = 0, h = 0, depth = 0, ctype = 0, interlace = 0;
-  unsigned char palette[256][4];
-  int npal = 0;
-  unsigned char *idat = NULL;
-  size_t idat_len = 0, idat_cap = 0;
-  unsigned char *raw = NULL, *rows = NULL, *rgba = NULL;
-  size_t raw_size, stride;
-  int channels, bpp, x, y;
-  int ok = false;
-
-  if (len < 8 || memcmp (data, sig, 8) != 0)
-    return false;
-  memset (palette, 255, sizeof palette);
-  p = data + 8;
-  end = data + len;
-  while (p + 8 <= end)
-    {
-      unsigned clen = be32 (p);
-      const unsigned char *type = p + 4;
-      const unsigned char *chunk = p + 8;
-
-      if (clen > (unsigned) (end - chunk) || p + 12 + clen > end)
-	break;
-      if (!memcmp (type, "IHDR", 4) && clen >= 13)
-	{
-	  w = (int) be32 (chunk);
-	  h = (int) be32 (chunk + 4);
-	  depth = chunk[8];
-	  ctype = chunk[9];
-	  interlace = chunk[12];
-	}
-      else if (!memcmp (type, "PLTE", 4))
-	{
-	  npal = (int) (clen / 3);
-	  if (npal > 256)
-	    npal = 256;
-	  for (int i = 0; i < npal; i++)
-	    {
-	      palette[i][0] = chunk[i * 3];
-	      palette[i][1] = chunk[i * 3 + 1];
-	      palette[i][2] = chunk[i * 3 + 2];
-	      palette[i][3] = 255;
-	    }
-	}
-      else if (!memcmp (type, "tRNS", 4))
-	{
-	  for (unsigned i = 0; i < clen && i < 256; i++)
-	    palette[i][3] = chunk[i];
-	}
-      else if (!memcmp (type, "IDAT", 4))
-	{
-	  if (idat_len + clen > idat_cap)
-	    {
-	      idat_cap = (idat_len + clen) * 2 + 1024;
-	      idat = xrealloc (idat, idat_cap);
-	    }
-	  memcpy (idat + idat_len, chunk, clen);
-	  idat_len += clen;
-	}
-      else if (!memcmp (type, "IEND", 4))
-	break;
-      p += 12 + clen;
-    }
-
-  if (w <= 0 || h <= 0 || interlace != 0 || !idat
-      || (depth != 8 && depth != 16))
-    goto done;
-  switch (ctype)
-    {
-    case 0: channels = 1; break;
-    case 2: channels = 3; break;
-    case 3: channels = 1; break;
-    case 4: channels = 2; break;
-    case 6: channels = 4; break;
-    default: goto done;
-    }
-  if (ctype == 3 && npal == 0)
-    goto done;
-
-  bpp = channels * (depth == 16 ? 2 : 1);
-  stride = (size_t) w * bpp;
-  raw_size = (stride + 1) * (size_t) h;
-  raw = xmalloc (raw_size);
-  {
-    uLongf out_len = (uLongf) raw_size;
-
-    if (uncompress (raw, &out_len, idat, (uLong) idat_len) != Z_OK
-	|| out_len < raw_size)
-      goto done;
-  }
-
-  rows = xmalloc (stride * (size_t) h);
-  for (y = 0; y < h; y++)
-    {
-      const unsigned char *src = raw + (size_t) y * (stride + 1) + 1;
-      unsigned char *dst = rows + (size_t) y * stride;
-      const unsigned char *prev = y ? rows + (size_t) (y - 1) * stride : NULL;
-      int filter = raw[(size_t) y * (stride + 1)];
-      size_t i;
-
-      for (i = 0; i < stride; i++)
-	{
-	  int a = i >= (size_t) bpp ? dst[i - bpp] : 0;
-	  int b = prev ? prev[i] : 0;
-	  int c = (prev && i >= (size_t) bpp) ? prev[i - bpp] : 0;
-	  int v = src[i];
-
-	  switch (filter)
-	    {
-	    case 0: break;
-	    case 1: v += a; break;
-	    case 2: v += b; break;
-	    case 3: v += (a + b) / 2; break;
-	    case 4:
-	      {
-		int pp = a + b - c;
-		int pa = abs (pp - a), pb = abs (pp - b), pc = abs (pp - c);
-
-		v += (pa <= pb && pa <= pc) ? a : (pb <= pc ? b : c);
-	      }
-	      break;
-	    default:
-	      goto done;
-	    }
-	  dst[i] = (unsigned char) v;
-	}
-    }
-
-  rgba = xmalloc ((size_t) w * h * 4);
-  for (y = 0; y < h; y++)
-    for (x = 0; x < w; x++)
-      {
-	const unsigned char *px = rows + (size_t) y * stride + (size_t) x * bpp;
-	unsigned char *out = rgba + ((size_t) y * w + x) * 4;
-
-	switch (ctype)
-	  {
-	  case 0:
-	    out[0] = out[1] = out[2] = px[0];
-	    out[3] = 255;
-	    break;
-	  case 2:
-	    out[0] = px[0]; out[1] = px[1]; out[2] = px[2]; out[3] = 255;
-	    break;
-	  case 3:
-	    {
-	      int idx = px[0];
-
-	      if (idx >= npal)
-		idx = 0;
-	      out[0] = palette[idx][0];
-	      out[1] = palette[idx][1];
-	      out[2] = palette[idx][2];
-	      out[3] = palette[idx][3];
-	    }
-	    break;
-	  case 4:
-	    out[0] = out[1] = out[2] = px[0];
-	    out[3] = px[(depth == 16) ? 2 : 1];
-	    break;
-	  default:
-	    out[0] = px[0]; out[1] = px[1]; out[2] = px[2];
-	    out[3] = px[(depth == 16) ? 6 : 3];
-	    break;
-	  }
-      }
-
-  *out_w = w;
-  *out_h = h;
-  *out_rgba = rgba;
-  rgba = NULL;
-  ok = true;
-
- done:
-  xfree (idat);
-  xfree (raw);
-  xfree (rows);
-  xfree (rgba);
-  return ok;
+  return (CONSP (spec) && EQ (XCAR (spec), Qimage)) ? XCDR (spec) : spec;
 }
 
 bool
 ohos_png_image_p (Lisp_Object spec)
 {
-  return (STRINGP (Fplist_get (spec, Qohos_png_file, Qnil))
-	  || STRINGP (Fplist_get (spec, Qohos_png_data, Qnil)));
+  Lisp_Object plist = ohos_spec_plist (spec);
+
+  return (STRINGP (Fplist_get (plist, Qohos_image_file, Qnil))
+	  || STRINGP (Fplist_get (plist, Qohos_image_data, Qnil)));
 }
 
 bool
 ohos_png_load (struct frame *f, struct image *img)
 {
-  Lisp_Object file = Fplist_get (img->spec, Qohos_png_file, Qnil);
-  Lisp_Object data = Fplist_get (img->spec, Qohos_png_data, Qnil);
-  const unsigned char *bytes = NULL;
-  unsigned char *owned = NULL;
-  size_t len = 0;
-  int w = 0, h = 0;
-  unsigned char *rgba = NULL;
+  Lisp_Object plist = ohos_spec_plist (img->spec);
+  Lisp_Object file = Fplist_get (plist, Qohos_image_file, Qnil);
+  Lisp_Object data = Fplist_get (plist, Qohos_image_data, Qnil);
+  char *owned = NULL;
+  const unsigned char *bytes;
+  size_t len;
+  png_image png;
+  struct ohos_image_bitmap *bmp;
 
   (void) f;
   if (STRINGP (file))
     {
-      owned = read_whole_file (SSDATA (file), &len);
+      owned = (char *) ohos_read_whole_file (SSDATA (file), &len);
       if (!owned)
 	return false;
-      bytes = owned;
+      bytes = (unsigned char *) owned;
     }
   else if (STRINGP (data))
     {
@@ -282,15 +142,122 @@ ohos_png_load (struct frame *f, struct image *img)
   else
     return false;
 
-  if (!png_decode (bytes, len, &w, &h, &rgba))
+  memset (&png, 0, sizeof png);
+  png.version = PNG_IMAGE_VERSION;
+  if (!png_image_begin_read_from_memory (&png, bytes, len))
     {
       xfree (owned);
+      ohos_log ("png load: begin_read failed");
       return false;
     }
+  png.format = PNG_FORMAT_RGBA;
+  bmp = ohos_bitmap_new ((int) png.width, (int) png.height);
+  if (!png_image_finish_read (&png, NULL, bmp->rgba, 0, NULL))
+    {
+      xfree (owned);
+      xfree (bmp->rgba);
+      xfree (bmp);
+      png_image_free (&png);
+      return false;
+    }
+  png_image_free (&png);
   xfree (owned);
 
-  img->lisp_data = make_unibyte_string ((char *) rgba, (ptrdiff_t) w * h * 4);
-  xfree (rgba);
+  img->pixmap = bmp;
+  img->width = bmp->width;
+  img->height = bmp->height;
+  {
+    char d[80];
+    snprintf (d, sizeof d, "png load ok img=%p %dx%d", (void *) img,
+              bmp->width, bmp->height);
+    ohos_log (d);
+  }
+  return true;
+}
+
+bool
+ohos_svg_image_p (Lisp_Object spec)
+{
+  Lisp_Object plist = ohos_spec_plist (spec);
+  bool ok = (STRINGP (Fplist_get (plist, Qohos_image_file, Qnil))
+             || STRINGP (Fplist_get (plist, Qohos_image_data, Qnil)));
+
+  return ok;
+}
+
+bool
+ohos_svg_load (struct frame *f, struct image *img)
+{
+  Lisp_Object plist = ohos_spec_plist (img->spec);
+  Lisp_Object file = Fplist_get (plist, Qohos_image_file, Qnil);
+  Lisp_Object data = Fplist_get (plist, Qohos_image_data, Qnil);
+  char *owned = NULL;
+  const char *text = NULL;
+  NSVGimage *svg;
+  NSVGrasterizer *rast;
+  unsigned char *rgba;
+  int w, h;
+  float scale;
+
+  (void) f;
+  if (STRINGP (file))
+    {
+      size_t len;
+
+      owned = (char *) ohos_read_whole_file (SSDATA (file), &len);
+      if (!owned)
+        return false;
+      text = owned;
+    }
+  else if (STRINGP (data))
+    text = SSDATA (data);
+  else
+    return false;
+
+  svg = nsvgParse ((char *) text, "px", 96.0f);
+  xfree (owned);
+  if (!svg)
+    {
+      ohos_log ("svg: parse failed");
+      return false;
+    }
+  if (svg->width <= 0 || svg->height <= 0)
+    {
+      nsvgDelete (svg);
+      return false;
+    }
+
+  /* Honour :width/:height when Emacs asked for a size; otherwise use the
+     document's own size.  */
+  w = img->width > 0 ? img->width : (int) (svg->width + 0.5f);
+  h = img->height > 0 ? img->height : (int) (svg->height + 0.5f);
+  if (w <= 0 || h <= 0)
+    {
+      nsvgDelete (svg);
+      return false;
+    }
+  scale = (float) w / svg->width;
+  if ((float) h / svg->height < scale)
+    scale = (float) h / svg->height;
+
+  rgba = xmalloc ((size_t) w * h * 4);
+  memset (rgba, 0, (size_t) w * h * 4);
+  rast = nsvgCreateRasterizer ();
+  if (!rast)
+    {
+      xfree (rgba);
+      nsvgDelete (svg);
+      return false;
+    }
+  nsvgRasterize (rast, svg, 0, 0, scale, rgba, w, h, w * 4);
+  nsvgDeleteRasterizer (rast);
+  nsvgDelete (svg);
+
+  ohos_log ("svg load ok");
+  img->pixmap = xmalloc (sizeof (struct ohos_image_bitmap));
+  ((struct ohos_image_bitmap *) img->pixmap)->width = w;
+  ((struct ohos_image_bitmap *) img->pixmap)->height = h;
+  ((struct ohos_image_bitmap *) img->pixmap)->rgba = rgba;
   img->width = w;
   img->height = h;
   return true;
@@ -299,8 +266,8 @@ ohos_png_load (struct frame *f, struct image *img)
 void
 syms_of_ohosimage (void)
 {
-  Qohos_png_file = intern_c_string (":file");
-  staticpro (&Qohos_png_file);
-  Qohos_png_data = intern_c_string (":data");
-  staticpro (&Qohos_png_data);
+  Qohos_image_file = intern_c_string (":file");
+  staticpro (&Qohos_image_file);
+  Qohos_image_data = intern_c_string (":data");
+  staticpro (&Qohos_image_data);
 }

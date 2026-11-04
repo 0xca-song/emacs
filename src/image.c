@@ -13449,6 +13449,9 @@ initialize_image_type (struct image_type const *type)
 #ifdef HAVE_OHOS_GUI
 extern bool ohos_png_image_p (Lisp_Object);
 extern bool ohos_png_load (struct frame *, struct image *);
+extern bool ohos_svg_image_p (Lisp_Object);
+extern bool ohos_svg_load (struct frame *, struct image *);
+extern void ohos_image_free (struct frame *, struct image *);
 #endif
 
 static struct image_type const image_types[] =
@@ -13490,9 +13493,6 @@ static struct image_type const image_types[] =
    IMAGE_TYPE_INIT (init_webp_functions) },
 #endif
  { SYMBOL_INDEX (Qxbm), xbm_image_p, xbm_load, image_clear_image },
-#ifdef HAVE_OHOS_GUI
- { SYMBOL_INDEX (Qpng), ohos_png_image_p, ohos_png_load, image_clear_image },
-#endif
  { SYMBOL_INDEX (Qpbm), pbm_image_p, pbm_load, image_clear_image },
  { SYMBOL_INDEX (Qcanvas), canvas_image_p, canvas_load, image_clear_image },
 };
@@ -13512,6 +13512,29 @@ lookup_image_type (Lisp_Object type)
 #if HAVE_NATIVE_IMAGE_API
   if (image_can_use_native_api (type))
     return &native_image_type;
+#endif
+
+#ifdef HAVE_OHOS_GUI
+  /* The port's own types are looked up by name: an incremental build can
+     leave symbol indices in different objects out of step, and a
+     compile-time index would then never match the runtime symbol.  */
+  {
+    static Lisp_Object ohos_png_symbol, ohos_svg_symbol;
+    static struct image_type ohos_png_type =
+      { 0, ohos_png_image_p, ohos_png_load, ohos_image_free };
+    static struct image_type ohos_svg_type =
+      { 0, ohos_svg_image_p, ohos_svg_load, ohos_image_free };
+
+    if (NILP (ohos_png_symbol))
+      {
+        ohos_png_symbol = intern_c_string ("png");
+        ohos_svg_symbol = intern_c_string ("svg");
+      }
+    if (EQ (type, ohos_png_symbol))
+      return initialize_image_type (&ohos_png_type) ? &ohos_png_type : NULL;
+    if (EQ (type, ohos_svg_symbol))
+      return initialize_image_type (&ohos_svg_type) ? &ohos_svg_type : NULL;
+  }
 #endif
 
   for (int i = 0; i < countof (image_types); i++)
@@ -13682,6 +13705,7 @@ non-numeric, there is no explicit limit on the size of images.  */);
 
 #ifdef HAVE_OHOS_GUI
   add_image_type (Qpng);
+  add_image_type (Qsvg);
 #endif
 
 #if defined (HAVE_PNG) || defined (HAVE_NATIVE_IMAGE_API)
