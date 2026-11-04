@@ -290,13 +290,13 @@ Return the chosen command when it was executed."
           (ohos-menu-bar-open-index index)
         (error nil)))))
 
-(run-with-timer 0.1 0.1 #'ohos-menu-bar-poll)
+(run-with-idle-timer 0.1 t #'ohos-menu-bar-poll)
 
 ;; The menu bar content depends on the buffer and its modes.  Polling it
 ;; once a second keeps the native bar in sync without depending on when
 ;; update_menu_bar decides to run; the backend only talks to the host when
 ;; the item list actually changed.
-(run-with-timer 1 1 #'ohos-menu-bar-refresh)
+(run-with-idle-timer 1 t #'ohos-menu-bar-refresh)
 
 (defun ohos-menu-bar-open (&optional frame)
   "Open the menu bar of FRAME, the ArkUI bar counterpart of menu-bar-open."
@@ -334,7 +334,7 @@ Return the chosen command when it was executed."
                     nil ohos-dev-file nil 'silent)))
   (setq ohos-dev-stamp nil)
   (ohos-dev-poll)
-  (run-with-timer 0.5 0.5 #'ohos-dev-poll))
+  (run-with-idle-timer 0.5 t #'ohos-dev-poll))
 
 ;; Start right away: in this CANNOT_DUMP build after-init-hook is not a
 ;; reliable trigger, but timers run once the command loop is up.

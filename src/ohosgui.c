@@ -149,6 +149,15 @@ XParseGeometry (const char *string, int *x, int *y, unsigned int *width,
 /* ------------------------------------------------------------------ */
 /* Basic drawing.                                                      */
 
+/* The cursor rectangle most recently composited by the host.
+
+   blink-cursor-mode does not call draw_window_cursor to switch the cursor
+   off: erase_phys_cursor redraws the glyph under it.  The backend has to
+   notice that redraw and tell the host to drop the overlay, otherwise the
+   block stays on the screen for ever.  */
+static int ohos_cursor_x = -1, ohos_cursor_y = -1;
+static bool ohos_cursor_shown;
+
 static void
 ohos_draw_glyph_string (struct glyph_string *s)
 {
@@ -161,6 +170,18 @@ ohos_draw_glyph_string (struct glyph_string *s)
       && !(s->first_glyph->type == COMPOSITE_GLYPH
 	   && s->first_glyph->u.cmp.automatic))
     return;
+  /* A redraw of the cell the cursor sits on is how redisplay erases the
+     cursor (blink off, or an ordinary redraw before the next draw).  */
+  if (ohos_cursor_shown && s->x == ohos_cursor_x
+      && s->y >= ohos_cursor_y - 2 && s->y <= ohos_cursor_y + 2)
+    {
+      ohos_cursor_shown = false;
+      ohos_draw_cursor (ohos_cursor_x, ohos_cursor_y,
+			FRAME_COLUMN_WIDTH (s->f), FRAME_LINE_HEIGHT (s->f),
+			2, (uint32_t) FRAME_FOREGROUND_PIXEL (s->f),
+			(uint32_t) FRAME_BACKGROUND_PIXEL (s->f), 0u, 0);
+    }
+
   if (s->first_glyph->type == IMAGE_GLYPH)
     {
       struct image *img = s->img;
@@ -298,7 +319,13 @@ ohos_draw_window_cursor (struct window *w, struct glyph_row *row,
       break;
     case DEFAULT_CURSOR:	/* -2: the frame's default cursor (a box) */
     case FILLED_BOX_CURSOR:
-      kind = 1;			/* host inverts the cell */
+      /* Draw the glyph with the cursor face, like every GUI backend:
+         the cell is redrawn in reverse video, and hiding the cursor
+         (blink, or an unfocused window) is the ordinary redraw that
+         redisplay performs on its own.  */
+      if (on_p)
+	draw_phys_cursor_glyph (w, row, DRAW_CURSOR);
+      kind = 0;
       break;
     case HOLLOW_BOX_CURSOR:
       kind = 2;
@@ -328,6 +355,14 @@ ohos_draw_window_cursor (struct window *w, struct glyph_row *row,
 		      (uint32_t) FRAME_FOREGROUND_PIXEL (f),
 		      (uint32_t) FRAME_BACKGROUND_PIXEL (f),
 		      on_p ? 1u : 0u, kind | (int) sel);
+    if (on_p && sel && kind)
+      {
+	ohos_cursor_x = fx;
+	ohos_cursor_y = fy;
+	ohos_cursor_shown = true;
+      }
+    else if (!on_p && fx == ohos_cursor_x && fy == ohos_cursor_y)
+      ohos_cursor_shown = false;
   }
 }
 
