@@ -305,6 +305,13 @@ ohos_draw_window_cursor (struct window *w, struct glyph_row *row,
   (void) active_p;
   if (!w || !row)
     return;
+  /* redisplay calls this with on_p true even on the blink-off tick; the
+     visibility flag lives in w->cursor_off_p (internal-show-cursor sets
+     it).  Other backends get on_p == false there and skip the draw; do
+     the same explicitly, otherwise the cursor is painted on every tick
+     and never appears to blink.  */
+  if (w->cursor_off_p)
+    on_p = false;
   f = WINDOW_XFRAME (w);
   line_height = FRAME_LINE_HEIGHT (f);
   cell_width = FRAME_COLUMN_WIDTH (f);
