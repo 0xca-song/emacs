@@ -2385,6 +2385,8 @@ position (0, 0) of the selected frame's terminal."
       (haiku-mouse-absolute-pixel-position))
      ((eq frame-type 'android)
       (android-mouse-absolute-pixel-position))
+     ((eq frame-type 'ohos)
+      (ohos-mouse-absolute-pixel-position))
      (t
       (cons 0 0)))))
 

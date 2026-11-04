@@ -1042,6 +1042,30 @@ ohos_frame_parm_init (void)
   eassert (countof (ohos_frame_parm_handlers) == 63);
 }
 
+/* Absolute pixel position of the pointer.
+
+   `mouse-drag-line' (mode line, divider, header line dragging) asks for
+   it through `mouse-absolute-pixel-position', which dispatches on the
+   frame type in frame.el.  Without an OHOS entry that function returned
+   the constant (0 . 0), so every drag computed a zero displacement and
+   the boundary never moved.  Mirrors androidfns.c.  */
+
+DEFUN ("ohos-mouse-absolute-pixel-position",
+       Fohos_mouse_absolute_pixel_position,
+       Sohos_mouse_absolute_pixel_position, 0, 0, 0,
+       doc: /* Return the pointer position in pixels as (X . Y).  */)
+  (void)
+{
+  struct frame *f = SELECTED_FRAME ();
+  struct ohos_display_info *dpyinfo;
+
+  if (!f || !FRAME_OHOS_P (f))
+    return Fcons (make_fixnum (0), make_fixnum (0));
+  dpyinfo = FRAME_DISPLAY_INFO (f);
+  return Fcons (make_fixnum (dpyinfo->last_mouse_motion_x),
+		make_fixnum (dpyinfo->last_mouse_motion_y));
+}
+
 /* RGB lookup for a colour name on an OHOS frame.
 
    `frame--current-background-mode' (used by `frame-set-background-mode' and
@@ -1129,6 +1153,7 @@ syms_of_ohosfns (void)
   defsubr (&Sohos_notify);
   defsubr (&Sohos_battery);
   defsubr (&Sohos_debug_rif);
+  defsubr (&Sohos_mouse_absolute_pixel_position);
   defsubr (&Sxw_color_values);
   defsubr (&Sxw_color_defined_p);
   defsubr (&Sx_display_color_cells);
