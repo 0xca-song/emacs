@@ -191,7 +191,19 @@ ohos_svg_load (struct frame *f, struct image *img)
       text = owned;
     }
   else if (STRINGP (data))
-    text = SSDATA (data);
+    {
+      size_t len = SBYTES (data);
+
+      /* nsvgParse tokenizes its input in place.  The :data string belongs
+	 to the image spec, so parsing it directly corrupts the spec: the
+	 next load of the same image (image cache miss, resize, new frame)
+	 then sees a half-tokenized document and fails.  Parse a private
+	 copy, exactly as the :file branch reads into its own buffer.  */
+      owned = xmalloc (len + 1);
+      memcpy (owned, SSDATA (data), len);
+      owned[len] = '\0';
+      text = owned;
+    }
   else
     return false;
 

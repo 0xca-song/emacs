@@ -215,12 +215,40 @@ ohos_draw_glyph_string (struct glyph_string *s)
       if (img && img->pixmap && img->width > 0 && img->height > 0)
 	{
 	  struct ohos_pixmap *bmp = img->pixmap;
+	  int sx = s->slice.x, sy = s->slice.y;
+	  int tw, th;
+	  int x = s->x;
 	  int y = s->ybase - image_ascent (img, s->face, &s->slice);
-	  int tw = img->width, th = img->height;
-	  size_t n = (size_t) tw * th * 4;
-	  unsigned char *rgba = xmalloc (n);
+	  size_t n;
+	  unsigned char *rgba;
 	  int dx, dy, has_alpha = 0;
 	  size_t k;
+
+	  /* :slice crops the image without decoding it again: Ebox/ETAF
+	     split every image taller than one line into one slice per row
+	     (and use slices for rounded backgrounds).  The pixmap is the
+	     whole image, so both the source rectangle and the destination
+	     size come from the slice; drawing the full pixmap for each
+	     slice stacks the image on every row and clips it.  */
+	  if (s->slice.width > 0 && s->slice.height > 0)
+	    {
+	      tw = s->slice.width;
+	      th = s->slice.height;
+	    }
+	  else
+	    {
+	      sx = sy = 0;
+	      tw = img->width;
+	      th = img->height;
+	    }
+	  if (tw <= 0 || th <= 0)
+	    return;
+	  if (s->slice.x == 0)
+	    x += img->hmargin;
+	  if (s->slice.y == 0)
+	    y += img->vmargin;
+	  n = (size_t) tw * th * 4;
+	  rgba = xmalloc (n);
 
 	  /* image.c writes RGB_TO_ULONG for images without an alpha channel,
 	     which leaves the high byte zero; only treat the pixmap as
@@ -233,30 +261,69 @@ ohos_draw_glyph_string (struct glyph_string *s)
 	      }
 
 	  /* The pixmap stores ARGB32 (image.c's PUT_PIXEL layout) while the
-	     draw protocol carries RGBA, and redisplay laid the glyph out at
-	     tw x th (the :width/:height/:scale result), so convert and scale
-	     in one pass: the blit then covers exactly the layout box.  */
+	     draw protocol carries RGBA.  Map each destination pixel back to
+	     image space so a pixmap that is not at the displayed size (a
+	     decoder-side scale) still lines up with the slice.  */
 	  for (dy = 0; dy < th; dy++)
 	    {
-	      int sy = (int) ((long) dy * bmp->height / th);
-	      const unsigned int *row
-		= (const unsigned int *) (bmp->data + (size_t) sy * bmp->bytes_per_line);
+	      int row_y = (int) ((double) (sy + dy) * bmp->height / img->height);
+	      const unsigned int *row;
+
+	      if (row_y < 0)
+		row_y = 0;
+	      else if (row_y >= bmp->height)
+		row_y = bmp->height - 1;
+	      row = (const unsigned int *) (bmp->data
+					    + (size_t) row_y * bmp->bytes_per_line);
 
 	      for (dx = 0; dx < tw; dx++)
 		{
-		  int sx = (int) ((long) dx * bmp->width / tw);
-		  unsigned int px = row[sx];
+		  int col = (int) ((double) (sx + dx) * bmp->width / img->width);
+		  unsigned int px;
 		  unsigned char *d = rgba + ((size_t) dy * tw + dx) * 4;
 
+		  if (col < 0)
+		    col = 0;
+		  else if (col >= bmp->width)
+		    col = bmp->width - 1;
+		  px = row[col];
 		  d[0] = (px >> 16) & 0xff;
 		  d[1] = (px >> 8) & 0xff;
 		  d[2] = px & 0xff;
 		  d[3] = has_alpha ? ((px >> 24) & 0xff) : 0xff;
 		}
 	    }
-	  ohos_draw_image (s->x, y, tw, th, rgba, (unsigned) n);
+	  /* Transparent pixels reveal the face background, not whatever the
+	     previous buffer left in the framebuffer.  */
+	  ohos_draw_fill (x, y, tw, th, (uint32_t) s->face->background);
+	  ohos_draw_image (x, y, tw, th, rgba, (unsigned) n);
 	  xfree (rgba);
 	}
+      return;
+    }
+
+  /* A stretch glyph has no characters to hand to the font driver: its
+     whole job is the background rectangle.  Ebox/ETAF build their pixel
+     alignment (spacers, fractional padding, table columns) from
+     `display (space :width (N))' glyphs, so skipping them leaves stale
+     pixels from the previous buffer and collapses the layout.  Paint the
+     run exactly like x_draw_stretch_glyph_string does.  */
+  if (s->first_glyph->type == STRETCH_GLYPH)
+    {
+      int width = s->background_width > 0 ? s->background_width : s->width;
+      uint32_t color;
+
+      if (width <= 0)
+	return;
+      if (s->hl == DRAW_CURSOR)
+	{
+	  unsigned long px = FRAME_OUTPUT_DATA (s->f)->cursor_pixel;
+
+	  color = (uint32_t) (px >= 0 ? px : FRAME_FOREGROUND_PIXEL (s->f));
+	}
+      else
+	color = (uint32_t) s->face->background;
+      ohos_draw_fill (s->x, s->y, width, s->height, color);
       return;
     }
 
