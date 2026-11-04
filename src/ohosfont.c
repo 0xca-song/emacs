@@ -455,12 +455,12 @@ ohosfont_list (struct frame *f, Lisp_Object font_spec)
   name = ohosfont_family_name (family);
   if (!ohosfont_family_installed (mgr, name))
     {
-      /* The requested family is not installed.  Keep the driver's
-         default monospace family; `open_font' resolves the generic
-         "monospace" alias when that is missing as well.  Probe the
-         styles through the alias so that bold and italic specs still
-         find an entity.  */
-      family = ohosfont_default_family ();
+      /* The requested family is not installed: generic aliases such as
+         "Sans Serif" are not real families on this platform.  Keep the
+         requested family in the entity (font matching compares it against
+         the spec, and rewriting it here makes Emacs discard the entity,
+         leaving the face without a font), but probe the styles through
+         the default family; opening falls back to the platform typeface.  */
       name = OHOSFONT_DEFAULT_FAMILY;
       if (!ohosfont_family_installed (mgr, name))
         name = "monospace";

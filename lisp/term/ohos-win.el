@@ -265,12 +265,14 @@ Return the chosen command when it was executed."
 
 (add-hook 'window-setup-hook #'ohos-refresh-frame-faces)
 
-;; Image support: PNG (libpng, built with the OHOS NDK) and SVG (vendored
-;; nanosvg).  Both decode to RGBA and go through the backend's IMAGE_GLYPH
-;; blit.  The other types Emacs knows about (pbm, xbm, canvas) have no
-;; drawing path here, so they are not offered: claiming them would
-;; silently produce empty boxes.
-(setq image-types '(png svg))
+;; Image support: PNG through Emacs' own png_load (libpng, built with the
+;; OHOS NDK), SVG through the port's nanosvg loader (librsvg is not
+;; available).  Both decoders write into the backend pixmap, which the
+;; IMAGE_GLYPH path blits, and that pixmap path is generic: every type
+;; image.c registers can be drawn the same way.  So the list is Emacs'
+;; own plus svg, not a hand-picked subset (a subset makes create-image
+;; reject perfectly drawable types with "Invalid image type").
+(setq image-types (delete-dups (cons 'svg image-types)))
 
 
 (when (fboundp 'menu-bar-mode)

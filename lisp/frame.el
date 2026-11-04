@@ -2953,7 +2953,7 @@ DISPLAY can be a display name or a frame.
 If DISPLAY is omitted or nil, it defaults to the selected frame's display."
   (let ((frame-type (framep-on-display display)))
     (cond
-     ((memq frame-type '(x w32 ns haiku pgtk android))
+     ((memq frame-type '(x w32 ns haiku pgtk android ohos))
       (x-display-planes display))
      ((eq frame-type 'pc)
       4)
