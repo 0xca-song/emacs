@@ -219,32 +219,13 @@ Return the chosen command when it was executed."
 ;; `(background light)' face spec is skipped and faces such as `highlight'
 ;; or `mode-line-highlight' stay unspecified -- no hover highlight, no
 ;; coloured mode line (task book B-15).
-(defun ohos-setup-frame-faces (frame)
-  "Classify FRAME as a light, full-colour graphical frame and rebuild faces.
-The `display-type' / `background-mode' frame parameters are what
-`(class color)' / `(background light)' face specs are matched against, and
-`frame-set-background-mode' skips them when it thinks nothing changed, so
-they are set explicitly here before the faces are recalculated."
-  (when (and (frame-live-p frame) (display-graphic-p frame))
-    (with-selected-frame frame
-      (condition-case nil
-          (progn
-            (modify-frame-parameters
-             frame '((display-type . color) (background-mode . light)))
-            (when (fboundp 'frame-set-background-mode)
-              (condition-case nil
-                  (frame-set-background-mode frame)
-                (error nil)))
-            (dolist (face (face-list))
-              (condition-case nil
-                  (face-spec-recalc face frame)
-                (error nil))))
-        (error nil)))))
-
-(add-hook 'after-make-frame-functions #'ohos-setup-frame-faces)
-(condition-case nil
-    (ohos-setup-frame-faces (selected-frame))
-  (error nil))
+;; Image support is not implemented for OHOS frames: the backend is
+;; graphical but has no image drawing path, so `display-images-p' is true
+;; and the splash screen asks image.c for an image, which logs
+;; "Invalid image size" on every redisplay until the app dies.  Declared
+;; as a backend limitation, like the missing tool bar.
+(setq image-types nil)
+(setq fancy-splash-image nil)
 
 ;; Emacs' pointer auto-hide is a one-way trip on this backend: the hook
 ;; that shows the pointer again runs from the mouse-motion path, which the
