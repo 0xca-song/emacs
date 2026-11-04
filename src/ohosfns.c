@@ -824,6 +824,16 @@ ohos_create_frame (struct terminal *terminal, Lisp_Object parms)
   }
   /* Realize the standard faces and publish the initial title.  */
   ohos_set_name_internal (f, f->name);
+  {
+    /* Adopt the geometry the host already reported: the startup screen
+       decides between the fancy and plain layouts from (frame-height), so
+       the frame must be its real size before Lisp first looks at it.  */
+    int sw = 0, sh = 0;
+
+    ohos_last_surface_size (&sw, &sh);
+    if (sw > 0 && sh > 0)
+      change_frame_size (f, sw, sh, false, false, false);
+  }
   unbind_to (count, Qnil);
   return f;
 }
