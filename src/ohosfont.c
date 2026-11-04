@@ -792,6 +792,26 @@ ohosfont_face_flags (struct glyph_string *s, bool with_background)
   return flags;
 }
 
+/* Colours for a glyph string.
+
+   Draw_cursor means reverse video: every backend swaps the face colours
+   for the glyph under the cursor, and our driver has to do the same or
+   the cursor is drawn exactly like plain text (invisible).  */
+
+static inline uint32_t
+ohosfont_fg (struct glyph_string *s)
+{
+  return (uint32_t) (s->hl == DRAW_CURSOR
+                     ? s->face->background : s->face->foreground);
+}
+
+static inline uint32_t
+ohosfont_bg (struct glyph_string *s)
+{
+  return (uint32_t) (s->hl == DRAW_CURSOR
+                     ? s->face->foreground : s->face->background);
+}
+
 /* Draw the glyphs of an automatic composition.  The characters to
    draw are recorded in the composition's glyph string rather than in
    the row glyphs, which only carry glyph codes.  */
@@ -826,8 +846,7 @@ ohosfont_draw_gstring (struct glyph_string *s, int x, int y,
         width = 0;
       x += LGLYPH_XOFF (lglyph);
       ohos_draw_text (x, y, width, line_height, (unsigned) code,
-                      (uint32_t) s->face->foreground,
-                      (uint32_t) s->face->background, flags);
+                      ohosfont_fg (s), ohosfont_bg (s), flags);
       x += width;
     }
   return (int) (s->cmp_to - s->cmp_from);
@@ -869,8 +888,7 @@ ohosfont_draw (struct glyph_string *s, int from, int to, int x, int y,
       if (w <= 0)
         continue;
       ohos_draw_text (x, y, w, line_height, g->u.ch,
-                      (uint32_t) s->face->foreground,
-                      (uint32_t) s->face->background, flags);
+                      ohosfont_fg (s), ohosfont_bg (s), flags);
       x += w;
     }
   return to - from;
