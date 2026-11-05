@@ -547,7 +547,6 @@ ohosfont_open (struct frame *f, Lisp_Object entity, int pixel_size)
   OH_Drawing_FontStyleStruct style;
   const char *family;
 
-  (void) f;
   if (pixel_size <= 0)
     pixel_size = 12;
 
@@ -563,16 +562,26 @@ ohosfont_open (struct frame *f, Lisp_Object entity, int pixel_size)
   font = &info->font;
   font->driver = &ohosfont_driver;
   font->pixel_size = pixel_size;
-  font->height = ohos_height;
-  font->ascent = ohos_ascent;
-  font->descent = ohos_descent;
-  font->space_width = ohos_space_width;
-  font->min_width = 9;
-  font->max_width = 18;
-  font->average_width = ohos_space_width;
-  font->underline_position = ohos_underline_position;
-  font->underline_thickness = ohos_underline_thickness;
-  font->default_ascent = ohos_ascent;
+  /* The native renderer's cell is 9x18 at the default size.  Scale the
+     font metrics with PIXEL_SIZE so text-scale and face heights change the
+     actual glyph grid instead of being ignored.  */
+  int scaled_height = pixel_size > 0 ? pixel_size : 18;
+  int scaled_space = (scaled_height * 9 + 9) / 18;
+  int scaled_ascent = (scaled_height * 14 + 9) / 18;
+  if (scaled_space < 1)
+    scaled_space = 1;
+  if (scaled_ascent >= scaled_height)
+    scaled_ascent = scaled_height - 1;
+  font->height = scaled_height;
+  font->ascent = scaled_ascent;
+  font->descent = scaled_height - scaled_ascent;
+  font->space_width = scaled_space;
+  font->min_width = scaled_space;
+  font->max_width = scaled_space * 2;
+  font->average_width = scaled_space;
+  font->underline_position = (scaled_height * 15 + 9) / 18;
+  font->underline_thickness = (scaled_height + 9) / 18 > 1 ? (scaled_height + 9) / 18 : 1;
+  font->default_ascent = scaled_ascent;
   font->vertical_centering = 0;
   font->baseline_offset = 0;
   font->relative_compose = 0;
@@ -589,7 +598,8 @@ ohosfont_open (struct frame *f, Lisp_Object entity, int pixel_size)
   if (info->drawing_font && info->drawing_typeface)
     {
       OH_Drawing_FontSetTypeface (info->drawing_font, info->drawing_typeface);
-      OH_Drawing_FontSetTextSize (info->drawing_font, OHOSFONT_TEXT_SIZE);
+      OH_Drawing_FontSetTextSize (info->drawing_font,
+				  (float) scaled_height * (OHOSFONT_TEXT_SIZE / 18.0f));
     }
 
   info->cjk_typeface = ohosfont_match_cjk_typeface (family, style);
@@ -597,7 +607,7 @@ ohosfont_open (struct frame *f, Lisp_Object entity, int pixel_size)
   if (info->cjk_font && info->cjk_typeface)
     {
       OH_Drawing_FontSetTypeface (info->cjk_font, info->cjk_typeface);
-      OH_Drawing_FontSetTextSize (info->cjk_font, OHOSFONT_CJK_TEXT_SIZE);
+      OH_Drawing_FontSetTextSize (info->cjk_font, (float) scaled_height);
     }
 
   font->props[FONT_NAME_INDEX] = Ffont_xlfd_name (obj, Qnil, Qt);
@@ -848,7 +858,8 @@ ohosfont_draw_gstring (struct glyph_string *s, int x, int y,
   if (!composition_gstring_p (gstring))
     return 0;
 
-  line_height = FRAME_LINE_HEIGHT (s->f);
+  line_height = (s->font && s->font->height > 0
+		 ? s->font->height : FRAME_LINE_HEIGHT (s->f));
   flags = ohosfont_face_flags (s, with_background);
   for (i = s->cmp_from; i < s->cmp_to; i++)
     {
@@ -897,7 +908,8 @@ ohosfont_draw (struct glyph_string *s, int from, int to, int x, int y,
   if (from >= to || s->first_glyph->type != CHAR_GLYPH)
     return 0;
 
-  line_height = FRAME_LINE_HEIGHT (s->f);
+  line_height = (s->font && s->font->height > 0
+		 ? s->font->height : FRAME_LINE_HEIGHT (s->f));
   flags = ohosfont_face_flags (s, with_background);
   for (i = from; i < to; i++)
     {
