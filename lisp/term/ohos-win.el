@@ -306,6 +306,25 @@ Return the chosen command when it was executed."
   (with-selected-frame (or frame (selected-frame))
     (ohos-menu-bar-open-index 0)))
 
+;;; Custom Themes widget compatibility.
+
+;; `widget-button-click' waits for the release event and cancels the
+;; press when it sees motion.  With the OHOS pointer event stream the
+;; release is a separate `mouse-1' event, but the down/up pair can be
+;; consumed before the widget tracking loop sees it.  Invoke the widget
+;; at the release position directly, which is what a GUI mouse click is
+;; expected to do.
+(defun ohos-widget-button-press (event)
+  "Press the widget at the release position of EVENT."
+  (interactive "e")
+  (let ((pos (posn-point (event-start event))))
+    (when (and pos (get-char-property pos 'button))
+      (widget-button-press pos event))))
+
+(with-eval-after-load 'cus-theme
+  (define-key custom-theme-choose-mode-map [mouse-1]
+    #'ohos-widget-button-press))
+
 ;;; Development hook.
 
 ;; A writable file that is reloaded whenever it changes, so Lisp experiments
