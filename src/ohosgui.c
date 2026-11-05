@@ -1738,11 +1738,11 @@ ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
 {
   unsigned key, modifiers;
   int count = 0;
-  int mouse, button, mx, my, press, motion;
+  int mouse, button, mx, my, press, motion, wheel;
   (void) hold_quit;
 
   while (ohos_pop_input (&key, &modifiers, &mouse, &button, &mx, &my,
-			 &press, &motion))
+			 &press, &motion, &wheel))
     {
       struct input_event ev;
       int emods = 0;
@@ -1776,6 +1776,33 @@ ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
 	  if (!NILP (frame) && FRAME_LIVE_P (XFRAME (frame)))
 	    ohos_handle_surface_resize (XFRAME (frame), width, height);
 	  /* Same rule as above: side effect only, no event stored.  */
+	  continue;
+	}
+
+      if (wheel)
+	{
+	  struct frame *f = SELECTED_FRAME ();
+	  if (f && FRAME_LIVE_P (f))
+	    {
+	      int cw = FRAME_COLUMN_WIDTH (f);
+	      int lh = FRAME_LINE_HEIGHT (f);
+	      int px = mx * cw + cw / 2;
+	      int py = my * lh + lh / 2;
+	      if (px < 0)
+		px = 0;
+	      if (py < 0)
+		py = 0;
+	      EVENT_INIT (ev);
+	      ev.kind = WHEEL_EVENT;
+	      ev.modifiers = button ? down_modifier : up_modifier;
+	      XSETINT (ev.x, px);
+	      XSETINT (ev.y, py);
+	      ev.frame_or_window = selected_frame;
+	      ev.arg = Qnil;
+	      ev.timestamp = ohos_event_time ();
+	      kbd_buffer_store_event (&ev);
+	      count++;
+	    }
 	  continue;
 	}
 

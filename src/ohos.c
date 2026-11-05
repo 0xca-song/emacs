@@ -406,6 +406,7 @@ struct ohos_input_cmd
      (mouse-face, hand pointer) and `frame->mouse_moved'.  */
   int motion;
   int button, x, y, press;
+  int wheel;
 };
 
 static struct ohos_input_cmd input_ring[OHOS_INPUT_CAP];
@@ -473,6 +474,7 @@ ohos_input_key (unsigned key, unsigned modifiers, int pressed)
       input_ring[input_tail].modifiers = modifiers;
       input_ring[input_tail].mouse = 0;
       input_ring[input_tail].motion = 0;
+      input_ring[input_tail].wheel = 0;
       input_tail = (input_tail + 1) & OHOS_INPUT_MASK;
       input_count++;
     }
@@ -494,6 +496,7 @@ ohos_input_mouse (int button, int x, int y, unsigned modifiers, int press)
     {
       input_ring[input_tail].mouse = 1;
       input_ring[input_tail].motion = 0;
+      input_ring[input_tail].wheel = 0;
       input_ring[input_tail].button = button;
       input_ring[input_tail].x = x;
       input_ring[input_tail].y = y;
@@ -523,6 +526,7 @@ ohos_input_motion (int x, int y, unsigned modifiers)
     {
       input_ring[input_tail].mouse = 1;
       input_ring[input_tail].motion = 1;
+      input_ring[input_tail].wheel = 0;
       input_ring[input_tail].button = -1;
       input_ring[input_tail].x = x;
       input_ring[input_tail].y = y;
@@ -535,9 +539,37 @@ ohos_input_motion (int x, int y, unsigned modifiers)
   ohos_signal_input (was_empty);
 }
 
+void
+ohos_input_wheel (int delta, int col, int row)
+{
+  int was_empty;
+
+  pthread_mutex_lock (&input_lock);
+  was_empty = (input_count == 0);
+  if (input_count == OHOS_INPUT_CAP)
+    input_dropped++;
+  else
+    {
+      input_ring[input_tail].key = 0;
+      input_ring[input_tail].modifiers = 0;
+      input_ring[input_tail].mouse = 0;
+      input_ring[input_tail].motion = 0;
+      input_ring[input_tail].wheel = 1;
+      input_ring[input_tail].button = delta > 0 ? 1 : 0;
+      input_ring[input_tail].x = col;
+      input_ring[input_tail].y = row;
+      input_ring[input_tail].press = 0;
+      input_tail = (input_tail + 1) & OHOS_INPUT_MASK;
+      input_count++;
+    }
+  pthread_mutex_unlock (&input_lock);
+  ohos_signal_input (was_empty);
+}
+
 int
 ohos_pop_input (unsigned *key, unsigned *modifiers, int *mouse,
-		int *button, int *x, int *y, int *press, int *motion)
+		int *button, int *x, int *y, int *press, int *motion,
+		int *wheel)
 {
   int found = 0;
   pthread_mutex_lock (&input_lock);
@@ -548,6 +580,8 @@ ohos_pop_input (unsigned *key, unsigned *modifiers, int *mouse,
       *mouse = input_ring[input_head].mouse;
       if (motion)
 	*motion = input_ring[input_head].motion;
+      if (wheel)
+	*wheel = input_ring[input_head].wheel;
       *button = input_ring[input_head].button;
       *x = input_ring[input_head].x;
       *y = input_ring[input_head].y;
@@ -603,6 +637,7 @@ ohos_input_text (const char *text)
 	  input_ring[input_tail].modifiers = 0;
 	  input_ring[input_tail].mouse = 0;
 	  input_ring[input_tail].motion = 0;
+	  input_ring[input_tail].wheel = 0;
 	  input_tail = (input_tail + 1) & OHOS_INPUT_MASK;
 	  input_count++;
 	}
@@ -630,6 +665,7 @@ ohos_input_expose (int x, int y, int width, int height)
       input_ring[input_tail].key = OHOS_INPUT_EXPOSE_FLAG;
       input_ring[input_tail].modifiers = 0;
       input_ring[input_tail].mouse = 0;
+      input_ring[input_tail].wheel = 0;
       input_ring[input_tail].button = width;
       input_ring[input_tail].x = x;
       input_ring[input_tail].y = y;
@@ -711,6 +747,7 @@ ohos_input_resize (int width, int height)
 	| ((unsigned) width & 0xffffu);
       input_ring[input_tail].modifiers = (unsigned) height;
       input_ring[input_tail].mouse = 0;
+      input_ring[input_tail].wheel = 0;
       input_tail = (input_tail + 1) & OHOS_INPUT_MASK;
       input_count++;
     }
