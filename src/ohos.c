@@ -19,12 +19,15 @@
 #include "lisp.h"
 #include "ohosgui.h"
 
-#define OHOS_DRAW_CMD_CAP 16384
+/* A full redraw on a 4K/320-column frame can exceed 30k glyph commands.
+   Keep enough headroom that a cold resize does not immediately overflow
+   the ring and force an epoch-gap repaint.  */
+#define OHOS_DRAW_CMD_CAP 65536
 #define OHOS_DRAW_CMD_MASK (OHOS_DRAW_CMD_CAP - 1)
 
 /* One pump pass hands at most this many commands to the host, so a long
    redisplay cannot monopolise the UI thread.  */
-#define OHOS_DRAW_BATCH_MAX 256
+#define OHOS_DRAW_BATCH_MAX 512
 
 static struct ohos_draw_command draw_ring[OHOS_DRAW_CMD_CAP];
 static unsigned draw_head, draw_tail, draw_count;
@@ -43,6 +46,7 @@ static ohos_draw_scroll_fn draw_scroll_sink;
 static ohos_draw_present_fn draw_present_sink;
 static ohos_draw_batch_fn draw_batch_sink;
 static ohos_pump_done_fn pump_done_sink;
+static ohos_draw_wakeup_fn draw_wakeup_sink;
 static unsigned draw_epoch;
 
 void
@@ -133,6 +137,12 @@ ohos_set_pump_done_sink (ohos_pump_done_fn fn)
   pump_done_sink = fn;
 }
 
+void
+ohos_set_draw_wakeup_sink (ohos_draw_wakeup_fn fn)
+{
+  draw_wakeup_sink = fn;
+}
+
 unsigned
 ohos_draw_epoch (void)
 {
@@ -143,6 +153,19 @@ unsigned long
 ohos_draw_dropped_count (void)
 {
   return draw_dropped;
+}
+
+/* Number of commands waiting for the UI thread.  The host uses this to
+   decide whether to map a NativeWindow buffer before pumping.  */
+int
+ohos_draw_pending (void)
+{
+  int n;
+
+  pthread_mutex_lock (&draw_lock);
+  n = (int) draw_count;
+  pthread_mutex_unlock (&draw_lock);
+  return n;
 }
 
 static void
@@ -239,6 +262,8 @@ ohos_draw_present (void)
 {
   struct ohos_draw_command cmd = { .op = OHOS_OP_PRESENT };
   enqueue (&cmd);
+  if (draw_wakeup_sink)
+    draw_wakeup_sink ();
 }
 
 void

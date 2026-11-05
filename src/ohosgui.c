@@ -198,19 +198,20 @@ ohos_draw_glyph_string (struct glyph_string *s)
   if (s->first_glyph->type == IMAGE_GLYPH)
     {
       struct image *img = s->img;
-      { char d[192];
-	snprintf (d, sizeof d, "image glyph: img=%p pixmap=%p failed=%d w=%d h=%d spec_type=%s",
-		  (void *) img, img ? img->pixmap : NULL,
-		  img ? (int) img->load_failed_p : -1,
-		  img ? img->width : -1, img ? img->height : -1,
-		  (img && SYMBOLP (AREF (img->spec, 0))) ? "?" : "?");
-	ohos_log (d); }
-      { char d[160];
-        snprintf (d, sizeof d, "image glyph: img=%p pixmap=%p w=%d h=%d lisp=%d",
-                  (void *) img, img ? img->pixmap : NULL,
-                  img ? img->width : -1, img ? img->height : -1,
-                  (img && STRINGP (img->lisp_data)) ? 1 : 0);
-        ohos_log (d); }
+      /* This used to log twice for every image glyph on every redisplay.
+	 ETAF redraws many images per frame, so the formatting alone showed
+	 up in profiles.  Keep a few samples for diagnostics.  */
+      static int image_logs;
+      if (image_logs++ < 8)
+	{
+	  char d[192];
+	  snprintf (d, sizeof d,
+		    "image glyph: img=%p pixmap=%p w=%d h=%d lisp=%d",
+		    (void *) img, img ? img->pixmap : NULL,
+		    img ? img->width : -1, img ? img->height : -1,
+		    (img && STRINGP (img->lisp_data)) ? 1 : 0);
+	  ohos_log (d);
+	}
 
       if (img && img->pixmap && img->width > 0 && img->height > 0)
 	{
@@ -1783,18 +1784,22 @@ ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
 	  /* No EVENT: motion only updates the highlight state and must not
 	     add to the count of events read.  */
 	  bool moved = ohos_note_mouse_movement (SELECTED_FRAME (), mx, my);
-	  {
-	    struct frame *df = SELECTED_FRAME ();
-	    Mouse_HLInfo *hl = df ? MOUSE_HL_INFO (df) : NULL;
-	    char dbg[192];
-	    snprintf (dbg, sizeof dbg,
-		      "motion x=%d y=%d highlight=%d inv=%d glyphs=%d defer=%d",
-		      mx, my, (int) moved,
-		      df ? (int) df->pointer_invisible : -1,
-		      df ? (int) df->glyphs_initialized_p : -1,
-		      hl ? (int) hl->mouse_face_defer : -1);
-	    ohos_log (dbg);
-	  }
+	  /* Pointer motion can arrive hundreds of times per second; log a
+	     short sample instead of formatting a line for every event.  */
+	  static int motion_logs;
+	  if (motion_logs++ < 20)
+	    {
+	      struct frame *df = SELECTED_FRAME ();
+	      Mouse_HLInfo *hl = df ? MOUSE_HL_INFO (df) : NULL;
+	      char dbg[192];
+	      snprintf (dbg, sizeof dbg,
+			"motion x=%d y=%d highlight=%d inv=%d glyphs=%d defer=%d",
+			mx, my, (int) moved,
+			df ? (int) df->pointer_invisible : -1,
+			df ? (int) df->glyphs_initialized_p : -1,
+			hl ? (int) hl->mouse_face_defer : -1);
+	      ohos_log (dbg);
+	    }
 	  (void) moved;
 	  continue;
 	}
