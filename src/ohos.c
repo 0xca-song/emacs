@@ -25,6 +25,11 @@
 #define OHOS_DRAW_CMD_CAP 65536
 #define OHOS_DRAW_CMD_MASK (OHOS_DRAW_CMD_CAP - 1)
 
+/* IMAGE commands carry an owned RGBA copy.  A full ring of 4K/ETAF images
+   would otherwise pin tens of gigabytes; keep a bounded byte budget and
+   drop new images when the UI is too far behind.  */
+#define OHOS_IMAGE_BYTES_MAX (64u * 1024u * 1024u)
+
 /* One pump pass hands at most this many commands to the host, so a long
    redisplay cannot monopolise the UI thread.  */
 #define OHOS_DRAW_BATCH_MAX 512
@@ -32,6 +37,7 @@
 static struct ohos_draw_command draw_ring[OHOS_DRAW_CMD_CAP];
 static unsigned draw_head, draw_tail, draw_count;
 static unsigned long draw_dropped;
+static size_t draw_image_bytes;
 static pthread_mutex_t draw_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static ohos_frame_sink_fn ohos_frame_sink;
@@ -169,17 +175,40 @@ ohos_draw_pending (void)
 }
 
 static void
+release_image (const struct ohos_draw_command *cmd)
+{
+  if (cmd->op != OHOS_OP_IMAGE || !cmd->ptr)
+    return;
+  pthread_mutex_lock (&draw_lock);
+  if (draw_image_bytes >= cmd->ptr_len)
+    draw_image_bytes -= cmd->ptr_len;
+  else
+    draw_image_bytes = 0;
+  pthread_mutex_unlock (&draw_lock);
+  xfree ((void *) cmd->ptr);
+}
+
+static void
 enqueue (const struct ohos_draw_command *cmd)
 {
+  bool image = cmd->op == OHOS_OP_IMAGE && cmd->ptr;
+
   pthread_mutex_lock (&draw_lock);
-  if (draw_count == OHOS_DRAW_CMD_CAP)
-    draw_dropped++;
-  else
+  bool over_budget = image
+    && (size_t) cmd->ptr_len > OHOS_IMAGE_BYTES_MAX - draw_image_bytes;
+  if (draw_count == OHOS_DRAW_CMD_CAP || over_budget)
     {
-      draw_ring[draw_tail] = *cmd;
-      draw_tail = (draw_tail + 1) & OHOS_DRAW_CMD_MASK;
-      draw_count++;
+      draw_dropped++;
+      pthread_mutex_unlock (&draw_lock);
+      if (image)
+	xfree ((void *) cmd->ptr);
+      return;
     }
+  if (image)
+    draw_image_bytes += cmd->ptr_len;
+  draw_ring[draw_tail] = *cmd;
+  draw_tail = (draw_tail + 1) & OHOS_DRAW_CMD_MASK;
+  draw_count++;
   pthread_mutex_unlock (&draw_lock);
 }
 
@@ -221,10 +250,16 @@ ohos_draw_image (int x, int y, int w, int h, const void *rgba, unsigned len)
       ohos_log (dbg);
       return;
     }
-  { char dbg[128];
-    snprintf (dbg, sizeof dbg, "image draw x=%d y=%d w=%d h=%d len=%u",
-	      x, y, w, h, len);
-    ohos_log (dbg); }
+  {
+    static int image_logs;
+    if (image_logs++ < 8)
+      {
+	char dbg[128];
+	snprintf (dbg, sizeof dbg, "image draw x=%d y=%d w=%d h=%d len=%u",
+		  x, y, w, h, len);
+	ohos_log (dbg);
+      }
+  }
   /* The command must own its pixels: it is consumed later, on the UI
      thread, while the caller's buffer is already gone.  */
   void *owned = xmalloc (len);
@@ -310,8 +345,7 @@ ohos_pump_draw_commands (void)
 	{
 	  draw_batch_sink (batch, n);
 	  for (i = 0; i < n; i++)
-	    if (batch[i].op == OHOS_OP_IMAGE && batch[i].ptr)
-	      xfree ((void *) batch[i].ptr);
+	    release_image (&batch[i]);
 	  continue;
 	}
 
@@ -352,6 +386,7 @@ ohos_pump_draw_commands (void)
 	case OHOS_OP_END:
 	  break;
 	}
+	  release_image (&cmd);
 	}
     }
 }
