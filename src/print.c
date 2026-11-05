@@ -2270,6 +2270,14 @@ static void
 print_object (Lisp_Object obj, Lisp_Object printcharfun, bool escapeflag)
 {
   ptrdiff_t base_depth = print_depth;
+  /* A malformed/self-referential interval plist can otherwise recurse
+     forever through print_object.  Keep printing bounded; the placeholder
+     is preferable to an unresponsive editor.  */
+  if (print_depth > 1000)
+    {
+      print_c_string ("#<print-depth>", printcharfun);
+      return;
+    }
   ptrdiff_t base_sp = prstack.sp;
   char buf[max (sizeof "from..to..in " + 2 * INT_STRLEN_BOUND (EMACS_INT),
 		max (sizeof " . #" + INT_STRLEN_BOUND (intmax_t),
