@@ -338,8 +338,6 @@ Return the chosen command when it was executed."
       (setq browse-url-browser-function #'eww-browse-url))
   (error nil))
 
-(when (fboundp 'scroll-bar-mode)
-  (scroll-bar-mode 1))
 
 ;;; Development hook.
 
