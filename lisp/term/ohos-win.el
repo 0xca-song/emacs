@@ -332,11 +332,31 @@ Return the chosen command when it was executed."
   (xterm-mouse-mode -1))
 
 ;; Use Eww for in-program links instead of handing them to another app.
+;; Local file: links must use eww-open-file; eww-browse-url leaves them
+;; in a blank *eww* buffer on this backend.
+(defun ohos-browse-url (url &rest _args)
+  "Open URL internally with Eww, handling file: URIs explicitly."
+  (require 'eww)
+  (if (string-prefix-p "file:" url)
+      (let* ((parsed (url-generic-parse-url url))
+             (path (url-unhex-string (url-filename parsed))))
+        (eww-open-file path))
+    (eww-browse-url url)))
+
 (condition-case nil
     (progn
       (require 'eww)
-      (setq browse-url-browser-function #'eww-browse-url))
+      (setq browse-url-browser-function #'ohos-browse-url))
   (error nil))
+
+;; scroll-bar-mode only changes the default for future frames.  Apply it
+;; to the already-created OHOS frame after init.
+(defun ohos-enable-scroll-bars ()
+  (when (display-graphic-p)
+    (ignore-errors
+      (set-frame-parameter nil 'vertical-scroll-bars 'right))))
+
+(add-hook 'after-init-hook #'ohos-enable-scroll-bars)
 
 
 ;;; Development hook.
