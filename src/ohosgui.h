@@ -404,7 +404,9 @@ void ohos_input_raw (const char *data, size_t len);
 int ohos_input_wait_fd (void);
 int ohos_input_key (unsigned key, unsigned modifiers, int pressed);
 int ohos_pop_input (unsigned *key, unsigned *modifiers, int *mouse,
-		    int *button, int *x, int *y, int *press, int *motion);
+		    int *button, int *x, int *y, int *press, int *motion,
+		    int *wheel);
+void ohos_input_wheel (int delta, int col, int row, unsigned modifiers);
 void ohos_input_mouse (int button, int x, int y, unsigned modifiers,
 		       int press);
 /* Pointer motion only: drives note_mouse_highlight (mouse-face, hand

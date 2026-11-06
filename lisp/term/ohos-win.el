@@ -328,6 +328,8 @@ Return the chosen command when it was executed."
 ;; Native wheel events are delivered by the OHOS backend as WHEEL_EVENT.
 (when (fboundp 'mouse-wheel-mode)
   (mouse-wheel-mode 1))
+(when (fboundp 'xterm-mouse-mode)
+  (xterm-mouse-mode -1))
 
 ;;; Development hook.
 
