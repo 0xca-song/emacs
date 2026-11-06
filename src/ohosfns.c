@@ -942,6 +942,30 @@ HarmonyOS NotificationKit session.  */)
   return Qnil;
 }
 
+DEFUN ("ohos-host-user-directory", Fohos_host_user_directory,
+       Sohos_host_user_directory, 0, 0, 0,
+       doc: /* Ask the host picker for an optional user directory URI.
+Returns the directory URI, or nil when unavailable.  This is a document
+URI, not a POSIX path; HOME remains the application runtime.  */)
+  (void)
+{
+  static int next_user_dir_id = 0x21000000;
+  char text[2048];
+  int id = next_user_dir_id++;
+
+  if (!ohos_gui_available ())
+    return Qnil;
+  if (next_user_dir_id < 0)
+    next_user_dir_id = 0x21000000;
+  ohos_host_command ("pick-user-dir %d", id);
+  text[0] = '\0';
+  if (!ohos_host_wait_result (id, 30000, NULL, text, sizeof text))
+    return Qnil;
+  if (text[0] == '\0')
+    return Qnil;
+  return build_string (text);
+}
+
 DEFUN ("ohos-battery", Fohos_battery, Sohos_battery, 0, 0, 0,
        doc: /* Return battery state reported by the ArkUI host as JSON.
 Value is a string such as
@@ -1193,6 +1217,7 @@ syms_of_ohosfns (void)
   defsubr (&Sohos_set_title);
   defsubr (&Sohos_set_clipboard);
   defsubr (&Sohos_frame_host_operation);
+  defsubr (&Sohos_host_user_directory);
   defsubr (&Sohos_notify);
   defsubr (&Sohos_battery);
   defsubr (&Sohos_debug_rif);
