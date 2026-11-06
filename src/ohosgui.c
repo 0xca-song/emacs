@@ -1795,6 +1795,12 @@ ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
 	      EVENT_INIT (ev);
 	      ev.kind = WHEEL_EVENT;
 	      ev.modifiers = button ? down_modifier : up_modifier;
+	      if (modifiers & OHOS_MOD_CTRL)
+		ev.modifiers |= ctrl_modifier;
+	      if (modifiers & OHOS_MOD_SHIFT)
+		ev.modifiers |= shift_modifier;
+	      if (modifiers & OHOS_MOD_ALT)
+		ev.modifiers |= meta_modifier;
 	      XSETINT (ev.x, px);
 	      XSETINT (ev.y, py);
 	      ev.frame_or_window = selected_frame;

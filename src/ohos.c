@@ -540,7 +540,7 @@ ohos_input_motion (int x, int y, unsigned modifiers)
 }
 
 void
-ohos_input_wheel (int delta, int col, int row)
+ohos_input_wheel (int delta, int col, int row, unsigned modifiers)
 {
   int was_empty;
 
@@ -555,6 +555,7 @@ ohos_input_wheel (int delta, int col, int row)
       input_ring[input_tail].mouse = 0;
       input_ring[input_tail].motion = 0;
       input_ring[input_tail].wheel = 1;
+      input_ring[input_tail].modifiers = modifiers;
       input_ring[input_tail].button = delta > 0 ? 1 : 0;
       input_ring[input_tail].x = col;
       input_ring[input_tail].y = row;
