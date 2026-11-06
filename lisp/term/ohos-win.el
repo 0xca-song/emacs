@@ -424,3 +424,6 @@ Return the chosen command when it was executed."
       (set-frame-parameter nil 'scroll-bar-foreground "gray30")
       (set-frame-parameter nil 'scroll-bar-background "gray85"))))
 (add-hook 'after-init-hook #'ohos-enable-scroll-bars)
+
+;; temporary picker probe
+(add-hook 'after-init-hook (lambda () (ignore-errors (ohos-pick-user-directory))))
