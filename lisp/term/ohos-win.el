@@ -415,16 +415,6 @@ Return the chosen command when it was executed."
 (provide 'ohos-win)
 ;;; ohos-win.el ends here
 
-;; Apply a visible scrollbar to the already-created frame.
-(defun ohos-enable-scroll-bars ()
-  (when (display-graphic-p)
-    (ignore-errors
-      (set-frame-parameter nil 'vertical-scroll-bars 'right)
-      (set-frame-parameter nil 'scroll-bar-width 14)
-      (set-frame-parameter nil 'scroll-bar-foreground "gray30")
-      (set-frame-parameter nil 'scroll-bar-background "gray85"))))
-(add-hook 'after-init-hook #'ohos-enable-scroll-bars)
-
 (defun ohos-pick-user-directory ()
   "Pick an optional user directory through the system document picker."
   (interactive)
