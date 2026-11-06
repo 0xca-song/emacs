@@ -343,9 +343,28 @@ Return the chosen command when it was executed."
         (eww-open-file path))
     (eww-browse-url url)))
 
+;; The linked libxml2 parser hangs on this target.  Use xml.el for the
+;; HTML subset Eww needs; strip Eww's local-file Content-Type header and
+;; the ordinary HTML doctype before parsing.
+(defun ohos-libxml-parse-html-region (start end &optional _base-url _discard)
+  (require 'xml)
+  (save-restriction
+    (save-excursion
+      (narrow-to-region start end)
+      (goto-char (point-min))
+      (let ((case-fold-search t))
+        (when (looking-at "Content-[Tt]ype:[^\n]*\n\n")
+          (delete-region (point-min) (match-end 0))))
+      (goto-char (point-min))
+      (let ((case-fold-search t))
+        (when (re-search-forward "<!doctype[^>]*>" nil t)
+          (replace-match "")))
+      (xml-parse-region (point-min) (point-max)))))
+
 (condition-case nil
     (progn
       (require 'eww)
+      (defalias 'libxml-parse-html-region #'ohos-libxml-parse-html-region)
       (setq browse-url-browser-function #'ohos-browse-url))
   (error nil))
 
