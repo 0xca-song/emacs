@@ -434,6 +434,3 @@ Return the chosen command when it was executed."
           (setq ohos-user-directory uri)
           (message "User directory URI: %s" uri))
       (message "User directory picker cancelled"))))
-
-;; temporary picker probe
-(add-hook 'after-init-hook (lambda () (ignore-errors (ohos-pick-user-directory))))
