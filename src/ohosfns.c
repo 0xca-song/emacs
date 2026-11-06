@@ -942,8 +942,8 @@ HarmonyOS NotificationKit session.  */)
   return Qnil;
 }
 
-DEFUN ("ohos-host-user-directory", Fohos_host_user_directory,
-       Sohos_host_user_directory, 0, 0, 0,
+DEFUN ("ohos-host-user-directory", Fohos_user_directory,
+       Sohos_user_directory, 0, 0, 0,
        doc: /* Ask the host picker for an optional user directory URI.
 Returns the directory URI, or nil when unavailable.  This is a document
 URI, not a POSIX path; HOME remains the application runtime.  */)
@@ -1217,7 +1217,7 @@ syms_of_ohosfns (void)
   defsubr (&Sohos_set_title);
   defsubr (&Sohos_set_clipboard);
   defsubr (&Sohos_frame_host_operation);
-  defsubr (&Sohos_host_user_directory);
+  defsubr (&Sohos_user_directory);
   defsubr (&Sohos_notify);
   defsubr (&Sohos_battery);
   defsubr (&Sohos_debug_rif);
