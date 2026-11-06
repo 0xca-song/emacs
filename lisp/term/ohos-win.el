@@ -368,14 +368,7 @@ Return the chosen command when it was executed."
       (setq browse-url-browser-function #'ohos-browse-url))
   (error nil))
 
-;; scroll-bar-mode only changes the default for future frames.  Apply it
-;; to the already-created OHOS frame after init.
-(defun ohos-enable-scroll-bars ()
-  (when (display-graphic-p)
-    (ignore-errors
-      (set-frame-parameter nil 'vertical-scroll-bars 'right))))
 
-(add-hook 'after-init-hook #'ohos-enable-scroll-bars)
 
 
 ;;; Development hook.
