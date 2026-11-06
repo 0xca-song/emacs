@@ -728,7 +728,7 @@ ohos_create_frame (struct terminal *terminal, Lisp_Object parms)
 			 NULL, NULL, RES_TYPE_NUMBER);
   gui_default_parameter (f, parms, Qbottom_divider_width, make_fixnum (0),
 			 NULL, NULL, RES_TYPE_NUMBER);
-  gui_default_parameter (f, parms, Qvertical_scroll_bars, Qnil,
+  gui_default_parameter (f, parms, Qvertical_scroll_bars, Qright,
 			 "verticalScrollBars", "ScrollBars", RES_TYPE_SYMBOL);
   gui_default_parameter (f, parms, Qhorizontal_scroll_bars, Qnil,
 			 "horizontalScrollBars", "ScrollBars",

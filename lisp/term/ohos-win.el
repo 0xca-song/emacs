@@ -331,6 +331,16 @@ Return the chosen command when it was executed."
 (when (fboundp 'xterm-mouse-mode)
   (xterm-mouse-mode -1))
 
+;; Use Eww for in-program links instead of handing them to another app.
+(condition-case nil
+    (progn
+      (require 'eww)
+      (setq browse-url-browser-function #'eww-browse-url))
+  (error nil))
+
+(when (fboundp 'scroll-bar-mode)
+  (scroll-bar-mode 1))
+
 ;;; Development hook.
 
 ;; A writable file that is reloaded whenever it changes, so Lisp experiments
