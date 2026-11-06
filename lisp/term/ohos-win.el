@@ -425,5 +425,15 @@ Return the chosen command when it was executed."
       (set-frame-parameter nil 'scroll-bar-background "gray85"))))
 (add-hook 'after-init-hook #'ohos-enable-scroll-bars)
 
+(defun ohos-pick-user-directory ()
+  "Pick an optional user directory through the system document picker."
+  (interactive)
+  (let ((uri (ohos-host-user-directory)))
+    (if uri
+        (progn
+          (setq ohos-user-directory uri)
+          (message "User directory URI: %s" uri))
+      (message "User directory picker cancelled"))))
+
 ;; temporary picker probe
 (add-hook 'after-init-hook (lambda () (ignore-errors (ohos-pick-user-directory))))
