@@ -231,18 +231,9 @@ extern bool ohos_defined_color (struct frame *, const char *, Emacs_Color *,
 				bool, bool);
 extern void ohos_query_frame_background_color (struct frame *, Emacs_Color *);
 
-typedef void (*ohos_frame_sink_fn) (int x, int y, int width, unsigned code,
-                                    uint32_t fg, uint32_t bg,
-                                    int with_background);
 typedef void (*ohos_log_fn) (const char *);
-typedef void (*ohos_clear_fn) (void);
 void ohos_set_log_sink (ohos_log_fn fn);
 void ohos_log (const char *s);
-void ohos_set_frame_sink (ohos_frame_sink_fn fn);
-void ohos_frame_text (int x, int y, int width, unsigned code,
-                      uint32_t fg, uint32_t bg, int with_background);
-void ohos_set_clear_sink (ohos_clear_fn fn);
-void ohos_frame_clear (void);
 
 /* Native draw command queue.  Emacs redisplay only enqueues commands;
    the ArkUI host thread drains them with ohos_pump_draw_commands.  */

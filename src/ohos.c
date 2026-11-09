@@ -40,9 +40,7 @@ static unsigned long draw_dropped;
 static size_t draw_image_bytes;
 static pthread_mutex_t draw_lock = PTHREAD_MUTEX_INITIALIZER;
 
-static ohos_frame_sink_fn ohos_frame_sink;
 static ohos_log_fn ohos_log_sink;
-static ohos_clear_fn ohos_clear_sink;
 
 static ohos_draw_clear_fn draw_clear_sink;
 static ohos_draw_fill_fn draw_fill_sink;
@@ -66,33 +64,6 @@ ohos_log (const char *s)
 {
   if (ohos_log_sink)
     ohos_log_sink (s);
-}
-
-void
-ohos_set_frame_sink (ohos_frame_sink_fn fn)
-{
-  ohos_frame_sink = fn;
-}
-
-void
-ohos_frame_text (int x, int y, int width, unsigned code, uint32_t fg,
-                 uint32_t bg, int with_background)
-{
-  if (ohos_frame_sink)
-    ohos_frame_sink (x, y, width, code, fg, bg, with_background);
-}
-
-void
-ohos_set_clear_sink (ohos_clear_fn fn)
-{
-  ohos_clear_sink = fn;
-}
-
-void
-ohos_frame_clear (void)
-{
-  if (ohos_clear_sink)
-    ohos_clear_sink ();
 }
 
 void
