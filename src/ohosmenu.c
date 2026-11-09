@@ -480,10 +480,7 @@ ohos_menu_show (struct frame *f, int x, int y, int menuflags,
     size_t chunk = 4000;
     size_t total = (len + chunk - 1) / chunk;
 
-    if (total <= 1)
-      ohos_host_command ("menu-open %d %s %s", id,
-			 dialog ? "dialog" : "menu", json);
-    else
+    if (total > 1)
       {
 	size_t k;
 
