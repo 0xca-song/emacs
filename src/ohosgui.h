@@ -2,6 +2,7 @@
 #define OHOS_GUI_H
 #include <stdint.h>
 #include "lisp.h"
+#include "ohos_host_abi.h"
 #include "frame.h"
 #include "termhooks.h"
 #include "dispextern.h"
@@ -231,37 +232,13 @@ extern bool ohos_defined_color (struct frame *, const char *, Emacs_Color *,
 				bool, bool);
 extern void ohos_query_frame_background_color (struct frame *, Emacs_Color *);
 
-typedef void (*ohos_log_fn) (const char *);
-void ohos_set_log_sink (ohos_log_fn fn);
 void ohos_log (const char *s);
+/* Installed once by ohos_abi.c before Emacs starts.  */
+void ohos_set_host_api (const struct ohos_host_api *api);
+const struct ohos_host_api *ohos_get_host_api (void);
 
 /* Native draw command queue.  Emacs redisplay only enqueues commands;
    the ArkUI host thread drains them with ohos_pump_draw_commands.  */
-typedef void (*ohos_draw_clear_fn) (uint32_t bg);
-typedef void (*ohos_draw_fill_fn) (int x, int y, int w, int h,
-				   uint32_t color);
-typedef void (*ohos_draw_text_fn) (int x, int y, int w, int h,
-				   unsigned code, uint32_t fg,
-				   uint32_t bg, uint32_t flags);
-typedef void (*ohos_draw_cursor_fn) (int x, int y, int w, int h, int bar,
-				     uint32_t fg, uint32_t bg,
-				     uint32_t flags, int kind);
-typedef void (*ohos_draw_scroll_fn) (int x, int from_y, int width,
-				     int height, int to_y);
-typedef void (*ohos_draw_present_fn) (void);
-
-void ohos_set_draw_clear_sink (ohos_draw_clear_fn fn);
-void ohos_set_draw_fill_sink (ohos_draw_fill_fn fn);
-void ohos_set_draw_text_sink (ohos_draw_text_fn fn);
-void ohos_set_draw_cursor_sink (ohos_draw_cursor_fn fn);
-void ohos_set_draw_scroll_sink (ohos_draw_scroll_fn fn);
-void ohos_set_draw_present_sink (ohos_draw_present_fn fn);
-/* Native frame property sinks: the host (ArkUI page) installs these to
-   apply window title/clipboard changes.  */
-typedef void (*ohos_set_title_fn) (const char *);
-typedef void (*ohos_set_clipboard_fn) (const char *);
-void ohos_set_title_sink (ohos_set_title_fn fn);
-void ohos_set_clipboard_sink (ohos_set_clipboard_fn fn);
 void ohos_set_title (const char *title);
 
 /* ------------------------------------------------------------------ */
@@ -313,45 +290,6 @@ void ohos_set_clipboard (const char *b64);
    bracket one redisplay pass so the host can detect lost commands (the
    epoch sequence has a gap) and ask for a full repaint.  */
 
-enum ohos_draw_opcode
-{
-  OHOS_OP_CLEAR = 1,
-  OHOS_OP_FILL,
-  OHOS_OP_TEXT,
-  OHOS_OP_CURSOR,
-  OHOS_OP_SCROLL,
-  OHOS_OP_PRESENT,
-  OHOS_OP_IMAGE,
-  OHOS_OP_BEGIN,
-  OHOS_OP_END
-};
-
-struct ohos_draw_command
-{
-  int op;
-  int x, y, w, h;
-  int to_y;
-  unsigned code;
-  uint32_t fg, bg;
-  uint32_t flags;
-  unsigned epoch;
-  /* IMAGE op: RGBA pixels (same process, valid during the pump).  */
-  const void *ptr;
-  unsigned ptr_len;
-};
-
-typedef void (*ohos_draw_batch_fn) (const struct ohos_draw_command *, int);
-
-void ohos_set_draw_batch_sink (ohos_draw_batch_fn fn);
-
-/* Called once after the pump drained the queue, so the host can present
-   at most once per tick instead of once per batch.  */
-typedef void (*ohos_pump_done_fn) (void);
-/* Optional UI-thread wakeup: called once after a PRESENT is queued, so
-   the host can pump before its next periodic tick.  */
-typedef void (*ohos_draw_wakeup_fn) (void);
-void ohos_set_pump_done_sink (ohos_pump_done_fn fn);
-void ohos_set_draw_wakeup_sink (ohos_draw_wakeup_fn fn);
 unsigned ohos_draw_epoch (void);
 unsigned long ohos_draw_dropped_count (void);
 int ohos_draw_pending (void);
@@ -360,10 +298,6 @@ void ohos_draw_end (unsigned epoch);
 
 /* Frame geometry published to the host so it can allocate a bitmap of
    exactly the frame pixels instead of guessing from a cell grid.  */
-typedef void (*ohos_frame_metrics_fn) (int width, int height, int cell_width,
-				       int cell_height, int ascent,
-				       int descent);
-void ohos_set_frame_metrics_sink (ohos_frame_metrics_fn fn);
 void ohos_publish_frame_metrics (struct frame *f);
 /* Called once the first redisplay of a frame finished.  */
 void ohos_menubar_mark_ready (void);

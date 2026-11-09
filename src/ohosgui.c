@@ -2094,41 +2094,22 @@ ohos_create_terminal (struct ohos_display_info *dpyinfo)
   return terminal;
 }
 
-static ohos_set_title_fn ohos_title_sink;
-static ohos_set_clipboard_fn ohos_clipboard_sink;
-
-void
-ohos_set_title_sink (ohos_set_title_fn fn)
-{
-  ohos_title_sink = fn;
-}
-
-void
-ohos_set_clipboard_sink (ohos_set_clipboard_fn fn)
-{
-  ohos_clipboard_sink = fn;
-}
-
 void
 ohos_set_title (const char *title)
 {
-  if (ohos_title_sink)
-    ohos_title_sink (title);
+  const struct ohos_host_api *api = ohos_get_host_api ();
+
+  if (api && api->frame.title)
+    api->frame.title (title);
 }
 
 void
 ohos_set_clipboard (const char *b64)
 {
-  if (ohos_clipboard_sink)
-    ohos_clipboard_sink (b64);
-}
+  const struct ohos_host_api *api = ohos_get_host_api ();
 
-static ohos_frame_metrics_fn ohos_frame_metrics_sink;
-
-void
-ohos_set_frame_metrics_sink (ohos_frame_metrics_fn fn)
-{
-  ohos_frame_metrics_sink = fn;
+  if (api && api->frame.clipboard)
+    api->frame.clipboard (b64);
 }
 
 /* Publish the exact pixel geometry of F so the host can allocate a
@@ -2140,14 +2121,17 @@ ohos_publish_frame_metrics (struct frame *f)
   struct font *font;
   int ascent, descent;
 
-  if (!f || !FRAME_LIVE_P (f) || !FRAME_OHOS_P (f) || !ohos_frame_metrics_sink)
+  const struct ohos_host_api *api = ohos_get_host_api ();
+
+  if (!f || !FRAME_LIVE_P (f) || !FRAME_OHOS_P (f)
+      || !api || !api->frame.metrics)
     return;
   font = FRAME_FONT (f);
   ascent = font ? font->ascent : FRAME_LINE_HEIGHT (f) * 3 / 4;
   descent = font ? font->descent : FRAME_LINE_HEIGHT (f) - ascent;
-  ohos_frame_metrics_sink (FRAME_PIXEL_WIDTH (f), FRAME_PIXEL_HEIGHT (f),
-			   FRAME_COLUMN_WIDTH (f), FRAME_LINE_HEIGHT (f),
-			   ascent, descent);
+  api->frame.metrics (FRAME_PIXEL_WIDTH (f), FRAME_PIXEL_HEIGHT (f),
+		      FRAME_COLUMN_WIDTH (f), FRAME_LINE_HEIGHT (f),
+		      ascent, descent);
 }
 
 struct redisplay_interface *

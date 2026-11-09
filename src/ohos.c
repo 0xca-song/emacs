@@ -40,84 +40,28 @@ static unsigned long draw_dropped;
 static size_t draw_image_bytes;
 static pthread_mutex_t draw_lock = PTHREAD_MUTEX_INITIALIZER;
 
-static ohos_log_fn ohos_log_sink;
-
-static ohos_draw_clear_fn draw_clear_sink;
-static ohos_draw_fill_fn draw_fill_sink;
-static ohos_draw_text_fn draw_text_sink;
-static ohos_draw_cursor_fn draw_cursor_sink;
-static ohos_draw_scroll_fn draw_scroll_sink;
-static ohos_draw_present_fn draw_present_sink;
-static ohos_draw_batch_fn draw_batch_sink;
-static ohos_pump_done_fn pump_done_sink;
-static ohos_draw_wakeup_fn draw_wakeup_sink;
+/* The host API installed by ohos_abi.c before Emacs starts.  NULL only
+   during very early startup, before the host calls the run entry.  */
+static const struct ohos_host_api *host_api;
 static unsigned draw_epoch;
 
 void
-ohos_set_log_sink (ohos_log_fn fn)
+ohos_set_host_api (const struct ohos_host_api *api)
 {
-  ohos_log_sink = fn;
+  host_api = api;
+}
+
+const struct ohos_host_api *
+ohos_get_host_api (void)
+{
+  return host_api;
 }
 
 void
 ohos_log (const char *s)
 {
-  if (ohos_log_sink)
-    ohos_log_sink (s);
-}
-
-void
-ohos_set_draw_clear_sink (ohos_draw_clear_fn fn)
-{
-  draw_clear_sink = fn;
-}
-
-void
-ohos_set_draw_fill_sink (ohos_draw_fill_fn fn)
-{
-  draw_fill_sink = fn;
-}
-
-void
-ohos_set_draw_text_sink (ohos_draw_text_fn fn)
-{
-  draw_text_sink = fn;
-}
-
-void
-ohos_set_draw_cursor_sink (ohos_draw_cursor_fn fn)
-{
-  draw_cursor_sink = fn;
-}
-
-void
-ohos_set_draw_scroll_sink (ohos_draw_scroll_fn fn)
-{
-  draw_scroll_sink = fn;
-}
-
-void
-ohos_set_draw_present_sink (ohos_draw_present_fn fn)
-{
-  draw_present_sink = fn;
-}
-
-void
-ohos_set_draw_batch_sink (ohos_draw_batch_fn fn)
-{
-  draw_batch_sink = fn;
-}
-
-void
-ohos_set_pump_done_sink (ohos_pump_done_fn fn)
-{
-  pump_done_sink = fn;
-}
-
-void
-ohos_set_draw_wakeup_sink (ohos_draw_wakeup_fn fn)
-{
-  draw_wakeup_sink = fn;
+  if (host_api && host_api->frame.log)
+    host_api->frame.log (s);
 }
 
 unsigned
@@ -268,8 +212,8 @@ ohos_draw_present (void)
 {
   struct ohos_draw_command cmd = { .op = OHOS_OP_PRESENT };
   enqueue (&cmd);
-  if (draw_wakeup_sink)
-    draw_wakeup_sink ();
+  if (host_api && host_api->draw.wakeup)
+    host_api->draw.wakeup ();
 }
 
 void
@@ -307,14 +251,14 @@ ohos_pump_draw_commands (void)
 
       if (n == 0)
 	{
-	  if (pump_done_sink)
-	    pump_done_sink ();
+	  if (host_api && host_api->draw.pump_done)
+	    host_api->draw.pump_done ();
 	  break;
 	}
 
-      if (draw_batch_sink)
+      if (host_api && host_api->draw.batch)
 	{
-	  draw_batch_sink (batch, n);
+	  host_api->draw.batch (batch, n);
 	  for (i = 0; i < n; i++)
 	    release_image (&batch[i]);
 	  continue;
@@ -327,31 +271,31 @@ ohos_pump_draw_commands (void)
 	  switch (cmd.op)
 	{
 	case OHOS_OP_CLEAR:
-	  if (draw_clear_sink)
-	    draw_clear_sink (cmd.bg);
+	  if (host_api && host_api->draw.clear)
+	    host_api->draw.clear (cmd.bg);
 	  break;
 	case OHOS_OP_FILL:
-	  if (draw_fill_sink)
-	    draw_fill_sink (cmd.x, cmd.y, cmd.w, cmd.h, cmd.bg);
+	  if (host_api && host_api->draw.fill)
+	    host_api->draw.fill (cmd.x, cmd.y, cmd.w, cmd.h, cmd.bg);
 	  break;
 	case OHOS_OP_TEXT:
-	  if (draw_text_sink)
-	    draw_text_sink (cmd.x, cmd.y, cmd.w, cmd.h, cmd.code,
-			    cmd.fg, cmd.bg, cmd.flags);
+	  if (host_api && host_api->draw.text)
+	    host_api->draw.text (cmd.x, cmd.y, cmd.w, cmd.h, cmd.code,
+				 cmd.fg, cmd.bg, cmd.flags);
 	  break;
 	case OHOS_OP_CURSOR:
-	  if (draw_cursor_sink)
-	    draw_cursor_sink (cmd.x, cmd.y, cmd.w, cmd.h, (int) cmd.code,
-			      cmd.fg, cmd.bg, cmd.flags,
-			      (int) ((cmd.flags >> 1) & 7u));
+	  if (host_api && host_api->draw.cursor)
+	    host_api->draw.cursor (cmd.x, cmd.y, cmd.w, cmd.h, (int) cmd.code,
+				   cmd.fg, cmd.bg, cmd.flags,
+				   (int) ((cmd.flags >> 1) & 7u));
 	  break;
 	case OHOS_OP_SCROLL:
-	  if (draw_scroll_sink)
-	    draw_scroll_sink (cmd.x, cmd.y, cmd.w, cmd.h, cmd.to_y);
+	  if (host_api && host_api->draw.scroll)
+	    host_api->draw.scroll (cmd.x, cmd.y, cmd.w, cmd.h, cmd.to_y);
 	  break;
 	case OHOS_OP_PRESENT:
-	  if (draw_present_sink)
-	    draw_present_sink ();
+	  if (host_api && host_api->draw.present)
+	    host_api->draw.present ();
 	  break;
 	case OHOS_OP_BEGIN:
 	case OHOS_OP_END:

@@ -2597,7 +2597,7 @@ AS_CASE([$host],
     AS_IF([test "x$with_ohos_gui" != "xno"], [
       window_system=ohos
       no_x=yes
-      OHOS_OBJ="ohosgui.o ohosimage.o ohos.o ohosterm.o ohosfns.o ohosfont.o ohosmenu.o ohosselect.o ohosgui_stubs.o"
+      OHOS_OBJ="ohosgui.o ohosimage.o ohos.o ohos_abi.o ohosterm.o ohosfns.o ohosfont.o ohosmenu.o ohosselect.o ohosgui_stubs.o"
       AC_DEFINE([HAVE_OHOS_GUI], [1],
         [Define to 1 if building the native OHOS GUI backend.])
     ])
