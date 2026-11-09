@@ -40,12 +40,6 @@ static unsigned long draw_dropped;
 static size_t draw_image_bytes;
 static pthread_mutex_t draw_lock = PTHREAD_MUTEX_INITIALIZER;
 
-/* Temporary timing probe: how long a key sits in the C queue and how
-   long Emacs takes to enqueue its first drawing command.  */
-static uint64_t probe_pop_ns;
-static bool probe_pending;
-static int probe_logs;
-
 /* The host API installed by ohos_abi.c before Emacs starts.  NULL only
    during very early startup, before the host calls the run entry.  */
 static const struct ohos_host_api *host_api;
@@ -113,17 +107,6 @@ static void
 enqueue (const struct ohos_draw_command *cmd)
 {
   bool image = cmd->op == OHOS_OP_IMAGE && cmd->ptr;
-  if (probe_pending)
-    {
-      struct timespec ts;
-      clock_gettime (CLOCK_MONOTONIC, &ts);
-      uint64_t now = (uint64_t) ts.tv_sec * 1000000000ull + ts.tv_nsec;
-      char dbg[128];
-      snprintf (dbg, sizeof dbg, "key->draw %.1f us",
-                (double) (now - probe_pop_ns) / 1000.0);
-      ohos_log (dbg);
-      probe_pending = false;
-    }
 
   pthread_mutex_lock (&draw_lock);
   bool over_budget = image
@@ -339,7 +322,6 @@ struct ohos_input_cmd
   int motion;
   int button, x, y, press;
   int wheel;
-  uint64_t enqueue_ns;
 };
 
 static struct ohos_input_cmd input_ring[OHOS_INPUT_CAP];
@@ -404,17 +386,12 @@ ohos_input_key (unsigned key, unsigned modifiers, int pressed)
     return 0;
   int was_empty;
 
-  struct timespec ts;
-  clock_gettime (CLOCK_MONOTONIC, &ts);
-  uint64_t enqueue_ns
-      = (uint64_t) ts.tv_sec * 1000000000ull + ts.tv_nsec;
   pthread_mutex_lock (&input_lock);
   was_empty = (input_count == 0);
   if (input_count == OHOS_INPUT_CAP)
     input_dropped++;
   else
     {
-      input_ring[input_tail].enqueue_ns = enqueue_ns;
       input_ring[input_tail].key = key;
       input_ring[input_tail].modifiers = modifiers;
       input_ring[input_tail].mouse = 0;
@@ -532,26 +509,9 @@ ohos_pop_input (unsigned *key, unsigned *modifiers, int *mouse,
       *x = input_ring[input_head].x;
       *y = input_ring[input_head].y;
       *press = input_ring[input_head].press;
-      uint64_t enqueue_ns = input_ring[input_head].enqueue_ns;
       input_head = (input_head + 1) & OHOS_INPUT_MASK;
       input_count--;
       found = 1;
-      if (enqueue_ns)
-        {
-          struct timespec now_ts;
-          clock_gettime (CLOCK_MONOTONIC, &now_ts);
-          uint64_t now
-              = (uint64_t) now_ts.tv_sec * 1000000000ull + now_ts.tv_nsec;
-          probe_pop_ns = now;
-          probe_pending = true;
-          if (probe_logs++ < 40)
-            {
-              char dbg[128];
-              snprintf (dbg, sizeof dbg, "input queue %.1f us",
-                        (double) (now - enqueue_ns) / 1000.0);
-              ohos_log (dbg);
-            }
-        }
     }
   pthread_mutex_unlock (&input_lock);
   return found;
