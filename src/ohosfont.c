@@ -49,6 +49,20 @@ struct ohosfont_style
   OH_Drawing_FontStyleStruct drawing;
 };
 
+/* Char-to-glyph and advance results are asked for every character on
+   every redisplay.  Keep a small direct-mapped cache so a font object
+   only shapes a character once.  */
+#define OHOSFONT_CACHE_SIZE 4096
+
+struct ohosfont_cache_entry
+{
+  unsigned code;
+  uint16_t glyph;
+  int16_t advance;
+  uint8_t have_glyph;
+  uint8_t have_advance;
+};
+
 struct ohosfont_info
 {
   struct font font;
@@ -56,7 +70,16 @@ struct ohosfont_info
   OH_Drawing_Font *cjk_font;
   OH_Drawing_Typeface *drawing_typeface;
   OH_Drawing_Typeface *cjk_typeface;
+  struct ohosfont_cache_entry *cache;
 };
+
+static struct ohosfont_cache_entry *
+ohosfont_cache_slot (struct ohosfont_info *info, unsigned code)
+{
+  if (!info->cache)
+    return NULL;
+  return &info->cache[code & (OHOSFONT_CACHE_SIZE - 1)];
+}
 
 /* The styles enumerated by `list'.  */
 static const struct ohosfont_style ohosfont_styles[] =
@@ -180,7 +203,11 @@ static unsigned
 ohosfont_char_glyph (struct ohosfont_info *info, unsigned code)
 {
   OH_Drawing_Font *drawing_font = ohosfont_pick_font (info, code);
+  struct ohosfont_cache_entry *slot = ohosfont_cache_slot (info, code);
   unsigned glyph;
+
+  if (slot && slot->have_glyph && slot->code == code)
+    return slot->glyph;
 
   glyph = ohosfont_glyph_code (drawing_font, code);
   if (glyph == 0)
@@ -189,6 +216,12 @@ ohosfont_char_glyph (struct ohosfont_info *info, unsigned code)
                       ? info->drawing_font : info->cjk_font);
       if (drawing_font)
         glyph = ohosfont_glyph_code (drawing_font, code);
+    }
+  if (slot)
+    {
+      slot->code = code;
+      slot->glyph = (uint16_t) glyph;
+      slot->have_glyph = 1;
     }
   return glyph;
 }
@@ -220,8 +253,11 @@ ohosfont_char_width (struct ohosfont_info *info, unsigned code)
 {
   OH_Drawing_Font *drawing_font = ohosfont_pick_font (info, code);
   OH_Drawing_Font *fallback;
+  struct ohosfont_cache_entry *slot = ohosfont_cache_slot (info, code);
   int width;
 
+  if (slot && slot->have_advance && slot->code == code)
+    return slot->advance;
   if (!drawing_font)
     return -1;
   width = ohosfont_glyph_advance (drawing_font, code);
@@ -231,6 +267,12 @@ ohosfont_char_width (struct ohosfont_info *info, unsigned code)
                   ? info->drawing_font : info->cjk_font);
       if (fallback && fallback != drawing_font)
         width = ohosfont_glyph_advance (fallback, code);
+    }
+  if (slot)
+    {
+      slot->code = code;
+      slot->advance = (int16_t) width;
+      slot->have_advance = 1;
     }
   return width;
 }
@@ -558,6 +600,8 @@ ohosfont_open (struct frame *f, Lisp_Object entity, int pixel_size)
   info->cjk_font = NULL;
   info->drawing_typeface = NULL;
   info->cjk_typeface = NULL;
+  info->cache = xzalloc (sizeof (struct ohosfont_cache_entry)
+                         * OHOSFONT_CACHE_SIZE);
 
   font = &info->font;
   font->driver = &ohosfont_driver;
@@ -662,6 +706,8 @@ ohosfont_close (struct font *font)
   info->cjk_font = NULL;
   info->drawing_typeface = NULL;
   info->cjk_typeface = NULL;
+  xfree (info->cache);
+  info->cache = NULL;
 }
 
 static void
