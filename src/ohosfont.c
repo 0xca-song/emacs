@@ -590,7 +590,7 @@ ohosfont_open (struct frame *f, Lisp_Object entity, int pixel_size)
   const char *family;
 
   if (pixel_size <= 0)
-    pixel_size = 12;
+    pixel_size = ohos_default_font_pixel_size ();
 
   obj = font_make_object (VECSIZE (struct ohosfont_info), entity, pixel_size);
   info = (struct ohosfont_info *) XFONT_OBJECT (obj);
@@ -670,7 +670,7 @@ ohosfont_make_default_object (struct frame *f)
   ASET (entity, FONT_SIZE_INDEX, make_fixnum (18));
   ASET (entity, FONT_AVGWIDTH_INDEX, make_fixnum (0));
   ASET (entity, FONT_SPACING_INDEX, make_fixnum (FONT_SPACING_MONO));
-  return ohosfont_open (f, entity, 18);
+  return ohosfont_open (f, entity, ohos_default_font_pixel_size ());
 }
 
 struct font *
@@ -685,7 +685,7 @@ ohosfont_make_default (struct frame *f)
   ASET (entity, FONT_SIZE_INDEX, make_fixnum (12));
   ASET (entity, FONT_AVGWIDTH_INDEX, make_fixnum (0));
   ASET (entity, FONT_SPACING_INDEX, make_fixnum (FONT_SPACING_MONO));
-  Lisp_Object obj = ohosfont_open (f, entity, 12);
+  Lisp_Object obj = ohosfont_open (f, entity, ohos_default_font_pixel_size ());
   return NILP (obj) ? NULL : XFONT_OBJECT (obj);
 }
 

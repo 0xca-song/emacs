@@ -62,6 +62,7 @@ struct ohos_display_info
   Lisp_Object default_name;
   int grabbed;
   double resx, resy;
+  double font_resolution;
   int n_fonts;
   struct ohos_bitmap_record *bitmaps;
   ptrdiff_t bitmaps_size;
@@ -277,6 +278,12 @@ void ohos_host_drain (void);
 /* True when a native OHOS terminal is up and the host channel can be
    used.  */
 bool ohos_gui_available (void);
+void ohos_set_display_metrics (double density_dpi, double density_pixels,
+			       double scaled_density, double xdpi, double ydpi);
+int ohos_default_font_pixel_size (void);
+double ohos_display_xdpi (void);
+double ohos_display_ydpi (void);
+double ohos_display_font_resolution (void);
 void ohos_font_metrics (int ascent, int descent, int height,
 			int space_width, int underline_position,
 			int underline_thickness);

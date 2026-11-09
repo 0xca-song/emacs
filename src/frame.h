@@ -1001,16 +1001,16 @@ default_pixels_per_inch_y (void)
 #define FRAME_RES_Y(f)						\
   (eassert (FRAME_WINDOW_P (f)), FRAME_DISPLAY_INFO (f)->resy)
 
-#ifdef HAVE_ANDROID
+#if defined HAVE_ANDROID || defined HAVE_OHOS
 
-/* Android systems use a font scaling factor independent from the
+/* Android and OHOS use a font scaling factor independent from the
    display DPI.  */
 
 #define FRAME_RES(f)						\
   (eassert (FRAME_WINDOW_P (f)),				\
    FRAME_DISPLAY_INFO (f)->font_resolution)
 
-#else /* !HAVE_ANDROID */
+#else /* !HAVE_ANDROID && !HAVE_OHOS */
 #define FRAME_RES(f) FRAME_RES_Y (f)
 #endif /* HAVE_ANDROID */
 

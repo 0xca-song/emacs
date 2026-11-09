@@ -40,7 +40,7 @@
 extern "C" {
 #endif
 
-#define OHOS_GUI_ABI_VERSION 2
+#define OHOS_GUI_ABI_VERSION 3
 
 /* Draw command stream shared by redisplay and the host.  The layout is
    part of the ABI; keep the app-side mirror in sync with the static
@@ -126,6 +126,11 @@ struct ohos_emacs_api
   void (*font_metrics) (int ascent, int descent, int height,
 			int space_width, int underline_position,
 			int underline_thickness);
+  /* Display metrics from ArkUI: physical DPI, logical density, font
+     scale, and exact x/y DPI.  May be called before `run'.  */
+  void (*set_display_metrics) (double density_dpi, double density_pixels,
+			       double scaled_density, double xdpi,
+			       double ydpi);
 
   int (*take_command) (char *buf, int cap);
   void (*resolve_command) (int id, int index, const char *text);

@@ -36,6 +36,7 @@ static const struct ohos_emacs_api emacs_api =
   .input_resize = ohos_input_resize,
   .input_expose = ohos_input_expose,
   .font_metrics = ohos_font_metrics,
+  .set_display_metrics = ohos_set_display_metrics,
   .take_command = ohos_host_take_command,
   .resolve_command = ohos_host_result,
   .pump_draw = ohos_pump_draw_commands,

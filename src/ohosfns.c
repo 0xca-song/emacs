@@ -35,6 +35,59 @@ extern Lisp_Object Fset_fontset_font (Lisp_Object, Lisp_Object,
 void ohos_change_tab_bar_height (struct frame *, int);
 void ohos_change_tool_bar_height (struct frame *, int);
 
+/* Display metrics published by the ArkUI page.  Defaults keep the
+   backend usable in a dump/without a display.  */
+static double ohos_metric_density_dpi = 96.0;
+static double ohos_metric_density_pixels = 1.0;
+static double ohos_metric_scaled_density = 1.0;
+static double ohos_metric_xdpi = 96.0;
+static double ohos_metric_ydpi = 96.0;
+
+void
+ohos_set_display_metrics (double density_dpi, double density_pixels,
+			  double scaled_density, double xdpi, double ydpi)
+{
+  if (density_dpi > 0)
+    ohos_metric_density_dpi = density_dpi;
+  if (density_pixels > 0)
+    ohos_metric_density_pixels = density_pixels;
+  if (scaled_density > 0)
+    ohos_metric_scaled_density = scaled_density;
+  if (xdpi > 0)
+    ohos_metric_xdpi = xdpi;
+  if (ydpi > 0)
+    ohos_metric_ydpi = ydpi;
+}
+
+int
+ohos_default_font_pixel_size (void)
+{
+  int px = (int) (18.0 * ohos_metric_scaled_density + 0.5);
+  return px > 0 ? px : 18;
+}
+
+double
+ohos_display_xdpi (void)
+{
+  return ohos_metric_xdpi;
+}
+
+double
+ohos_display_ydpi (void)
+{
+  return ohos_metric_ydpi;
+}
+
+double
+ohos_display_font_resolution (void)
+{
+  double scale = (ohos_metric_density_pixels > 0
+		  ? ohos_metric_scaled_density / ohos_metric_density_pixels
+		  : 1.0);
+  double dpi = ohos_metric_xdpi * scale;
+  return dpi >= 160.0 ? dpi : 160.0;
+}
+
 static struct terminal *
 ohos_find_terminal (void)
 {
@@ -673,10 +726,13 @@ ohos_create_frame (struct terminal *terminal, Lisp_Object parms)
   f->output_data.ohos->complete_p = true;
   ohos_init_frame_cursors (f);
 
-  FRAME_DISPLAY_INFO (f)->resx = 96;
-  FRAME_DISPLAY_INFO (f)->resy = 96;
-  f->column_width = 9;
-  f->line_height = 18;
+  FRAME_DISPLAY_INFO (f)->resx = ohos_metric_xdpi;
+  FRAME_DISPLAY_INFO (f)->resy = ohos_metric_ydpi;
+  FRAME_DISPLAY_INFO (f)->font_resolution
+    = ohos_display_font_resolution ();
+  int default_px = ohos_default_font_pixel_size ();
+  f->column_width = (default_px * 9 + 9) / 18;
+  f->line_height = default_px;
 
   FRAME_FOREGROUND_PIXEL (f) = 0x000000;
   FRAME_BACKGROUND_PIXEL (f) = 0xffffff;
@@ -697,6 +753,8 @@ ohos_create_frame (struct terminal *terminal, Lisp_Object parms)
       unbind_to (count, Qnil);
       error ("Invalid frame font");
     }
+  f->column_width = FRAME_FONT (f)->space_width;
+  f->line_height = FRAME_FONT (f)->height;
   {
     /* Map the CJK charsets explicitly; fontset_from_font only maps the
        registry's primary charset (unicode-bmp), leaving the generic
