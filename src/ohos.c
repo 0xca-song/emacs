@@ -359,7 +359,13 @@ ohos_create_input_pipe (void)
 static void
 ohos_signal_input (int was_empty)
 {
-  if (was_empty && input_pipe[1] >= 0)
+  /* Always poke the pipe.  Signalling only when the queue was empty
+     loses a wakeup when a key arrives while Emacs is draining the
+     queue but after the previous byte was consumed: the event stays
+     queued until some later timer poll.  The pipe is non-blocking and
+     Emacs drains it in read_socket_hook, so an extra byte is cheap.  */
+  (void) was_empty;
+  if (input_pipe[1] >= 0)
     {
       char byte = 1;
       (void) write (input_pipe[1], &byte, 1);
