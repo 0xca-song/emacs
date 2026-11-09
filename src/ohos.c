@@ -757,6 +757,8 @@ ohos_host_command (const char *fmt, ...)
       host_count++;
     }
   pthread_mutex_unlock (&host_lock);
+  if (host_api && host_api->frame.host_wakeup)
+    host_api->frame.host_wakeup ();
 }
 
 int

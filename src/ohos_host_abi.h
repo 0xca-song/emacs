@@ -40,7 +40,7 @@
 extern "C" {
 #endif
 
-#define OHOS_GUI_ABI_VERSION 3
+#define OHOS_GUI_ABI_VERSION 4
 
 /* Draw command stream shared by redisplay and the host.  The layout is
    part of the ABI; keep the app-side mirror in sync with the static
@@ -102,6 +102,9 @@ struct ohos_host_api
     /* Base64 payload produced by Emacs for the system pasteboard.  */
     void (*clipboard) (const char *base64);
     void (*log) (const char *line);
+    /* Wake the ArkTS thread because a host command, title or clipboard
+       update is pending.  Called from the Emacs thread.  */
+    void (*host_wakeup) (void);
   } frame;
 };
 
