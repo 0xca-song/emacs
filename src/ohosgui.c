@@ -1374,6 +1374,7 @@ ohos_toggle_invisible_pointer (struct frame *f, bool invisible)
 }
 
 static unsigned probe_epoch;
+static unsigned long probe_read_calls;
 
 static void
 ohos_update_begin (struct frame *f)
@@ -1387,7 +1388,8 @@ ohos_update_begin (struct frame *f)
   probe_epoch = o->epoch;
   {
     char dbg[96];
-    snprintf (dbg, sizeof dbg, "update-begin epoch=%u", probe_epoch);
+    snprintf (dbg, sizeof dbg, "update-begin epoch=%u reads=%lu",
+              probe_epoch, probe_read_calls);
     ohos_log (dbg);
   }
   /* Open a new redisplay pass: the host uses the epoch to detect lost
@@ -1801,6 +1803,7 @@ ohos_note_mouse_movement (struct frame *f, int x, int y)
 static int
 ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
 {
+  probe_read_calls++;
   unsigned key, modifiers;
   int count = 0;
   int mouse, button, mx, my, press, motion, wheel;
