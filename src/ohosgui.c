@@ -2089,6 +2089,17 @@ ohos_gui_available (void)
 /* ------------------------------------------------------------------ */
 /* Terminal initialization.                                            */
 
+extern Lisp_Object Fohos_post_command_redisplay (void);
+
+DEFUN ("ohos-post-command-redisplay", Fohos_post_command_redisplay,
+       Sohos_post_command_redisplay, 0, 0, 0,
+       doc: /* Force an OHOS redisplay after each command.  */)
+  (void)
+{
+  Fredisplay (Qt);
+  return Qnil;
+}
+
 static struct redisplay_interface ohos_redisplay_interface;
 
 struct terminal *
@@ -2100,6 +2111,16 @@ ohos_create_terminal (struct ohos_display_info *dpyinfo)
   dpyinfo->terminal = terminal;
   terminal->kboard = allocate_kboard (Qohos);
   terminal->read_socket_hook = ohos_read_socket;
+  {
+    static bool hook_added;
+    if (!hook_added)
+      {
+        hook_added = true;
+        Lisp_Object fn = intern ("ohos-post-command-redisplay");
+        Lisp_Object old = Fsymbol_value (Qpost_command_hook);
+        Fset (Qpost_command_hook, Fcons (fn, old));
+      }
+  }
   terminal->delete_frame_hook = ohos_delete_frame;
   terminal->delete_terminal_hook = ohos_delete_terminal;
   terminal->clear_frame_hook = ohos_clear_frame;
@@ -2272,6 +2293,7 @@ void
 syms_of_ohosgui (void)
 {
   syms_of_ohosimage ();
+  defsubr (&Sohos_post_command_redisplay);
   defsubr (&Sxw_display_color_p);
   defsubr (&Sx_display_grayscale_p);
   DEFSYM (Qohos, "ohos");
