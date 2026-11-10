@@ -22,23 +22,14 @@
 /* A full redraw on a 4K/320-column frame can exceed 30k glyph commands.
    Keep enough headroom that a cold resize does not immediately overflow
    the ring and force an epoch-gap repaint.  */
-#define OHOS_DRAW_CMD_CAP 65536
-#define OHOS_DRAW_CMD_MASK (OHOS_DRAW_CMD_CAP - 1)
+
 
 /* IMAGE commands carry an owned RGBA copy.  A full ring of 4K/ETAF images
    would otherwise pin tens of gigabytes; keep a bounded byte budget and
    drop new images when the UI is too far behind.  */
 #define OHOS_IMAGE_BYTES_MAX (64u * 1024u * 1024u)
 
-/* One pump pass hands at most this many commands to the host, so a long
-   redisplay cannot monopolise the UI thread.  */
-#define OHOS_DRAW_BATCH_MAX 512
-
-static struct ohos_draw_command draw_ring[OHOS_DRAW_CMD_CAP];
-static unsigned draw_head, draw_tail, draw_count;
 static unsigned long draw_dropped;
-static size_t draw_image_bytes;
-static pthread_mutex_t draw_lock = PTHREAD_MUTEX_INITIALIZER;
 
 /* Temporary input-to-first-draw probe.  */
 static uint64_t probe_pop_ns;
@@ -87,27 +78,10 @@ ohos_draw_dropped_count (void)
 int
 ohos_draw_pending (void)
 {
-  int n;
-
-  pthread_mutex_lock (&draw_lock);
-  n = (int) draw_count;
-  pthread_mutex_unlock (&draw_lock);
-  return n;
+  return 0;
 }
 
-static void
-release_image (const struct ohos_draw_command *cmd)
-{
-  if (cmd->op != OHOS_OP_IMAGE || !cmd->ptr)
-    return;
-  pthread_mutex_lock (&draw_lock);
-  if (draw_image_bytes >= cmd->ptr_len)
-    draw_image_bytes -= cmd->ptr_len;
-  else
-    draw_image_bytes = 0;
-  pthread_mutex_unlock (&draw_lock);
-  xfree ((void *) cmd->ptr);
-}
+
 
 static bool
 ohos_direct_mode (void)
@@ -273,77 +247,8 @@ ohos_draw_end (unsigned epoch)
 void
 ohos_pump_draw_commands (void)
 {
-  struct ohos_draw_command batch[OHOS_DRAW_BATCH_MAX];
-
-  for (;;)
-    {
-      int n = 0, i;
-
-      pthread_mutex_lock (&draw_lock);
-      while (draw_count != 0 && n < OHOS_DRAW_BATCH_MAX)
-	{
-	  batch[n++] = draw_ring[draw_head];
-	  draw_head = (draw_head + 1) & OHOS_DRAW_CMD_MASK;
-	  draw_count--;
-	}
-      pthread_mutex_unlock (&draw_lock);
-
-      if (n == 0)
-	{
-	  if (host_api && host_api->draw.pump_done)
-	    host_api->draw.pump_done ();
-	  break;
-	}
-
-      if (host_api && host_api->draw.batch)
-	{
-	  host_api->draw.batch (batch, n);
-	  for (i = 0; i < n; i++)
-	    release_image (&batch[i]);
-	  continue;
-	}
-
-      for (i = 0; i < n; i++)
-	{
-	  struct ohos_draw_command cmd = batch[i];
-
-	  switch (cmd.op)
-	{
-	case OHOS_OP_CLEAR:
-	  if (host_api && host_api->draw.clear)
-	    host_api->draw.clear (cmd.bg);
-	  break;
-	case OHOS_OP_FILL:
-	  if (host_api && host_api->draw.fill)
-	    host_api->draw.fill (cmd.x, cmd.y, cmd.w, cmd.h, cmd.bg);
-	  break;
-	case OHOS_OP_TEXT:
-	  if (host_api && host_api->draw.text)
-	    host_api->draw.text (cmd.x, cmd.y, cmd.w, cmd.h, cmd.code,
-				 cmd.fg, cmd.bg, cmd.flags);
-	  break;
-	case OHOS_OP_CURSOR:
-	  if (host_api && host_api->draw.cursor)
-	    host_api->draw.cursor (cmd.x, cmd.y, cmd.w, cmd.h, (int) cmd.code,
-				   cmd.fg, cmd.bg, cmd.flags,
-				   (int) ((cmd.flags >> 1) & 7u));
-	  break;
-	case OHOS_OP_SCROLL:
-	  if (host_api && host_api->draw.scroll)
-	    host_api->draw.scroll (cmd.x, cmd.y, cmd.w, cmd.h, cmd.to_y);
-	  break;
-	case OHOS_OP_PRESENT:
-	  if (host_api && host_api->draw.present)
-	    host_api->draw.present ();
-	  break;
-	case OHOS_OP_BEGIN:
-	case OHOS_OP_END:
-	  break;
-	}
-	  release_image (&cmd);
-	}
-    }
 }
+
 
 /* ------------------------------------------------------------------ */
 /* Input queue: ArkUI UI thread -> Emacs read_socket_hook.            */
