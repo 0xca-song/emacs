@@ -371,6 +371,9 @@ ohos_clear_frame_area (struct frame *f, int x, int y, int width, int height)
 }
 
 
+static bool input_display_gate;
+static struct timespec input_gate_at;
+
 static void
 ohos_clear_frame (struct frame *f)
 {
@@ -1400,6 +1403,7 @@ ohos_frame_up_to_date (struct frame *f)
   /* Present when Emacs considers the frame complete, mirroring
      android_frame_up_to_date.  */
   FRAME_OUTPUT_DATA (f)->complete_p = true;
+  input_display_gate = false;
   unblock_input ();
 }
 
@@ -1776,14 +1780,32 @@ static int
 ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
 {
   probe_read_calls++;
+  if (input_display_gate)
+    {
+      struct timespec now;
+      clock_gettime (CLOCK_MONOTONIC, &now);
+      long ms = (now.tv_sec - input_gate_at.tv_sec) * 1000
+                + (now.tv_nsec - input_gate_at.tv_nsec) / 1000000;
+      int fd = ohos_input_wait_fd ();
+      char buf[64];
+      if (fd >= 0)
+        while (read (fd, buf, sizeof buf) > 0)
+          ;
+      if (ms < 40)
+        return 0;
+      input_display_gate = false;
+    }
   unsigned key, modifiers;
   int count = 0;
   int mouse, button, mx, my, press, motion, wheel;
   (void) hold_quit;
 
-  while (ohos_pop_input (&key, &modifiers, &mouse, &button, &mx, &my,
-			 &press, &motion, &wheel))
+  while (!input_display_gate
+         && ohos_pop_input (&key, &modifiers, &mouse, &button, &mx, &my,
+                            &press, &motion, &wheel))
     {
+      input_display_gate = true;
+      clock_gettime (CLOCK_MONOTONIC, &input_gate_at);
       struct input_event ev;
       int emods = 0;
       unsigned char_code = ohos_char_from_key (key);
@@ -2071,26 +2093,6 @@ ohos_gui_available (void)
 
 extern Lisp_Object Fohos_post_command_redisplay (void);
 
-DEFUN ("ohos-post-command-redisplay", Fohos_post_command_redisplay,
-       Sohos_post_command_redisplay, 0, 0, 0,
-       doc: /* Force redisplay for text insertion commands.  */)
-  (void)
-{
-  static Lisp_Object insert_cmd;
-  static Lisp_Object newline_cmd;
-  static Lisp_Object delete_cmd;
-  if (NILP (insert_cmd))
-    {
-      insert_cmd = intern ("self-insert-command");
-      newline_cmd = intern ("newline");
-      delete_cmd = intern ("delete-char");
-    }
-  if (EQ (Vthis_command, insert_cmd) || EQ (Vthis_command, newline_cmd)
-      || EQ (Vthis_command, delete_cmd))
-    Fredisplay (Qt);
-  return Qnil;
-}
-
 static struct redisplay_interface ohos_redisplay_interface;
 
 struct terminal *
@@ -2102,16 +2104,6 @@ ohos_create_terminal (struct ohos_display_info *dpyinfo)
   dpyinfo->terminal = terminal;
   terminal->kboard = allocate_kboard (Qohos);
   terminal->read_socket_hook = ohos_read_socket;
-  {
-    static bool hook_added;
-    if (!hook_added)
-      {
-        hook_added = true;
-        Lisp_Object fn = intern ("ohos-post-command-redisplay");
-        Lisp_Object old = Fsymbol_value (Qpost_command_hook);
-        Fset (Qpost_command_hook, Fcons (fn, old));
-      }
-  }
   terminal->delete_frame_hook = ohos_delete_frame;
   terminal->delete_terminal_hook = ohos_delete_terminal;
   terminal->clear_frame_hook = ohos_clear_frame;
@@ -2284,7 +2276,6 @@ void
 syms_of_ohosgui (void)
 {
   syms_of_ohosimage ();
-  defsubr (&Sohos_post_command_redisplay);
   defsubr (&Sxw_display_color_p);
   defsubr (&Sx_display_grayscale_p);
   DEFSYM (Qohos, "ohos");
