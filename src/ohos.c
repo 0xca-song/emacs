@@ -530,6 +530,7 @@ ohos_pop_input (unsigned *key, unsigned *modifiers, int *mouse,
 void
 ohos_input_menubar (int index)
 {
+  ohos_log ("input menubar");
   int was_empty;
   pthread_mutex_lock (&input_lock);
   was_empty = (input_count == 0);

@@ -442,6 +442,7 @@ Lisp_Object
 ohos_menu_show (struct frame *f, int x, int y, int menuflags,
 		Lisp_Object title, const char **error_name)
 {
+  ohos_log ("ohos_menu_show enter");
   specpdl_ref count;
   Lisp_Object value = Qnil;
   char *json;
