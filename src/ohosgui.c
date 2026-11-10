@@ -372,7 +372,6 @@ ohos_clear_frame_area (struct frame *f, int x, int y, int width, int height)
 
 
 static bool input_display_gate;
-static struct timespec input_gate_at;
 
 static void
 ohos_clear_frame (struct frame *f)
@@ -1781,20 +1780,7 @@ ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
 {
   probe_read_calls++;
   if (input_display_gate)
-    {
-      struct timespec now;
-      clock_gettime (CLOCK_MONOTONIC, &now);
-      long ms = (now.tv_sec - input_gate_at.tv_sec) * 1000
-                + (now.tv_nsec - input_gate_at.tv_nsec) / 1000000;
-      int fd = ohos_input_wait_fd ();
-      char buf[64];
-      if (fd >= 0)
-        while (read (fd, buf, sizeof buf) > 0)
-          ;
-      if (ms < 40)
-        return 0;
-      input_display_gate = false;
-    }
+    return 0;
   unsigned key, modifiers;
   int count = 0;
   int mouse, button, mx, my, press, motion, wheel;
@@ -1805,7 +1791,6 @@ ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
                             &press, &motion, &wheel))
     {
       input_display_gate = true;
-      clock_gettime (CLOCK_MONOTONIC, &input_gate_at);
       struct input_event ev;
       int emods = 0;
       unsigned char_code = ohos_char_from_key (key);
