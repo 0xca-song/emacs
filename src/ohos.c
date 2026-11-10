@@ -109,9 +109,30 @@ release_image (const struct ohos_draw_command *cmd)
   xfree ((void *) cmd->ptr);
 }
 
+static bool
+ohos_direct_mode (void)
+{
+  static int cached = -1;
+  if (cached < 0)
+    cached = getenv ("EMACS_OHOS_DIRECT") ? 1 : 0;
+  return cached != 0;
+}
+
 static void
 enqueue (const struct ohos_draw_command *cmd)
 {
+  if (ohos_direct_mode ())
+    {
+      if (cmd->op == OHOS_OP_PRESENT)
+        {
+          if (host_api && host_api->draw.present)
+            host_api->draw.present ();
+        }
+      else if (host_api && host_api->draw.batch)
+        host_api->draw.batch (cmd, 1);
+      return;
+    }
+
   bool image = cmd->op == OHOS_OP_IMAGE && cmd->ptr;
   if (probe_after_pop)
     {
@@ -246,7 +267,7 @@ ohos_draw_present (void)
     }
   struct ohos_draw_command cmd = { .op = OHOS_OP_PRESENT };
   enqueue (&cmd);
-  if (host_api && host_api->draw.wakeup)
+  if (!ohos_direct_mode () && host_api && host_api->draw.wakeup)
     host_api->draw.wakeup ();
 }
 
