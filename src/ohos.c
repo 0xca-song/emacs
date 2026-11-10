@@ -121,64 +121,35 @@ ohos_direct_mode (void)
 static void
 enqueue (const struct ohos_draw_command *cmd)
 {
-  if (ohos_direct_mode ())
+  static struct ohos_draw_command direct_buf[512];
+  static int direct_n;
+
+  if (cmd->op == OHOS_OP_IMAGE && cmd->ptr)
     {
-      static struct ohos_draw_command direct_buf[512];
-      static int direct_n;
-      if (cmd->op == OHOS_OP_PRESENT)
-        {
-          if (direct_n > 0 && host_api && host_api->draw.batch)
-            host_api->draw.batch (direct_buf, direct_n);
-          direct_n = 0;
-          if (host_api && host_api->draw.present)
-            host_api->draw.present ();
-        }
-      else
-        {
-          if (direct_n == 512)
-            {
-              if (host_api && host_api->draw.batch)
-                host_api->draw.batch (direct_buf, direct_n);
-              direct_n = 0;
-            }
-          direct_buf[direct_n++] = *cmd;
-        }
+      if (direct_n > 0 && host_api && host_api->draw.batch)
+        host_api->draw.batch (direct_buf, direct_n);
+      direct_n = 0;
+      if (host_api && host_api->draw.batch)
+        host_api->draw.batch (cmd, 1);
+      xfree ((void *) cmd->ptr);
       return;
     }
-
-  bool image = cmd->op == OHOS_OP_IMAGE && cmd->ptr;
-  if (probe_after_pop)
+  if (cmd->op == OHOS_OP_PRESENT)
     {
-      struct timespec ts;
-      clock_gettime (CLOCK_MONOTONIC, &ts);
-      uint64_t now = (uint64_t) ts.tv_sec * 1000000000ull + ts.tv_nsec;
-      if (probe_logs++ < 100000)
-        {
-          char dbg[128];
-          snprintf (dbg, sizeof dbg, "pop->draw %.1f us",
-                    (double) (now - probe_pop_ns) / 1000.0);
-          ohos_log (dbg);
-        }
-      probe_after_pop = false;
-    }
-
-  pthread_mutex_lock (&draw_lock);
-  bool over_budget = image
-    && (size_t) cmd->ptr_len > OHOS_IMAGE_BYTES_MAX - draw_image_bytes;
-  if (draw_count == OHOS_DRAW_CMD_CAP || over_budget)
-    {
-      draw_dropped++;
-      pthread_mutex_unlock (&draw_lock);
-      if (image)
-	xfree ((void *) cmd->ptr);
+      if (direct_n > 0 && host_api && host_api->draw.batch)
+        host_api->draw.batch (direct_buf, direct_n);
+      direct_n = 0;
+      if (host_api && host_api->draw.present)
+        host_api->draw.present ();
       return;
     }
-  if (image)
-    draw_image_bytes += cmd->ptr_len;
-  draw_ring[draw_tail] = *cmd;
-  draw_tail = (draw_tail + 1) & OHOS_DRAW_CMD_MASK;
-  draw_count++;
-  pthread_mutex_unlock (&draw_lock);
+  if (direct_n == 512)
+    {
+      if (host_api && host_api->draw.batch)
+        host_api->draw.batch (direct_buf, direct_n);
+      direct_n = 0;
+    }
+  direct_buf[direct_n++] = *cmd;
 }
 
 void
