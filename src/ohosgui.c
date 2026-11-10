@@ -386,6 +386,12 @@ ohos_flush (struct frame *f)
 
   ohos_probe_log ("pop->flush-entry");
   {
+    char dbg[128];
+    snprintf (dbg, sizeof dbg, "flush-enter epoch=%u blocked=%d",
+              o->epoch, buffer_flipping_blocked_p ());
+    ohos_log (dbg);
+  }
+  {
     char dbg[96];
     snprintf (dbg, sizeof dbg, "draw cmds=%lu glyph_ms=%.2f calls=%lu",
               ohos_probe_cmd_count (), (double) probe_glyph_ns / 1000000.0,
@@ -1432,6 +1438,12 @@ ohos_buffer_flipping_unblocked (struct frame *f)
     ohos_log (dbg);
   }
 
+  {
+    char dbg[128];
+    snprintf (dbg, sizeof dbg, "unblocked need_flip=%d blocked=%d",
+              (int) o->need_flip, buffer_flipping_blocked_p ());
+    ohos_log (dbg);
+  }
   if (!o->need_flip)
     return;
   o->need_flip = false;
