@@ -39,8 +39,6 @@ static const struct ohos_emacs_api emacs_api =
   .set_display_metrics = ohos_set_display_metrics,
   .take_command = ohos_host_take_command,
   .resolve_command = ohos_host_result,
-  .pump_draw = ohos_pump_draw_commands,
-  .draw_pending = ohos_draw_pending,
 };
 
 const struct ohos_emacs_api *

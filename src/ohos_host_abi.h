@@ -40,7 +40,7 @@
 extern "C" {
 #endif
 
-#define OHOS_GUI_ABI_VERSION 4
+#define OHOS_GUI_ABI_VERSION 6
 
 /* Draw command stream shared by redisplay and the host.  The layout is
    part of the ABI; keep the app-side mirror in sync with the static
@@ -138,8 +138,6 @@ struct ohos_emacs_api
   int (*take_command) (char *buf, int cap);
   void (*resolve_command) (int id, int index, const char *text);
 
-  void (*pump_draw) (void);
-  int (*draw_pending) (void);
 };
 
 /* Returns NULL when HOST_ABI_VERSION does not match this build.  */
