@@ -37,7 +37,6 @@ static bool probe_after_pop;
 static bool probe_present_pending;
 static int probe_logs;
 static uint64_t probe_pop_seq;
-static unsigned long probe_cmd_count;
 
 uint64_t
 ohos_probe_pop_ns (void)
@@ -49,12 +48,6 @@ bool
 ohos_probe_pending (void)
 {
   return probe_present_pending;
-}
-
-unsigned long
-ohos_probe_cmd_count (void)
-{
-  return probe_cmd_count;
 }
 
 void
@@ -117,81 +110,26 @@ ohos_draw_pending (void)
 
 
 
-static bool
-ohos_direct_mode (void)
-{
-  static int cached = -1;
-  if (cached < 0)
-    cached = getenv ("EMACS_OHOS_DIRECT") ? 1 : 0;
-  return cached != 0;
-}
-
-static void
-enqueue (const struct ohos_draw_command *cmd)
-{
-  if (cmd->op == OHOS_OP_PRESENT)
-    {
-      if (host_api && host_api->draw.present)
-        host_api->draw.present ();
-      return;
-    }
-  if (!host_api)
-    return;
-  switch (cmd->op)
-    {
-    case OHOS_OP_CLEAR:
-      if (host_api->draw.clear)
-        host_api->draw.clear (cmd->bg);
-      break;
-    case OHOS_OP_FILL:
-      if (host_api->draw.fill)
-        host_api->draw.fill (cmd->x, cmd->y, cmd->w, cmd->h, cmd->bg);
-      break;
-    case OHOS_OP_TEXT:
-      if (host_api->draw.text)
-        host_api->draw.text (cmd->x, cmd->y, cmd->w, cmd->h, cmd->code,
-                             cmd->fg, cmd->bg, cmd->flags);
-      break;
-    case OHOS_OP_CURSOR:
-      if (host_api->draw.cursor)
-        host_api->draw.cursor (cmd->x, cmd->y, cmd->w, cmd->h,
-                               (int) cmd->code, cmd->fg, cmd->bg,
-                               cmd->flags, (int) ((cmd->flags >> 1) & 7));
-      break;
-    case OHOS_OP_SCROLL:
-      if (host_api->draw.scroll)
-        host_api->draw.scroll (cmd->x, cmd->y, cmd->w, cmd->h, cmd->to_y);
-      break;
-    default:
-      break;
-    }
-}
-
 void
 ohos_draw_clear (uint32_t bg)
 {
-  struct ohos_draw_command cmd = { .op = OHOS_OP_CLEAR, .bg = bg };
-  enqueue (&cmd);
+  if (host_api && host_api->draw.clear)
+    host_api->draw.clear (bg);
 }
 
 void
 ohos_draw_fill (int x, int y, int w, int h, uint32_t color)
 {
-  struct ohos_draw_command cmd = { .op = OHOS_OP_FILL,
-			       .x = x, .y = y, .w = w, .h = h,
-			       .bg = color };
-  enqueue (&cmd);
+  if (host_api && host_api->draw.fill)
+    host_api->draw.fill (x, y, w, h, color);
 }
 
 void
 ohos_draw_text (int x, int y, int w, int h, unsigned code,
 		uint32_t fg, uint32_t bg, uint32_t flags)
 {
-  struct ohos_draw_command cmd = { .op = OHOS_OP_TEXT,
-			       .x = x, .y = y, .w = w, .h = h,
-			       .code = code, .fg = fg, .bg = bg,
-			       .flags = flags };
-  enqueue (&cmd);
+  if (host_api && host_api->draw.text)
+    host_api->draw.text (x, y, w, h, code, fg, bg, flags);
 }
 
 void
@@ -229,21 +167,15 @@ void
 ohos_draw_cursor (int x, int y, int w, int h, int bar, uint32_t fg,
 		  uint32_t bg, uint32_t flags, int kind)
 {
-  struct ohos_draw_command cmd = { .op = OHOS_OP_CURSOR,
-			       .x = x, .y = y, .w = w, .h = h,
-			       .code = (unsigned) bar,
-			       .fg = fg, .bg = bg,
-			       .flags = flags | ((uint32_t) kind << 1) };
-  enqueue (&cmd);
+  if (host_api && host_api->draw.cursor)
+    host_api->draw.cursor (x, y, w, h, bar, fg, bg, flags, kind);
 }
 
 void
 ohos_draw_scroll (int x, int from_y, int width, int height, int to_y)
 {
-  struct ohos_draw_command cmd = { .op = OHOS_OP_SCROLL,
-			       .x = x, .y = from_y, .w = width,
-			       .h = height, .to_y = to_y };
-  enqueue (&cmd);
+  if (host_api && host_api->draw.scroll)
+    host_api->draw.scroll (x, from_y, width, height, to_y);
 }
 
 void
@@ -264,26 +196,20 @@ ohos_draw_present (void)
         }
       probe_present_pending = false;
     }
-  struct ohos_draw_command cmd = { .op = OHOS_OP_PRESENT };
-  enqueue (&cmd);
-  if (!ohos_direct_mode () && host_api && host_api->draw.wakeup)
-    host_api->draw.wakeup ();
+  if (host_api && host_api->draw.present)
+    host_api->draw.present ();
 }
 
 void
 ohos_draw_begin (unsigned epoch)
 {
-  struct ohos_draw_command cmd = { .op = OHOS_OP_BEGIN, .epoch = epoch };
   draw_epoch = epoch;
-  probe_cmd_count = 0;
-  enqueue (&cmd);
 }
 
 void
 ohos_draw_end (unsigned epoch)
 {
-  struct ohos_draw_command cmd = { .op = OHOS_OP_END, .epoch = epoch };
-  enqueue (&cmd);
+  (void) epoch;
 }
 
 void

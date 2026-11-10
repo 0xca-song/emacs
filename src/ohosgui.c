@@ -391,13 +391,6 @@ ohos_flush (struct frame *f)
               o->epoch, buffer_flipping_blocked_p ());
     ohos_log (dbg);
   }
-  {
-    char dbg[96];
-    snprintf (dbg, sizeof dbg, "draw cmds=%lu glyph_ms=%.2f calls=%lu",
-              ohos_probe_cmd_count (), (double) probe_glyph_ns / 1000000.0,
-              probe_glyph_calls);
-    ohos_log (dbg);
-  }
   ohos_draw_end (o->epoch);
   o->need_flip = true;
 

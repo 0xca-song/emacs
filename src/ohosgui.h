@@ -340,7 +340,6 @@ int ohos_input_key (unsigned key, unsigned modifiers, int pressed);
 uint64_t ohos_probe_pop_ns (void);
 bool ohos_probe_pending (void);
 void ohos_probe_log (const char *tag);
-unsigned long ohos_probe_cmd_count (void);
 int ohos_pop_input (unsigned *key, unsigned *modifiers, int *mouse,
 		    int *button, int *x, int *y, int *press, int *motion,
 		    int *wheel);
