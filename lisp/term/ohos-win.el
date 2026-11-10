@@ -277,6 +277,15 @@ Return the chosen command when it was executed."
 
 (when (fboundp 'menu-bar-mode)
   (menu-bar-mode 1))
+;; OHOS has no scrollbar implementation; do not reserve a scroll-bar
+;; column or let the global mode add one.
+(when (fboundp 'scroll-bar-mode)
+  (scroll-bar-mode -1))
+(when (fboundp 'horizontal-scroll-bar-mode)
+  (horizontal-scroll-bar-mode -1))
+(modify-all-frames-parameters
+ '((vertical-scroll-bars . nil)
+   (horizontal-scroll-bars . nil)))
 
 (when (fboundp 'context-menu-mode)
   (context-menu-mode 1))

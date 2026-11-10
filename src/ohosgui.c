@@ -288,15 +288,24 @@ ohos_draw_glyph_string_impl (struct glyph_string *s)
 		  else if (col >= bmp->width)
 		    col = bmp->width - 1;
 		  px = row[col];
-		  d[0] = (px >> 16) & 0xff;
-		  d[1] = (px >> 8) & 0xff;
-		  d[2] = px & 0xff;
-		  d[3] = has_alpha ? ((px >> 24) & 0xff) : 0xff;
+		  unsigned a = has_alpha ? ((px >> 24) & 0xff) : 255;
+		  unsigned bg = (unsigned) FRAME_BACKGROUND_PIXEL (s->f);
+		  unsigned br = (bg >> 16) & 0xff;
+		  unsigned bgc = (bg >> 8) & 0xff;
+		  unsigned bb = bg & 0xff;
+		  d[0] = (uint8_t) ((((px >> 16) & 0xff) * a
+				     + br * (255 - a)) / 255);
+		  d[1] = (uint8_t) ((((px >> 8) & 0xff) * a
+				     + bgc * (255 - a)) / 255);
+		  d[2] = (uint8_t) (((px & 0xff) * a
+				     + bb * (255 - a)) / 255);
+		  d[3] = 255;
 		}
 	    }
-	  /* Transparent pixels reveal the face background, not whatever the
-	     previous buffer left in the framebuffer.  */
-	  ohos_draw_fill (x, y, tw, th, (uint32_t) s->face->background);
+	  /* Do not pre-fill with the image face background: for the splash
+	     logo that face is black, which turns transparent image pixels
+	     into a black rectangle.  The bitmap already holds the frame
+	     background and alpha blending composites the image over it.  */
 	  ohos_draw_image (x, y, tw, th, rgba, (unsigned) n);
 	  xfree (rgba);
 	}
