@@ -375,7 +375,17 @@ ohos_flush (struct frame *f)
      backend does with android_flip_and_flush.  */
   if (!buffer_flipping_blocked_p ())
     {
-      ohos_draw_present ();
+      if (ohos_probe_pending ())
+    {
+      struct timespec ts;
+      clock_gettime (CLOCK_MONOTONIC, &ts);
+      uint64_t now = (uint64_t) ts.tv_sec * 1000000000ull + ts.tv_nsec;
+      char dbg[128];
+      snprintf (dbg, sizeof dbg, "pop->flush %.1f us",
+                (double) (now - ohos_probe_pop_ns ()) / 1000.0);
+      ohos_log (dbg);
+    }
+  ohos_draw_present ();
       o->need_flip = false;
     }
 }
