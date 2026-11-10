@@ -177,7 +177,7 @@ static int ohos_cursor_x = -1, ohos_cursor_y = -1;
 static bool ohos_cursor_shown;
 
 static void
-ohos_draw_glyph_string (struct glyph_string *s)
+ohos_draw_glyph_string_impl (struct glyph_string *s)
 {
   if (s && s->first_glyph)
     {
@@ -339,6 +339,24 @@ ohos_draw_glyph_string (struct glyph_string *s)
     s->font->driver->draw (s, 0, s->nchars, s->x, s->y, true);
 }
 
+static unsigned long long probe_glyph_ns;
+static unsigned long probe_glyph_calls;
+
+static void
+ohos_draw_glyph_string (struct glyph_string *s)
+{
+  struct timespec a, b;
+  clock_gettime (CLOCK_MONOTONIC, &a);
+  ohos_draw_glyph_string_impl (s);
+  clock_gettime (CLOCK_MONOTONIC, &b);
+  probe_glyph_ns += ((unsigned long long) b.tv_sec * 1000000000ull
+                     + b.tv_nsec)
+                    - ((unsigned long long) a.tv_sec * 1000000000ull
+                       + a.tv_nsec);
+  probe_glyph_calls++;
+}
+
+
 static void
 ohos_clear_frame_area_rect (struct frame *f, int x, int y, int width,
 			    int height)
@@ -369,7 +387,9 @@ ohos_flush (struct frame *f)
   ohos_probe_log ("pop->flush-entry");
   {
     char dbg[96];
-    snprintf (dbg, sizeof dbg, "draw cmds=%lu", ohos_probe_cmd_count ());
+    snprintf (dbg, sizeof dbg, "draw cmds=%lu glyph_ms=%.2f calls=%lu",
+              ohos_probe_cmd_count (), (double) probe_glyph_ns / 1000000.0,
+              probe_glyph_calls);
     ohos_log (dbg);
   }
   ohos_draw_end (o->epoch);
@@ -1353,6 +1373,8 @@ ohos_update_begin (struct frame *f)
   struct ohos_output *o = FRAME_OUTPUT_DATA (f);
 
   o->complete_p = false;
+  probe_glyph_ns = 0;
+  probe_glyph_calls = 0;
   o->epoch++;
   /* Open a new redisplay pass: the host uses the epoch to detect lost
      commands (a gap means the queue overflowed) and to discard commands
