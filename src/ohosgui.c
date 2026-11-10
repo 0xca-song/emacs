@@ -389,9 +389,9 @@ ohos_flush (struct frame *f)
   ohos_log ("OHOSDBG flush-enter");
   ohos_probe_log ("pop->flush-entry");
   ohos_draw_end (o->epoch);
-  /* Bitmap presentation is dirty-region based, so it is safe to submit
-     from flush_display; there is no partial GPU frame to expose.  */
-  ohos_draw_present ();
+  /* Present once per completed redisplay, not on every flush_display
+     call.  Multiple back-to-back presents rotate NativeWindow buffers
+     faster than the compositor consumes them and cause flicker.  */
 
 }
 
