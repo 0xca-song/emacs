@@ -1367,6 +1367,8 @@ ohos_toggle_invisible_pointer (struct frame *f, bool invisible)
   unblock_input ();
 }
 
+static unsigned probe_epoch;
+
 static void
 ohos_update_begin (struct frame *f)
 {
@@ -1376,6 +1378,12 @@ ohos_update_begin (struct frame *f)
   probe_glyph_ns = 0;
   probe_glyph_calls = 0;
   o->epoch++;
+  probe_epoch = o->epoch;
+  {
+    char dbg[96];
+    snprintf (dbg, sizeof dbg, "update-begin epoch=%u", probe_epoch);
+    ohos_log (dbg);
+  }
   /* Open a new redisplay pass: the host uses the epoch to detect lost
      commands (a gap means the queue overflowed) and to discard commands
      that belong to a geometry it no longer has.  */
@@ -1418,6 +1426,11 @@ ohos_buffer_flipping_unblocked (struct frame *f)
 {
   struct ohos_output *o = FRAME_OUTPUT_DATA (f);
   ohos_probe_log ("pop->unblocked");
+  {
+    char dbg[96];
+    snprintf (dbg, sizeof dbg, "unblocked epoch=%u", probe_epoch);
+    ohos_log (dbg);
+  }
 
   if (!o->need_flip)
     return;
