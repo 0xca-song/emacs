@@ -389,9 +389,9 @@ ohos_flush (struct frame *f)
   ohos_log ("OHOSDBG flush-enter");
   ohos_probe_log ("pop->flush-entry");
   ohos_draw_end (o->epoch);
-  /* flush_display is XFlush-like.  It must not mark the frame dirty:
-     need_flip belongs to a redisplay pass (update_begin), otherwise
-     minibuffer/echo flushes produce spurious presents of stale frames.  */
+  /* Bitmap presentation is dirty-region based, so it is safe to submit
+     from flush_display; there is no partial GPU frame to expose.  */
+  ohos_draw_present ();
 
 }
 

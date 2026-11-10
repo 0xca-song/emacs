@@ -195,6 +195,7 @@ ohos_draw_scroll (int x, int from_y, int width, int height, int to_y)
 void
 ohos_draw_present (void)
 {
+  ohos_log ("OHOSDBG emacs-present");
   if (probe_present_pending)
     {
       probe_present_pending = false;
