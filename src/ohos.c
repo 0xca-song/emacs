@@ -118,7 +118,7 @@ enqueue (const struct ohos_draw_command *cmd)
       struct timespec ts;
       clock_gettime (CLOCK_MONOTONIC, &ts);
       uint64_t now = (uint64_t) ts.tv_sec * 1000000000ull + ts.tv_nsec;
-      if (probe_logs++ < 60)
+      if (probe_logs++ < 100000)
         {
           char dbg[128];
           snprintf (dbg, sizeof dbg, "pop->draw %.1f us",
@@ -235,7 +235,7 @@ ohos_draw_present (void)
       struct timespec ts;
       clock_gettime (CLOCK_MONOTONIC, &ts);
       uint64_t now = (uint64_t) ts.tv_sec * 1000000000ull + ts.tv_nsec;
-      if (probe_logs++ < 60)
+      if (probe_logs++ < 100000)
         {
           char dbg[128];
           snprintf (dbg, sizeof dbg, "pop->present %.1f us",
@@ -561,7 +561,7 @@ ohos_pop_input (unsigned *key, unsigned *modifiers, int *mouse,
               = (uint64_t) pts.tv_sec * 1000000000ull + pts.tv_nsec;
           probe_after_pop = true;
           probe_present_pending = true;
-          if (probe_logs < 60)
+          if (probe_logs < 100000)
             {
               char dbg[128];
               snprintf (dbg, sizeof dbg, "input queue %.1f us",
