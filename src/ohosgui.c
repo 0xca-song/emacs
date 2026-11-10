@@ -385,34 +385,12 @@ ohos_flush (struct frame *f)
   struct ohos_output *o = FRAME_OUTPUT_DATA (f);
 
   ohos_probe_log ("pop->flush-entry");
-  {
-    char dbg[128];
-    snprintf (dbg, sizeof dbg, "flush-enter epoch=%u blocked=%d",
-              o->epoch, buffer_flipping_blocked_p ());
-    ohos_log (dbg);
-  }
   ohos_draw_end (o->epoch);
-  o->need_flip = true;
-
-  /* Redisplay blocks buffer flips while it runs; presenting inside that
-     window could show a frame Emacs is still mutating.  Defer the
-     present to ohos_buffer_flipping_unblocked, exactly like the Android
-     backend does with android_flip_and_flush.  */
-  if (!buffer_flipping_blocked_p ())
-    {
-      if (ohos_probe_pending ())
-    {
-      struct timespec ts;
-      clock_gettime (CLOCK_MONOTONIC, &ts);
-      uint64_t now = (uint64_t) ts.tv_sec * 1000000000ull + ts.tv_nsec;
-      char dbg[128];
-      snprintf (dbg, sizeof dbg, "pop->flush %.1f us",
-                (double) (now - ohos_probe_pop_ns ()) / 1000.0);
-      ohos_log (dbg);
-    }
+  o->need_flip = false;
+  /* Android flips directly from its flush hook.  Deferring to
+     buffer_flipping_unblocked delayed key input by ~130ms on OHOS.  */
   ohos_draw_present ();
-      o->need_flip = false;
-    }
+
 }
 
 static void
@@ -2094,10 +2072,21 @@ extern Lisp_Object Fohos_post_command_redisplay (void);
 
 DEFUN ("ohos-post-command-redisplay", Fohos_post_command_redisplay,
        Sohos_post_command_redisplay, 0, 0, 0,
-       doc: /* Force an OHOS redisplay after each command.  */)
+       doc: /* Force redisplay for text insertion commands.  */)
   (void)
 {
-  Fredisplay (Qt);
+  static Lisp_Object insert_cmd;
+  static Lisp_Object newline_cmd;
+  static Lisp_Object delete_cmd;
+  if (NILP (insert_cmd))
+    {
+      insert_cmd = intern ("self-insert-command");
+      newline_cmd = intern ("newline");
+      delete_cmd = intern ("delete-char");
+    }
+  if (EQ (Vthis_command, insert_cmd) || EQ (Vthis_command, newline_cmd)
+      || EQ (Vthis_command, delete_cmd))
+    Fredisplay (Qt);
   return Qnil;
 }
 
