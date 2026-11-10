@@ -18,6 +18,7 @@
 #include <unistd.h>
 #include "lisp.h"
 #include "ohosgui.h"
+#include "ohos_render.h"
 
 /* A full redraw on a 4K/320-column frame can exceed 30k glyph commands.
    Keep enough headroom that a cold resize does not immediately overflow
@@ -69,6 +70,29 @@ ohos_probe_log (const char *tag)
 static const struct ohos_host_api *host_api;
 static unsigned draw_epoch;
 
+/* Emacs-side frame batch.  Drawing no longer calls the host per glyph.  */
+#define OHOS_DRAW_BATCH 8192
+static struct ohos_draw_command draw_batch[OHOS_DRAW_BATCH];
+static int draw_batch_n;
+
+static void
+ohos_flush_batch (void)
+{
+  if (draw_batch_n > 0)
+    {
+      ohos_render_submit (draw_batch, draw_batch_n);
+      draw_batch_n = 0;
+    }
+}
+
+static void
+ohos_queue_draw (const struct ohos_draw_command *c)
+{
+  if (draw_batch_n >= OHOS_DRAW_BATCH)
+    ohos_flush_batch ();
+  draw_batch[draw_batch_n++] = *c;
+}
+
 void
 ohos_set_host_api (const struct ohos_host_api *api)
 {
@@ -113,69 +137,59 @@ ohos_draw_pending (void)
 void
 ohos_draw_clear (uint32_t bg)
 {
-  if (host_api && host_api->draw.clear)
-    host_api->draw.clear (bg);
+  struct ohos_draw_command c = { .op = OHOS_OP_CLEAR, .bg = bg };
+  ohos_queue_draw (&c);
 }
 
 void
 ohos_draw_fill (int x, int y, int w, int h, uint32_t color)
 {
-  if (host_api && host_api->draw.fill)
-    host_api->draw.fill (x, y, w, h, color);
+  struct ohos_draw_command c = { .op = OHOS_OP_FILL, .x = x, .y = y,
+                                 .w = w, .h = h, .bg = color };
+  ohos_queue_draw (&c);
 }
 
 void
 ohos_draw_text (int x, int y, int w, int h, unsigned code,
 		uint32_t fg, uint32_t bg, uint32_t flags)
 {
-  if (host_api && host_api->draw.text)
-    host_api->draw.text (x, y, w, h, code, fg, bg, flags);
+  struct ohos_draw_command c = { .op = OHOS_OP_TEXT, .x = x, .y = y,
+                                 .w = w, .h = h, .code = code,
+                                 .fg = fg, .bg = bg, .flags = flags };
+  ohos_queue_draw (&c);
 }
 
 void
 ohos_draw_image (int x, int y, int w, int h, const void *rgba, unsigned len)
 {
   if (w <= 0 || h <= 0 || len == 0)
-    {
-      char dbg[128];
-      snprintf (dbg, sizeof dbg, "image draw skipped x=%d y=%d w=%d h=%d len=%u",
-		x, y, w, h, len);
-      ohos_log (dbg);
-      return;
-    }
-  {
-    static int image_logs;
-    if (image_logs++ < 8)
-      {
-	char dbg[128];
-	snprintf (dbg, sizeof dbg, "image draw x=%d y=%d w=%d h=%d len=%u",
-		  x, y, w, h, len);
-	ohos_log (dbg);
-      }
-  }
-  /* The command must own its pixels: it is consumed later, on the UI
-     thread, while the caller's buffer is already gone.  */
-  void *owned = xmalloc (len);
-
-  memcpy (owned, rgba, len);
-  if (host_api && host_api->draw.image)
-    host_api->draw.image (x, y, w, h, owned, len);
-  xfree (owned);
+    return;
+  /* Preserve ordering: submit everything queued before the image, then
+     submit the image while its pixel buffer is still alive.  */
+  ohos_flush_batch ();
+  struct ohos_draw_command c = { .op = OHOS_OP_IMAGE, .x = x, .y = y,
+                                 .w = w, .h = h, .ptr = rgba,
+                                 .ptr_len = len };
+  ohos_render_submit (&c, 1);
 }
 
 void
 ohos_draw_cursor (int x, int y, int w, int h, int bar, uint32_t fg,
 		  uint32_t bg, uint32_t flags, int kind)
 {
-  if (host_api && host_api->draw.cursor)
-    host_api->draw.cursor (x, y, w, h, bar, fg, bg, flags, kind);
+  struct ohos_draw_command c = { .op = OHOS_OP_CURSOR, .x = x, .y = y,
+                                 .w = w, .h = h, .code = (unsigned) bar,
+                                 .fg = fg, .bg = bg,
+                                 .flags = flags | ((uint32_t) kind << 1) };
+  ohos_queue_draw (&c);
 }
 
 void
 ohos_draw_scroll (int x, int from_y, int width, int height, int to_y)
 {
-  if (host_api && host_api->draw.scroll)
-    host_api->draw.scroll (x, from_y, width, height, to_y);
+  struct ohos_draw_command c = { .op = OHOS_OP_SCROLL, .x = x, .y = from_y,
+                                 .w = width, .h = height, .to_y = to_y };
+  ohos_queue_draw (&c);
 }
 
 void
@@ -183,27 +197,17 @@ ohos_draw_present (void)
 {
   if (probe_present_pending)
     {
-      struct timespec ts;
-      clock_gettime (CLOCK_MONOTONIC, &ts);
-      uint64_t now = (uint64_t) ts.tv_sec * 1000000000ull + ts.tv_nsec;
-      if (probe_logs++ < 100000)
-        {
-          char dbg[128];
-          snprintf (dbg, sizeof dbg, "OHOSDBG pop-present seq=%llu %.1f us",
-                    (unsigned long long) probe_pop_seq,
-                    (double) (now - probe_pop_ns) / 1000.0);
-          ohos_log (dbg);
-        }
       probe_present_pending = false;
     }
-  if (host_api && host_api->draw.present)
-    host_api->draw.present ();
+  ohos_flush_batch ();
+  ohos_render_flush ();
 }
 
 void
 ohos_draw_begin (unsigned epoch)
 {
   draw_epoch = epoch;
+  draw_batch_n = 0;
 }
 
 void
