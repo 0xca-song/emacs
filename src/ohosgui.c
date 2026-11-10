@@ -388,10 +388,12 @@ ohos_flush (struct frame *f)
 
   ohos_probe_log ("pop->flush-entry");
   ohos_draw_end (o->epoch);
-  o->need_flip = false;
-  /* Android flips directly from its flush hook.  Deferring to
-     buffer_flipping_unblocked delayed key input by ~130ms on OHOS.  */
-  ohos_draw_present ();
+  o->need_flip = true;
+  if (!buffer_flipping_blocked_p ())
+    {
+      ohos_draw_present ();
+      o->need_flip = false;
+    }
 
 }
 
@@ -1400,6 +1402,14 @@ ohos_frame_up_to_date (struct frame *f)
   FRAME_MOUSE_UPDATE (f);
   /* Present when Emacs considers the frame complete, mirroring
      android_frame_up_to_date.  */
+  {
+    struct ohos_output *o = FRAME_OUTPUT_DATA (f);
+    if (o->need_flip && !buffer_flipping_blocked_p ())
+      {
+        ohos_draw_present ();
+        o->need_flip = false;
+      }
+  }
   FRAME_OUTPUT_DATA (f)->complete_p = true;
   unblock_input ();
 }
@@ -1424,6 +1434,7 @@ ohos_buffer_flipping_unblocked (struct frame *f)
   if (!o->need_flip)
     return;
   o->need_flip = false;
+  ohos_draw_present ();
 }
 
 static void
