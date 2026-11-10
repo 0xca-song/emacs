@@ -123,13 +123,26 @@ enqueue (const struct ohos_draw_command *cmd)
 {
   if (ohos_direct_mode ())
     {
+      static struct ohos_draw_command direct_buf[512];
+      static int direct_n;
       if (cmd->op == OHOS_OP_PRESENT)
         {
+          if (direct_n > 0 && host_api && host_api->draw.batch)
+            host_api->draw.batch (direct_buf, direct_n);
+          direct_n = 0;
           if (host_api && host_api->draw.present)
             host_api->draw.present ();
         }
-      else if (host_api && host_api->draw.batch)
-        host_api->draw.batch (cmd, 1);
+      else
+        {
+          if (direct_n == 512)
+            {
+              if (host_api && host_api->draw.batch)
+                host_api->draw.batch (direct_buf, direct_n);
+              direct_n = 0;
+            }
+          direct_buf[direct_n++] = *cmd;
+        }
       return;
     }
 
