@@ -1356,6 +1356,10 @@ ohos_update_begin (struct frame *f)
   struct ohos_output *o = FRAME_OUTPUT_DATA (f);
 
   o->complete_p = false;
+  /* A redisplay pass has started.  Mark the frame dirty here, not only
+     in flush_display: window-only updates may never call
+     flush_display, but frame_up_to_date still has to commit them.  */
+  o->need_flip = true;
   probe_glyph_ns = 0;
   probe_glyph_calls = 0;
   o->epoch++;
