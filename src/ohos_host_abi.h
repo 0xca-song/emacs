@@ -40,7 +40,7 @@
 extern "C" {
 #endif
 
-#define OHOS_GUI_ABI_VERSION 6
+#define OHOS_GUI_ABI_VERSION 7
 
 /* Draw command stream shared by redisplay and the host.  The layout is
    part of the ABI; keep the app-side mirror in sync with the static
@@ -118,6 +118,7 @@ struct ohos_emacs_api
 
   int (*input_key) (unsigned key, unsigned modifiers, int pressed);
   void (*input_text) (const char *text);
+  void (*input_menubar) (int index);
   void (*input_raw) (const char *data, size_t len);
   void (*input_mouse) (int button, int x, int y,
 		       unsigned modifiers, int press);

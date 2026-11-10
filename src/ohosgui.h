@@ -331,8 +331,10 @@ void ohos_pump_draw_commands (void);
 #define OHOS_INPUT_FOCUS_FLAG 0x20000000u
 #define OHOS_INPUT_RESIZE_FLAG 0x10000000u
 #define OHOS_INPUT_EXPOSE_FLAG 0x08000000u
+#define OHOS_INPUT_MENUBAR_FLAG 0x04000000u
 void ohos_create_input_pipe (void);
 void ohos_input_raw (const char *data, size_t len);
+void ohos_input_menubar (int index);
 int ohos_input_wait_fd (void);
 int ohos_input_key (unsigned key, unsigned modifiers, int pressed);
 uint64_t ohos_probe_pop_ns (void);

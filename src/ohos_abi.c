@@ -28,6 +28,7 @@ static const struct ohos_emacs_api emacs_api =
   .run = ohos_abi_run,
   .input_key = ohos_input_key,
   .input_text = ohos_input_text,
+  .input_menubar = ohos_input_menubar,
   .input_raw = ohos_input_raw,
   .input_mouse = ohos_input_mouse,
   .input_wheel = ohos_input_wheel,

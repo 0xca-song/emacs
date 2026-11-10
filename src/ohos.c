@@ -528,6 +528,29 @@ ohos_pop_input (unsigned *key, unsigned *modifiers, int *mouse,
 }
 
 void
+ohos_input_menubar (int index)
+{
+  int was_empty;
+  pthread_mutex_lock (&input_lock);
+  was_empty = (input_count == 0);
+  if (input_count == OHOS_INPUT_CAP)
+    input_dropped++;
+  else
+    {
+      input_ring[input_tail].key = OHOS_INPUT_MENUBAR_FLAG | (unsigned) index;
+      input_ring[input_tail].modifiers = 0;
+      input_ring[input_tail].mouse = 0;
+      input_ring[input_tail].motion = 0;
+      input_ring[input_tail].wheel = 0;
+      input_ring[input_tail].seq = ++input_seq;
+      input_tail = (input_tail + 1) & OHOS_INPUT_MASK;
+      input_count++;
+    }
+  pthread_mutex_unlock (&input_lock);
+  ohos_signal_input (was_empty);
+}
+
+void
 ohos_input_text (const char *text)
 {
   const unsigned char *p = (const unsigned char *) text;

@@ -1816,6 +1816,13 @@ ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
       int emods = 0;
       unsigned char_code = ohos_char_from_key (key);
 
+      if (key & OHOS_INPUT_MENUBAR_FLAG)
+	{
+	  Lisp_Object fn = intern ("ohos-menu-bar-open-index");
+	  Lisp_Object args[2] = { fn, make_fixnum ((int) (key & 0xffff)) };
+	  Ffuncall (2, args);
+	  continue;
+	}
       if (key & OHOS_INPUT_EXPOSE_FLAG)
 	{
 	  /* The host rebuilt its surface (resize, surface loss, menu
