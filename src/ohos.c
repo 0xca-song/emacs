@@ -129,36 +129,42 @@ ohos_direct_mode (void)
 static void
 enqueue (const struct ohos_draw_command *cmd)
 {
-  static struct ohos_draw_command direct_buf[512];
-  static int direct_n;
-
-  if (cmd->op == OHOS_OP_IMAGE && cmd->ptr)
-    {
-      if (direct_n > 0 && host_api && host_api->draw.batch)
-        host_api->draw.batch (direct_buf, direct_n);
-      direct_n = 0;
-      if (host_api && host_api->draw.batch)
-        host_api->draw.batch (cmd, 1);
-      xfree ((void *) cmd->ptr);
-      return;
-    }
   if (cmd->op == OHOS_OP_PRESENT)
     {
-      if (direct_n > 0 && host_api && host_api->draw.batch)
-        host_api->draw.batch (direct_buf, direct_n);
-      direct_n = 0;
       if (host_api && host_api->draw.present)
         host_api->draw.present ();
       return;
     }
-  if (direct_n == 512)
+  if (!host_api)
+    return;
+  switch (cmd->op)
     {
-      if (host_api && host_api->draw.batch)
-        host_api->draw.batch (direct_buf, direct_n);
-      direct_n = 0;
+    case OHOS_OP_CLEAR:
+      if (host_api->draw.clear)
+        host_api->draw.clear (cmd->bg);
+      break;
+    case OHOS_OP_FILL:
+      if (host_api->draw.fill)
+        host_api->draw.fill (cmd->x, cmd->y, cmd->w, cmd->h, cmd->bg);
+      break;
+    case OHOS_OP_TEXT:
+      if (host_api->draw.text)
+        host_api->draw.text (cmd->x, cmd->y, cmd->w, cmd->h, cmd->code,
+                             cmd->fg, cmd->bg, cmd->flags);
+      break;
+    case OHOS_OP_CURSOR:
+      if (host_api->draw.cursor)
+        host_api->draw.cursor (cmd->x, cmd->y, cmd->w, cmd->h,
+                               (int) cmd->code, cmd->fg, cmd->bg,
+                               cmd->flags, (int) ((cmd->flags >> 1) & 7));
+      break;
+    case OHOS_OP_SCROLL:
+      if (host_api->draw.scroll)
+        host_api->draw.scroll (cmd->x, cmd->y, cmd->w, cmd->h, cmd->to_y);
+      break;
+    default:
+      break;
     }
-  probe_cmd_count++;
-  direct_buf[direct_n++] = *cmd;
 }
 
 void
@@ -214,10 +220,9 @@ ohos_draw_image (int x, int y, int w, int h, const void *rgba, unsigned len)
   void *owned = xmalloc (len);
 
   memcpy (owned, rgba, len);
-  struct ohos_draw_command cmd = { .op = OHOS_OP_IMAGE,
-			       .x = x, .y = y, .w = w, .h = h,
-			       .ptr = owned, .ptr_len = len };
-  enqueue (&cmd);
+  if (host_api && host_api->draw.image)
+    host_api->draw.image (x, y, w, h, owned, len);
+  xfree (owned);
 }
 
 void
