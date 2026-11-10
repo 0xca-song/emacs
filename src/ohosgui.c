@@ -386,13 +386,12 @@ ohos_flush (struct frame *f)
 {
   struct ohos_output *o = FRAME_OUTPUT_DATA (f);
 
+  ohos_log ("OHOSDBG flush-enter");
   ohos_probe_log ("pop->flush-entry");
   ohos_draw_end (o->epoch);
-  /* flush_display is XFlush-like: mark the frame dirty and let
-     frame_up_to_date / buffer_flipping_unblocked commit the complete
-     frame.  Presenting here can commit a partial frame and clear
-     need_flip before redisplay finishes.  */
-  o->need_flip = true;
+  /* flush_display is XFlush-like.  It must not mark the frame dirty:
+     need_flip belongs to a redisplay pass (update_begin), otherwise
+     minibuffer/echo flushes produce spurious presents of stale frames.  */
 
 }
 
@@ -1366,7 +1365,7 @@ ohos_update_begin (struct frame *f)
   probe_epoch = o->epoch;
   {
     char dbg[96];
-    snprintf (dbg, sizeof dbg, "update-begin epoch=%u reads=%lu",
+    snprintf (dbg, sizeof dbg, "OHOSDBG update-begin epoch=%u reads=%lu",
               probe_epoch, probe_read_calls);
     ohos_log (dbg);
   }
@@ -1403,6 +1402,13 @@ ohos_frame_up_to_date (struct frame *f)
 {
   block_input ();
   FRAME_MOUSE_UPDATE (f);
+  {
+    char dbg[96];
+    snprintf (dbg, sizeof dbg, "OHOSDBG frame-up-to-date need=%d blocked=%d",
+              (int) FRAME_OUTPUT_DATA (f)->need_flip,
+              buffer_flipping_blocked_p ());
+    ohos_log (dbg);
+  }
   /* Present when Emacs considers the frame complete, mirroring
      android_frame_up_to_date.  */
   {
@@ -1430,7 +1436,7 @@ ohos_buffer_flipping_unblocked (struct frame *f)
 
   {
     char dbg[128];
-    snprintf (dbg, sizeof dbg, "unblocked need_flip=%d blocked=%d",
+    snprintf (dbg, sizeof dbg, "OHOSDBG unblocked need_flip=%d blocked=%d",
               (int) o->need_flip, buffer_flipping_blocked_p ());
     ohos_log (dbg);
   }
