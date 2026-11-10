@@ -37,6 +37,7 @@ static bool probe_after_pop;
 static bool probe_present_pending;
 static int probe_logs;
 static uint64_t probe_pop_seq;
+static unsigned long probe_cmd_count;
 
 uint64_t
 ohos_probe_pop_ns (void)
@@ -48,6 +49,12 @@ bool
 ohos_probe_pending (void)
 {
   return probe_present_pending;
+}
+
+unsigned long
+ohos_probe_cmd_count (void)
+{
+  return probe_cmd_count;
 }
 
 void
@@ -150,6 +157,7 @@ enqueue (const struct ohos_draw_command *cmd)
         host_api->draw.batch (direct_buf, direct_n);
       direct_n = 0;
     }
+  probe_cmd_count++;
   direct_buf[direct_n++] = *cmd;
 }
 
@@ -262,6 +270,7 @@ ohos_draw_begin (unsigned epoch)
 {
   struct ohos_draw_command cmd = { .op = OHOS_OP_BEGIN, .epoch = epoch };
   draw_epoch = epoch;
+  probe_cmd_count = 0;
   enqueue (&cmd);
 }
 

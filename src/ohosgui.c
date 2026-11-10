@@ -367,6 +367,11 @@ ohos_flush (struct frame *f)
   struct ohos_output *o = FRAME_OUTPUT_DATA (f);
 
   ohos_probe_log ("pop->flush-entry");
+  {
+    char dbg[96];
+    snprintf (dbg, sizeof dbg, "draw cmds=%lu", ohos_probe_cmd_count ());
+    ohos_log (dbg);
+  }
   ohos_draw_end (o->epoch);
   o->need_flip = true;
 
