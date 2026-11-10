@@ -59,7 +59,7 @@ ohos_probe_log (const char *tag)
   clock_gettime (CLOCK_MONOTONIC, &ts);
   uint64_t now = (uint64_t) ts.tv_sec * 1000000000ull + ts.tv_nsec;
   char dbg[128];
-  snprintf (dbg, sizeof dbg, "%s %.1f us", tag,
+  snprintf (dbg, sizeof dbg, "OHOSDBG %s %.1f us", tag,
             (double) (now - probe_pop_ns) / 1000.0);
   ohos_log (dbg);
 }
@@ -189,7 +189,7 @@ ohos_draw_present (void)
       if (probe_logs++ < 100000)
         {
           char dbg[128];
-          snprintf (dbg, sizeof dbg, "pop->present seq=%llu %.1f us",
+          snprintf (dbg, sizeof dbg, "OHOSDBG pop-present seq=%llu %.1f us",
                     (unsigned long long) probe_pop_seq,
                     (double) (now - probe_pop_ns) / 1000.0);
           ohos_log (dbg);
@@ -447,7 +447,7 @@ ohos_pop_input (unsigned *key, unsigned *modifiers, int *mouse,
           if (probe_logs < 100000)
             {
               char dbg[128];
-              snprintf (dbg, sizeof dbg, "input queue seq=%llu %.1f us",
+              snprintf (dbg, sizeof dbg, "OHOSDBG input-queue seq=%llu %.1f us",
                         (unsigned long long) seq,
                         (double) (probe_pop_ns - enqueue_ns) / 1000.0);
               ohos_log (dbg);

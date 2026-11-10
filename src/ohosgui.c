@@ -1430,7 +1430,7 @@ ohos_buffer_flipping_unblocked (struct frame *f)
   ohos_probe_log ("pop->unblocked");
   {
     char dbg[96];
-    snprintf (dbg, sizeof dbg, "unblocked epoch=%u", probe_epoch);
+    snprintf (dbg, sizeof dbg, "OHOSDBG unblocked-epoch=%u", probe_epoch);
     ohos_log (dbg);
   }
 
