@@ -371,7 +371,6 @@ ohos_clear_frame_area (struct frame *f, int x, int y, int width, int height)
 }
 
 
-static bool input_display_gate;
 
 static void
 ohos_clear_frame (struct frame *f)
@@ -1402,7 +1401,6 @@ ohos_frame_up_to_date (struct frame *f)
   /* Present when Emacs considers the frame complete, mirroring
      android_frame_up_to_date.  */
   FRAME_OUTPUT_DATA (f)->complete_p = true;
-  input_display_gate = false;
   unblock_input ();
 }
 
@@ -1779,18 +1777,14 @@ static int
 ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
 {
   probe_read_calls++;
-  if (input_display_gate)
-    return 0;
   unsigned key, modifiers;
   int count = 0;
   int mouse, button, mx, my, press, motion, wheel;
   (void) hold_quit;
 
-  while (!input_display_gate
-         && ohos_pop_input (&key, &modifiers, &mouse, &button, &mx, &my,
-                            &press, &motion, &wheel))
+  while (ohos_pop_input (&key, &modifiers, &mouse, &button, &mx, &my,
+                         &press, &motion, &wheel))
     {
-      input_display_gate = true;
       struct input_event ev;
       int emods = 0;
       unsigned char_code = ohos_char_from_key (key);
