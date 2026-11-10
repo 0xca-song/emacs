@@ -366,6 +366,7 @@ ohos_flush (struct frame *f)
 {
   struct ohos_output *o = FRAME_OUTPUT_DATA (f);
 
+  ohos_probe_log ("pop->flush-entry");
   ohos_draw_end (o->epoch);
   o->need_flip = true;
 
@@ -1351,6 +1352,7 @@ ohos_update_begin (struct frame *f)
   /* Open a new redisplay pass: the host uses the epoch to detect lost
      commands (a gap means the queue overflowed) and to discard commands
      that belong to a geometry it no longer has.  */
+  ohos_probe_log ("pop->draw-begin");
   ohos_draw_begin (o->epoch);
 }
 
