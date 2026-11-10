@@ -388,12 +388,11 @@ ohos_flush (struct frame *f)
 
   ohos_probe_log ("pop->flush-entry");
   ohos_draw_end (o->epoch);
+  /* flush_display is XFlush-like: mark the frame dirty and let
+     frame_up_to_date / buffer_flipping_unblocked commit the complete
+     frame.  Presenting here can commit a partial frame and clear
+     need_flip before redisplay finishes.  */
   o->need_flip = true;
-  if (!buffer_flipping_blocked_p ())
-    {
-      ohos_draw_present ();
-      o->need_flip = false;
-    }
 
 }
 
