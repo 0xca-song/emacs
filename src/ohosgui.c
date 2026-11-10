@@ -1388,6 +1388,7 @@ static void
 ohos_buffer_flipping_unblocked (struct frame *f)
 {
   struct ohos_output *o = FRAME_OUTPUT_DATA (f);
+  ohos_probe_log ("pop->unblocked");
 
   if (!o->need_flip)
     return;
@@ -1982,6 +1983,7 @@ ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
       while (read (fd, buf, sizeof buf) > 0)
 	;
   }
+  ohos_probe_log ("pop->read-return");
   return count;
 }
 

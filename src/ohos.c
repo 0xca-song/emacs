@@ -50,6 +50,20 @@ ohos_probe_pending (void)
   return probe_present_pending;
 }
 
+void
+ohos_probe_log (const char *tag)
+{
+  if (!probe_present_pending)
+    return;
+  struct timespec ts;
+  clock_gettime (CLOCK_MONOTONIC, &ts);
+  uint64_t now = (uint64_t) ts.tv_sec * 1000000000ull + ts.tv_nsec;
+  char dbg[128];
+  snprintf (dbg, sizeof dbg, "%s %.1f us", tag,
+            (double) (now - probe_pop_ns) / 1000.0);
+  ohos_log (dbg);
+}
+
 /* The host API installed by ohos_abi.c before Emacs starts.  NULL only
    during very early startup, before the host calls the run entry.  */
 static const struct ohos_host_api *host_api;
