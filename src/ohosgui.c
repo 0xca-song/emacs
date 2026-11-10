@@ -370,6 +370,7 @@ ohos_clear_frame_area (struct frame *f, int x, int y, int width, int height)
   ohos_clear_frame_area_rect (f, x, y, width, height);
 }
 
+
 static void
 ohos_clear_frame (struct frame *f)
 {
@@ -1396,6 +1397,8 @@ ohos_frame_up_to_date (struct frame *f)
 {
   block_input ();
   FRAME_MOUSE_UPDATE (f);
+  /* Present when Emacs considers the frame complete, mirroring
+     android_frame_up_to_date.  */
   FRAME_OUTPUT_DATA (f)->complete_p = true;
   unblock_input ();
 }
@@ -1420,8 +1423,6 @@ ohos_buffer_flipping_unblocked (struct frame *f)
   if (!o->need_flip)
     return;
   o->need_flip = false;
-  if (!buffer_flipping_blocked_p ())
-    ohos_draw_present ();
 }
 
 static void
