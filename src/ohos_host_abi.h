@@ -3,9 +3,12 @@
 
    There are exactly two directions:
 
-     struct ohos_host_api   host -> Emacs: drawing and frame properties.
-     struct ohos_emacs_api  Emacs -> host: lifecycle, input, draw pump,
-                            host command channel.
+     struct ohos_emacs_api  host -> Emacs: lifecycle, input, surface
+                            events and command channel.
+     struct ohos_host_api   Emacs -> host: frame properties, logging,
+                            clipboard and wakeups.  Drawing does not cross
+                            this ABI; it goes to the statically linked
+                            renderer on the Emacs thread.
 
    The host resolves the single exported symbol `ohos_emacs_api' and calls
    its `run' entry with the host API.  No other C symbol is part of the
