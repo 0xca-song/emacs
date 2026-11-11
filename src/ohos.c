@@ -246,6 +246,19 @@ ohos_push_surface (int kind, void *window, int width, int height,
                    uint64_t generation)
 {
   pthread_mutex_lock (&surface_event_lock);
+  /* Coalesce a pending resize: the newest size wins.  */
+  if (kind == 1 && surface_count > 0)
+    {
+      unsigned last = (surface_tail + OHOS_SURFACE_CAP - 1) & (OHOS_SURFACE_CAP - 1);
+      if (surface_ring[last].kind == 1)
+        {
+          surface_ring[last].width = width;
+          surface_ring[last].height = height;
+          surface_ring[last].generation = generation;
+          pthread_mutex_unlock (&surface_event_lock);
+          return;
+        }
+    }
   if (surface_count == OHOS_SURFACE_CAP)
     {
       /* Keep the newest event; drop the oldest pending event.  */
