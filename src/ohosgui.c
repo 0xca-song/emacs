@@ -29,6 +29,7 @@ typedef struct ohos_display_info Display_Info;
 #include "termchar.h"
 #include "blockinput.h"
 #include "ohosgui.h"
+#include "ohos_render.h"
 
 /* Event timestamps.
 
@@ -2210,6 +2211,7 @@ ohos_publish_frame_metrics (struct frame *f)
   font = FRAME_FONT (f);
   ascent = font ? font->ascent : FRAME_LINE_HEIGHT (f) * 3 / 4;
   descent = font ? font->descent : FRAME_LINE_HEIGHT (f) - ascent;
+  ohos_render_set_content_size (FRAME_PIXEL_WIDTH (f), FRAME_PIXEL_HEIGHT (f));
   api->frame.metrics (FRAME_PIXEL_WIDTH (f), FRAME_PIXEL_HEIGHT (f),
 		      FRAME_COLUMN_WIDTH (f), FRAME_LINE_HEIGHT (f),
 		      ascent, descent);
