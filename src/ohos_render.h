@@ -1,3 +1,6 @@
+/* Renderer C ABI.  Every entry point below except the notify_* functions
+   must be called from the Emacs thread.  libentry.so must not include
+   this header or link the renderer archive.  */
 #ifndef OHOS_RENDER_H
 #define OHOS_RENDER_H
 #include "ohos_host_abi.h"
