@@ -1806,6 +1806,7 @@ ohos_note_mouse_movement (struct frame *f, int x, int y)
 static int
 ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
 {
+  ohos_apply_surface_events ();
   probe_read_calls++;
   unsigned key, modifiers;
   int count = 0;

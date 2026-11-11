@@ -223,6 +223,99 @@ ohos_pump_draw_commands (void)
 }
 
 
+
+/* Surface lifecycle events from the ArkUI thread.  Immutable events are
+   queued here; only the Emacs thread applies them to the renderer.  */
+struct ohos_surface_cmd
+{
+  int kind; /* 0 created, 1 resized, 2 destroyed */
+  void *window;
+  int width, height;
+  uint64_t generation;
+};
+
+#define OHOS_SURFACE_CAP 16
+static struct ohos_surface_cmd surface_ring[OHOS_SURFACE_CAP];
+static unsigned surface_head, surface_tail, surface_count;
+static pthread_mutex_t surface_event_lock = PTHREAD_MUTEX_INITIALIZER;
+static void *surface_window;
+static void ohos_signal_input (int was_empty);
+
+static void
+ohos_push_surface (int kind, void *window, int width, int height,
+                   uint64_t generation)
+{
+  pthread_mutex_lock (&surface_event_lock);
+  if (surface_count == OHOS_SURFACE_CAP)
+    {
+      /* Keep the newest event; drop the oldest pending event.  */
+      surface_head = (surface_head + 1) & (OHOS_SURFACE_CAP - 1);
+      surface_count--;
+    }
+  struct ohos_surface_cmd *c = &surface_ring[surface_tail];
+  c->kind = kind;
+  c->window = window;
+  c->width = width;
+  c->height = height;
+  c->generation = generation;
+  surface_tail = (surface_tail + 1) & (OHOS_SURFACE_CAP - 1);
+  surface_count++;
+  pthread_mutex_unlock (&surface_event_lock);
+  ohos_signal_input (surface_count == 1);
+}
+
+void
+ohos_surface_created (void *window, int width, int height, uint64_t generation)
+{
+  ohos_log ("OHOSDBG surface enqueue created");
+  ohos_push_surface (0, window, width, height, generation);
+}
+
+void
+ohos_surface_resized (int width, int height, uint64_t generation)
+{
+  ohos_push_surface (1, NULL, width, height, generation);
+}
+
+void
+ohos_surface_destroyed (uint64_t generation)
+{
+  ohos_push_surface (2, NULL, 0, 0, generation);
+}
+
+void
+ohos_apply_surface_events (void)
+{
+  for (;;)
+    {
+      struct ohos_surface_cmd c;
+      pthread_mutex_lock (&surface_event_lock);
+      if (surface_count == 0)
+        {
+          pthread_mutex_unlock (&surface_event_lock);
+          return;
+        }
+      c = surface_ring[surface_head];
+      surface_head = (surface_head + 1) & (OHOS_SURFACE_CAP - 1);
+      surface_count--;
+      pthread_mutex_unlock (&surface_event_lock);
+
+      if (c.kind == 0)
+        {
+          ohos_log ("OHOSDBG surface apply created");
+          surface_window = c.window;
+          ohos_render_notify_surface (c.window, c.width, c.height);
+        }
+      else if (c.kind == 1 && surface_window)
+        ohos_render_notify_surface (surface_window, c.width, c.height);
+      else if (c.kind == 2)
+        {
+          surface_window = NULL;
+          ohos_render_notify_reset ();
+        }
+    }
+}
+
 /* ------------------------------------------------------------------ */
 /* Input queue: ArkUI UI thread -> Emacs read_socket_hook.            */
 
@@ -586,10 +679,10 @@ static pthread_cond_t surface_ready = PTHREAD_COND_INITIALIZER;
 void
 ohos_last_surface_size (int *width, int *height)
 {
-  pthread_mutex_lock (&surface_lock);
+  pthread_mutex_lock (&surface_event_lock);
   *width = ohos_last_surface_width;
   *height = ohos_last_surface_height;
-  pthread_mutex_unlock (&surface_lock);
+  pthread_mutex_unlock (&surface_event_lock);
 }
 
 /* Wait until the host has reported a surface size, like the X11 backend
@@ -610,7 +703,7 @@ ohos_wait_surface_size (int timeout_ms)
       deadline.tv_nsec -= 1000000000L;
     }
 
-  pthread_mutex_lock (&surface_lock);
+  pthread_mutex_lock (&surface_event_lock);
   while (ohos_last_surface_width <= 0)
     {
       if (pthread_cond_timedwait (&surface_ready, &surface_lock, &deadline)
@@ -618,7 +711,7 @@ ohos_wait_surface_size (int timeout_ms)
 	break;
     }
   ready = ohos_last_surface_width > 0;
-  pthread_mutex_unlock (&surface_lock);
+  pthread_mutex_unlock (&surface_event_lock);
   return ready;
 }
 
@@ -629,11 +722,11 @@ ohos_input_resize (int width, int height)
     return;
   int was_empty;
 
-  pthread_mutex_lock (&surface_lock);
+  pthread_mutex_lock (&surface_event_lock);
   ohos_last_surface_width = width;
   ohos_last_surface_height = height;
   pthread_cond_broadcast (&surface_ready);
-  pthread_mutex_unlock (&surface_lock);
+  pthread_mutex_unlock (&surface_event_lock);
 
   pthread_mutex_lock (&input_lock);
   was_empty = (input_count == 0);

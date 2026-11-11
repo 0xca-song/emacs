@@ -40,7 +40,7 @@
 extern "C" {
 #endif
 
-#define OHOS_GUI_ABI_VERSION 8
+#define OHOS_GUI_ABI_VERSION 9
 
 /* Draw command stream shared by redisplay and the host.  The layout is
    part of the ABI; keep the app-side mirror in sync with the static
@@ -127,6 +127,12 @@ struct ohos_emacs_api
   void (*input_focus) (int focused);
   void (*input_resize) (int width, int height);
   void (*input_expose) (int x, int y, int width, int height);
+  /* Surface lifecycle, called on the ArkUI thread.  These only enqueue
+     immutable events; the renderer is touched exclusively by Emacs.  */
+  void (*surface_created) (void *window, int width, int height,
+			   uint64_t generation);
+  void (*surface_resized) (int width, int height, uint64_t generation);
+  void (*surface_destroyed) (uint64_t generation);
   void (*font_metrics) (int ascent, int descent, int height,
 			int space_width, int underline_position,
 			int underline_thickness);
