@@ -1882,8 +1882,12 @@ ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
 	}
       if (key & OHOS_INPUT_EXPOSE_FLAG)
 	{
-	  /* Surface lifecycle is handled by SurfaceEvent; an expose input
-	     can arrive before the selected frame has a terminal.  */
+	  struct frame *f = ohos_boot_frame_ready ();
+	  if (f)
+	    {
+	      fset_redisplay (f);
+	      SET_FRAME_GARBAGED (f);
+	    }
 	  continue;
 	}
 
