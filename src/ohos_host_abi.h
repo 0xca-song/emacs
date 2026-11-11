@@ -52,10 +52,7 @@ enum ohos_draw_opcode
   OHOS_OP_TEXT,
   OHOS_OP_CURSOR,
   OHOS_OP_SCROLL,
-  OHOS_OP_PRESENT,
-  OHOS_OP_IMAGE,
-  OHOS_OP_BEGIN,
-  OHOS_OP_END
+  OHOS_OP_IMAGE
 };
 
 struct ohos_draw_command
@@ -66,7 +63,6 @@ struct ohos_draw_command
   unsigned code;
   uint32_t fg, bg;
   uint32_t flags;
-  unsigned epoch;
   /* IMAGE op: RGBA pixels owned by the queue while it is being drained.  */
   const void *ptr;
   unsigned ptr_len;

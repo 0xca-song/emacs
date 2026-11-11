@@ -297,11 +297,8 @@ void ohos_set_clipboard (const char *b64);
    bracket one redisplay pass so the host can detect lost commands (the
    epoch sequence has a gap) and ask for a full repaint.  */
 
-unsigned ohos_draw_epoch (void);
 unsigned long ohos_draw_dropped_count (void);
 int ohos_draw_pending (void);
-void ohos_draw_begin (unsigned epoch);
-void ohos_draw_end (unsigned epoch);
 
 /* Frame geometry published to the host so it can allocate a bitmap of
    exactly the frame pixels instead of guessing from a cell grid.  */

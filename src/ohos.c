@@ -68,7 +68,6 @@ ohos_probe_log (const char *tag)
 /* The host API installed by ohos_abi.c before Emacs starts.  NULL only
    during very early startup, before the host calls the run entry.  */
 static const struct ohos_host_api *host_api;
-static unsigned draw_epoch;
 
 /* Emacs-side frame batch.  Drawing no longer calls the host per glyph.  */
 #define OHOS_DRAW_BATCH 8192
@@ -111,27 +110,6 @@ ohos_log (const char *s)
   if (host_api && host_api->frame.log)
     host_api->frame.log (s);
 }
-
-unsigned
-ohos_draw_epoch (void)
-{
-  return draw_epoch;
-}
-
-unsigned long
-ohos_draw_dropped_count (void)
-{
-  return draw_dropped;
-}
-
-/* Number of commands waiting for the UI thread.  The host uses this to
-   decide whether to map a NativeWindow buffer before pumping.  */
-int
-ohos_draw_pending (void)
-{
-  return 0;
-}
-
 
 
 void
@@ -204,18 +182,6 @@ ohos_draw_present (void)
   ohos_render_flush ();
 }
 
-void
-ohos_draw_begin (unsigned epoch)
-{
-  draw_epoch = epoch;
-  draw_batch_n = 0;
-}
-
-void
-ohos_draw_end (unsigned epoch)
-{
-  (void) epoch;
-}
 
 void
 ohos_pump_draw_commands (void)

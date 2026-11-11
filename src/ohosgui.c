@@ -398,7 +398,6 @@ ohos_flush (struct frame *f)
 
   ohos_log ("OHOSDBG flush-enter");
   ohos_probe_log ("pop->flush-entry");
-  ohos_draw_end (o->epoch);
   /* Present once per completed redisplay, not on every flush_display
      call.  Multiple back-to-back presents rotate NativeWindow buffers
      faster than the compositor consumes them and cause flicker.  */
@@ -1383,7 +1382,6 @@ ohos_update_begin (struct frame *f)
      commands (a gap means the queue overflowed) and to discard commands
      that belong to a geometry it no longer has.  */
   ohos_probe_log ("pop->draw-begin");
-  ohos_draw_begin (o->epoch);
 }
 
 static void
