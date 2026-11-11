@@ -40,7 +40,7 @@
 extern "C" {
 #endif
 
-#define OHOS_GUI_ABI_VERSION 9
+#define OHOS_GUI_ABI_VERSION 10
 
 /* Draw command stream shared by redisplay and the host.  The layout is
    part of the ABI; keep the app-side mirror in sync with the static
@@ -75,24 +75,6 @@ struct ohos_draw_command
 struct ohos_host_api
 {
   uint32_t abi_version;
-
-  struct
-  {
-    void (*clear) (uint32_t bg);
-    void (*fill) (int x, int y, int w, int h, uint32_t color);
-    void (*text) (int x, int y, int w, int h, unsigned code,
-		  uint32_t fg, uint32_t bg, uint32_t flags);
-    void (*image) (int x, int y, int w, int h, const void *rgba,
-		   unsigned len);
-    void (*cursor) (int x, int y, int w, int h, int bar,
-		    uint32_t fg, uint32_t bg, uint32_t flags, int kind);
-    void (*scroll) (int x, int from_y, int width, int height, int to_y);
-    void (*present) (void);
-    /* Compatibility no-op retained for ABI 8.  */
-    void (*pump_done) (void);
-    /* Called after a PRESENT was queued, to wake the UI thread.  */
-    void (*wakeup) (void);
-  } draw;
 
   struct
   {
