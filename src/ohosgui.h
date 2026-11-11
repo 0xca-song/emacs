@@ -357,6 +357,7 @@ bool ohos_wait_surface_size (int timeout_ms);
    be repainted.  Emacs marks the frame garbaged and redisplays.  */
 void ohos_input_expose (int x, int y, int width, int height);
 void ohos_apply_surface_events (void);
+void ohos_note_frame_ready (void);
 void ohos_surface_created (void *window, int width, int height,
                            uint64_t generation);
 void ohos_surface_resized (int width, int height, uint64_t generation);

@@ -893,6 +893,7 @@ ohos_create_frame (struct terminal *terminal, Lisp_Object parms)
       change_frame_size (f, sw, sh, false, false, false);
   }
   unbind_to (count, Qnil);
+  ohos_note_frame_ready ();
   return f;
 }
 

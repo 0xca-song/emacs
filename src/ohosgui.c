@@ -842,8 +842,10 @@ static void
 ohos_update_window_begin (struct window *w)
 {
   struct frame *f = XFRAME (w->frame);
-
-  FRAME_OUTPUT_DATA (f)->update_in_progress = true;
+  struct ohos_output *o = FRAME_OUTPUT_DATA (f);
+  if (!o)
+    return;
+  o->update_in_progress = true;
 }
 
 static void
@@ -852,6 +854,8 @@ ohos_update_window_end (struct window *w, bool cursor_on_p,
 {
   struct frame *f = XFRAME (w->frame);
   struct ohos_output *o = FRAME_OUTPUT_DATA (f);
+  if (!o)
+    return;
 
   o->update_in_progress = false;
   if (mouse_face_overwritten_p)
@@ -1362,6 +1366,8 @@ static void
 ohos_update_begin (struct frame *f)
 {
   struct ohos_output *o = FRAME_OUTPUT_DATA (f);
+  if (!o)
+    return;
 
   o->complete_p = false;
   /* A redisplay pass has started.  Mark the frame dirty here, not only
@@ -1387,7 +1393,10 @@ ohos_update_begin (struct frame *f)
 static void
 ohos_update_end (struct frame *f)
 {
-  if (!f->pointer_invisible && !FRAME_OUTPUT_DATA (f)->hourglass)
+  struct ohos_output *o = FRAME_OUTPUT_DATA (f);
+  if (!o)
+    return;
+  if (!f->pointer_invisible && !o->hourglass)
     MOUSE_HL_INFO (f)->mouse_face_defer = false;
 }
 
@@ -1608,6 +1617,7 @@ ohos_delete_terminal (struct terminal *terminal)
 void
 ohos_handle_surface_resize (struct frame *f, int width, int height)
 {
+  ohos_log ("OHOSDBG resize handler enter");
   struct ohos_output *o;
   int cols, lines;
 
@@ -1801,11 +1811,52 @@ ohos_note_mouse_movement (struct frame *f, int x, int y)
   return false;
 }
 
+static bool ohos_backend_ready;
+
+void
+ohos_note_frame_ready (void)
+{
+  ohos_backend_ready = true;
+}
+
+static struct frame *
+ohos_boot_frame_ready (void)
+{
+  if (!FRAMEP (selected_frame))
+    return NULL;
+  struct frame *f = XFRAME (selected_frame);
+  if (!f || !f->terminal || !FRAME_OUTPUT_DATA (f))
+    return NULL;
+  return f;
+}
+
 static int
 ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
 {
   ohos_apply_surface_events ();
+  /* Do not dispatch window/input events until the first real frame has
+     finished initializing.  The boot frame has no terminal/output yet.  */
+  if (!ohos_backend_ready)
+    {
+      int fd = ohos_input_wait_fd ();
+      char buf[64];
+      if (fd >= 0)
+	while (read (fd, buf, sizeof buf) > 0)
+	  ;
+      return 0;
+    }
+  static int pending_resize_w;
+  static int pending_resize_h;
+  static bool pending_resize;
+  struct frame *boot_frame = ohos_boot_frame_ready ();
+  if (boot_frame && pending_resize)
+    {
+      pending_resize = false;
+      ohos_handle_surface_resize (boot_frame, pending_resize_w,
+                                 pending_resize_h);
+    }
   probe_read_calls++;
+  ohos_log ("OHOSDBG read after probe");
   unsigned key, modifiers;
   int count = 0;
   int mouse, button, mx, my, press, motion, wheel;
@@ -1814,9 +1865,12 @@ ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
   while (ohos_pop_input (&key, &modifiers, &mouse, &button, &mx, &my,
                          &press, &motion, &wheel))
     {
+      ohos_log ("OHOSDBG read pop event");
       struct input_event ev;
       int emods = 0;
+      ohos_log ("OHOSDBG pop before char");
       unsigned char_code = ohos_char_from_key (key);
+      ohos_log ("OHOSDBG pop after char");
 
       if (key & OHOS_INPUT_MENUBAR_FLAG)
 	{
@@ -1828,32 +1882,25 @@ ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
 	}
       if (key & OHOS_INPUT_EXPOSE_FLAG)
 	{
-	  /* The host rebuilt its surface (resize, surface loss, menu
-	     dismissal): the bitmap content is gone, so ask redisplay to
-	     paint the frame again.  */
-	  struct frame *f = SELECTED_FRAME ();
-
-	  if (f && FRAME_LIVE_P (f) && FRAME_OHOS_P (f))
-	    {
-	      fset_redisplay (f);
-	      SET_FRAME_GARBAGED (f);
-	    }
-	  /* No event is stored, so it must not be counted: a non-zero return
-	     value tells Emacs "an event is waiting", and it then spins in
-	     kbd_buffer_get_event instead of going idle (blink timers never
-	     run while that happens).  */
+	  /* Surface lifecycle is handled by SurfaceEvent; an expose input
+	     can arrive before the selected frame has a terminal.  */
 	  continue;
 	}
 
+      ohos_log ("OHOSDBG pop before resize check");
       if (key & OHOS_INPUT_RESIZE_FLAG)
 	{
 	  int width = (int) (key & 0xffff);
 	  int height = (int) modifiers;
-	  Lisp_Object frame = selected_frame;
-
-	  if (!NILP (frame) && FRAME_LIVE_P (XFRAME (frame)))
-	    ohos_handle_surface_resize (XFRAME (frame), width, height);
-	  /* Same rule as above: side effect only, no event stored.  */
+	  struct frame *f = ohos_boot_frame_ready ();
+	  if (!f)
+	    {
+	      pending_resize_w = width;
+	      pending_resize_h = height;
+	      pending_resize = true;
+	    }
+	  else
+	    ohos_handle_surface_resize (f, width, height);
 	  continue;
 	}
 
@@ -2051,6 +2098,8 @@ ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
 	;
   }
   ohos_probe_log ("pop->read-return");
+  ohos_log ("OHOSDBG read before return");
+  ohos_log ("OHOSDBG read before return");
   return count;
 }
 
