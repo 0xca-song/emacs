@@ -1,9 +1,9 @@
 /* OHOS native GUI redisplay backend.
 
    This is the display-engine half of the native window backend: the
-   redisplay_interface consumes Emacs glyph rows and forwards cells to
-   the OHOS draw command queue, where the ArkUI thread drains and
-   presents them with OH_Drawing.
+   redisplay_interface consumes Emacs glyph rows and draws them directly
+   into the owning frame's renderer.  There is no command queue and no
+   process-global drawing state.
 
    Window management that only ArkUI can perform (title, resize, move,
    fullscreen, menus, notifications) is forwarded through the host
@@ -166,6 +166,52 @@ XParseGeometry (const char *string, int *x, int *y, unsigned int *width,
 }
 
 /* ------------------------------------------------------------------ */
+/* Per-frame renderer binding.                                        */
+
+struct ohos_renderer *
+ohos_frame_renderer (struct frame *f)
+{
+  struct ohos_output *o;
+
+  if (!f || !FRAME_LIVE_P (f) || !FRAME_OHOS_P (f))
+    return NULL;
+  o = FRAME_OUTPUT_DATA (f);
+  return o ? o->renderer : NULL;
+}
+
+/* Present once for a completed redisplay pass.  A rebuilt backing store
+   asks for one full redraw; a failed present asks Emacs to try again
+   instead of marking the frame up to date.  */
+static bool
+ohos_present_frame (struct frame *f)
+{
+  struct ohos_output *o = FRAME_OUTPUT_DATA (f);
+  int result;
+
+  if (!o || !o->renderer)
+    return false;
+  result = ohos_renderer_present (o->renderer);
+  if (result & OHOS_RENDER_FULL_REPAINT)
+    {
+      SET_FRAME_GARBAGED (f);
+      fset_redisplay (f);
+    }
+  if (!(result & OHOS_RENDER_PRESENTED))
+    {
+      /* Retry only when the context is otherwise ready; while it is
+         RESIZING or has no surface the surface event will drive the
+         next redisplay.  Avoid a busy redisplay loop.  */
+      if (ohos_renderer_ready (o->renderer))
+        {
+          SET_FRAME_GARBAGED (f);
+          fset_redisplay (f);
+        }
+      return false;
+    }
+  return true;
+}
+
+/* ------------------------------------------------------------------ */
 /* Basic drawing.                                                      */
 
 /* The cursor rectangle most recently composited by the host.
@@ -174,9 +220,6 @@ XParseGeometry (const char *string, int *x, int *y, unsigned int *width,
    off: erase_phys_cursor redraws the glyph under it.  The backend has to
    notice that redraw and tell the host to drop the overlay, otherwise the
    block stays on the screen for ever.  */
-static int ohos_cursor_x = -1, ohos_cursor_y = -1;
-static bool ohos_cursor_shown;
-
 static void
 ohos_draw_glyph_string_impl (struct glyph_string *s)
 {
@@ -307,7 +350,12 @@ ohos_draw_glyph_string_impl (struct glyph_string *s)
 	     logo that face is black, which turns transparent image pixels
 	     into a black rectangle.  The bitmap already holds the frame
 	     background and alpha blending composites the image over it.  */
-	  ohos_draw_image (x, y, tw, th, rgba, (unsigned) n);
+	  {
+	    struct ohos_renderer *renderer = ohos_frame_renderer (s->f);
+	    if (renderer)
+	      ohos_renderer_image (renderer, x, y, tw, th, rgba,
+				   (unsigned) n);
+	  }
 	  xfree (rgba);
 	}
       return;
@@ -334,7 +382,12 @@ ohos_draw_glyph_string_impl (struct glyph_string *s)
 	}
       else
 	color = (uint32_t) s->face->background;
-      ohos_draw_fill (s->x, s->y, width, s->height, color);
+      {
+	struct ohos_renderer *renderer = ohos_frame_renderer (s->f);
+	if (renderer)
+	  ohos_renderer_fill (renderer, s->x, s->y, width, s->height,
+			      color);
+      }
       return;
     }
 
@@ -371,7 +424,11 @@ static void
 ohos_clear_frame_area_rect (struct frame *f, int x, int y, int width,
 			    int height)
 {
-  ohos_draw_fill (x, y, width, height, (uint32_t) FRAME_BACKGROUND_PIXEL (f));
+  struct ohos_renderer *renderer = ohos_frame_renderer (f);
+
+  if (renderer)
+    ohos_renderer_fill (renderer, x, y, width, height,
+			(uint32_t) FRAME_BACKGROUND_PIXEL (f));
 }
 
 static void
@@ -380,15 +437,27 @@ ohos_clear_frame_area (struct frame *f, int x, int y, int width, int height)
   ohos_clear_frame_area_rect (f, x, y, width, height);
 }
 
+static void
+ohos_frame_fill (struct frame *f, int x, int y, int w, int h, uint32_t color)
+{
+  struct ohos_renderer *renderer = ohos_frame_renderer (f);
+
+  if (renderer)
+    ohos_renderer_fill (renderer, x, y, w, h, color);
+}
+
 
 
 static void
 ohos_clear_frame (struct frame *f)
 {
   static int calls;
+  struct ohos_renderer *renderer = ohos_frame_renderer (f);
+
   if ((calls++ % 20) == 0)
     ohos_log ("ohos_clear_frame");
-  ohos_draw_clear ((uint32_t) FRAME_BACKGROUND_PIXEL (f));
+  if (renderer)
+    ohos_renderer_clear (renderer, (uint32_t) FRAME_BACKGROUND_PIXEL (f));
 }
 
 static void
@@ -401,7 +470,9 @@ ohos_flush (struct frame *f)
   /* Present once per completed redisplay, not on every flush_display
      call.  Multiple back-to-back presents rotate NativeWindow buffers
      faster than the compositor consumes them and cause flicker.  */
-
+  if (o && o->need_flip && !buffer_flipping_blocked_p ()
+      && ohos_present_frame (f))
+    o->need_flip = false;
 }
 
 static void
@@ -445,7 +516,11 @@ ohos_scroll_run (struct window *w, struct run *run)
     return;
 
   gui_clear_cursor (w);
-  ohos_draw_scroll (x, from_y, width, height, to_y);
+  {
+    struct ohos_renderer *renderer = ohos_frame_renderer (XFRAME (w->frame));
+    if (renderer)
+      ohos_renderer_scroll (renderer, x, from_y, width, height, to_y);
+  }
 }
 
 static void
@@ -517,21 +592,23 @@ ohos_draw_window_cursor (struct window *w, struct glyph_row *row,
         {
           int t = (width > 0 ? width : 1);
 
-          ohos_draw_fill (fx, fy, cell_width, t, color);
-          ohos_draw_fill (fx, fy + line_height - t, cell_width, t, color);
-          ohos_draw_fill (fx, fy, t, line_height, color);
-          ohos_draw_fill (fx + cell_width - t, fy, t, line_height, color);
+          ohos_frame_fill (f, fx, fy, cell_width, t, color);
+          ohos_frame_fill (f, fx, fy + line_height - t, cell_width, t, color);
+          ohos_frame_fill (f, fx, fy, t, line_height, color);
+          ohos_frame_fill (f, fx + cell_width - t, fy, t, line_height, color);
         }
       return;
 
     case BAR_CURSOR:
       if (on_p)
-        ohos_draw_fill (fx, fy, width > 0 ? width : 2, line_height, color);
+        ohos_frame_fill (f, fx, fy, width > 0 ? width : 2, line_height,
+                         color);
       return;
 
     case HBAR_CURSOR:
       if (on_p)
-        ohos_draw_fill (fx, fy, cell_width, width > 0 ? width : 2, color);
+        ohos_frame_fill (f, fx, fy, cell_width, width > 0 ? width : 2,
+                         color);
       return;
 
     default:
@@ -549,7 +626,7 @@ ohos_draw_vertical_window_border (struct window *w, int x, int y0, int y1)
 
   if (y1 <= y0)
     return;
-  ohos_draw_fill (x, y0, 1, y1 - y0, (uint32_t) color);
+  ohos_frame_fill (f, x, y0, 1, y1 - y0, (uint32_t) color);
 }
 
 static void
@@ -575,19 +652,21 @@ ohos_draw_window_divider (struct window *w, int x0, int x1, int y0, int y1)
     {
       /* A vertical divider, at least three pixels wide: draw the first
 	 and last pixels differently.  */
-      ohos_draw_fill (x0, y0, 1, y1 - y0, (uint32_t) color_first);
-      ohos_draw_fill (x0 + 1, y0, x1 - x0 - 2, y1 - y0, (uint32_t) color);
-      ohos_draw_fill (x1 - 1, y0, 1, y1 - y0, (uint32_t) color_last);
+      ohos_frame_fill (f, x0, y0, 1, y1 - y0, (uint32_t) color_first);
+      ohos_frame_fill (f, x0 + 1, y0, x1 - x0 - 2, y1 - y0,
+                       (uint32_t) color);
+      ohos_frame_fill (f, x1 - 1, y0, 1, y1 - y0, (uint32_t) color_last);
     }
   else if ((x1 - x0 > y1 - y0) && (y1 - y0 >= 3))
     {
       /* A horizontal divider, at least three pixels high.  */
-      ohos_draw_fill (x0, y0, x1 - x0, 1, (uint32_t) color_first);
-      ohos_draw_fill (x0, y0 + 1, x1 - x0, y1 - y0 - 2, (uint32_t) color);
-      ohos_draw_fill (x0, y1 - 1, x1 - x0, 1, (uint32_t) color_last);
+      ohos_frame_fill (f, x0, y0, x1 - x0, 1, (uint32_t) color_first);
+      ohos_frame_fill (f, x0, y0 + 1, x1 - x0, y1 - y0 - 2,
+                       (uint32_t) color);
+      ohos_frame_fill (f, x0, y1 - 1, x1 - x0, 1, (uint32_t) color_last);
     }
   else
-    ohos_draw_fill (x0, y0, x1 - x0, y1 - y0, (uint32_t) color);
+    ohos_frame_fill (f, x0, y0, x1 - x0, y1 - y0, (uint32_t) color);
 }
 
 static void
@@ -613,12 +692,13 @@ ohos_clear_under_internal_border (struct frame *f)
       unsigned long color = (face ? face->background
 			       : FRAME_BACKGROUND_PIXEL (f));
 
-      ohos_draw_fill (0, margin, width, border, (uint32_t) color);
-      ohos_draw_fill (0, 0, border, height, (uint32_t) color);
-      ohos_draw_fill (width - border, 0, border, height, (uint32_t) color);
+      ohos_frame_fill (f, 0, margin, width, border, (uint32_t) color);
+      ohos_frame_fill (f, 0, 0, border, height, (uint32_t) color);
+      ohos_frame_fill (f, width - border, 0, border, height,
+                       (uint32_t) color);
       if (height - bottom_margin - border >= 0)
-	ohos_draw_fill (0, height - bottom_margin - border, width, border,
-			(uint32_t) color);
+        ohos_frame_fill (f, 0, height - bottom_margin - border, width, border,
+                         (uint32_t) color);
     }
 }
 
@@ -738,7 +818,7 @@ ohos_draw_fringe_bitmap (struct window *w, struct glyph_row *row,
     }
 
   if (p->bx >= 0 && !p->overlay_p)
-    ohos_draw_fill (p->bx, p->by, p->nx, p->ny, (uint32_t) bg);
+    ohos_frame_fill (f, p->bx, p->by, p->nx, p->ny, (uint32_t) bg);
 
   if (!p->which || !p->bits)
     return;
@@ -772,8 +852,8 @@ ohos_draw_fringe_bitmap (struct window *w, struct glyph_row *row,
 	    run_start = x;
 	  else if (!on && run_start >= 0)
 	    {
-	      ohos_draw_fill (p->x + run_start, p->y + y, x - run_start, 1,
-			      (uint32_t) fg);
+      ohos_frame_fill (f, p->x + run_start, p->y + y, x - run_start, 1,
+                       (uint32_t) fg);
 	      run_start = -1;
 	    }
 	}
@@ -906,7 +986,7 @@ ohos_draw_one_scroll_bar (struct frame *f, struct ohos_scroll_bar *bar)
   if (bar->width <= 0 || bar->height <= 0 || length <= 0)
     return;
 
-  ohos_draw_fill (bar->x, bar->y, bar->width, bar->height, bg);
+  ohos_frame_fill (f, bar->x, bar->y, bar->width, bar->height, bg);
   if (bar->whole <= 0 || bar->portion <= 0)
     return;
 
@@ -925,11 +1005,11 @@ ohos_draw_one_scroll_bar (struct frame *f, struct ohos_scroll_bar *bar)
     handle_start = length - handle_size;
 
   if (bar->horizontal)
-    ohos_draw_fill (bar->x + handle_start, bar->y, handle_size, bar->height,
-		    fg);
+    ohos_frame_fill (f, bar->x + handle_start, bar->y, handle_size,
+                     bar->height, fg);
   else
-    ohos_draw_fill (bar->x, bar->y + handle_start, bar->width, handle_size,
-		    fg);
+    ohos_frame_fill (f, bar->x, bar->y + handle_start, bar->width,
+                     handle_size, fg);
 }
 
 static void
@@ -1230,19 +1310,26 @@ ohos_mouse_position (struct frame **fp, int insist, Lisp_Object *bar_window,
 static void
 ohos_frame_highlight (struct frame *f)
 {
-  gui_update_cursor (f, true);
+  if (f && f->glyphs_initialized_p)
+    gui_update_cursor (f, true);
 }
 
 static void
 ohos_frame_unhighlight (struct frame *f)
 {
-  gui_update_cursor (f, false);
+  if (f && f->glyphs_initialized_p)
+    gui_update_cursor (f, false);
 }
 
 static void
 ohos_frame_rehighlight (struct ohos_display_info *dpyinfo)
 {
   struct frame *old_highlight = dpyinfo->highlight_frame;
+
+  if (!NILP (dpyinfo->focus_frame)
+      && (!FRAMEP (dpyinfo->focus_frame)
+	  || !FRAME_LIVE_P (XFRAME (dpyinfo->focus_frame))))
+    dpyinfo->focus_frame = Qnil;
 
   if (!NILP (dpyinfo->focus_frame) && FRAMEP (dpyinfo->focus_frame)
       && FRAME_LIVE_P (XFRAME (dpyinfo->focus_frame)))
@@ -1262,10 +1349,13 @@ ohos_frame_rehighlight (struct ohos_display_info *dpyinfo)
 
   if (dpyinfo->highlight_frame != old_highlight)
     {
-      if (old_highlight)
+      if (old_highlight && FRAME_LIVE_P (old_highlight))
 	ohos_frame_unhighlight (old_highlight);
-      if (dpyinfo->highlight_frame)
+      if (dpyinfo->highlight_frame
+	  && FRAME_LIVE_P (dpyinfo->highlight_frame))
 	ohos_frame_highlight (dpyinfo->highlight_frame);
+      else
+	dpyinfo->highlight_frame = NULL;
     }
 }
 
@@ -1332,9 +1422,15 @@ ohos_ring_bell (struct frame *f)
 {
   if (visible_bell)
     {
-      ohos_draw_fill (0, 0, FRAME_PIXEL_WIDTH (f), FRAME_PIXEL_HEIGHT (f),
-		      (uint32_t) FRAME_FOREGROUND_PIXEL (f));
-      ohos_draw_present ();
+      struct ohos_renderer *renderer = ohos_frame_renderer (f);
+
+      if (renderer)
+        {
+          ohos_renderer_fill (renderer, 0, 0, FRAME_PIXEL_WIDTH (f),
+                              FRAME_PIXEL_HEIGHT (f),
+                              (uint32_t) FRAME_FOREGROUND_PIXEL (f));
+          ohos_present_frame (f);
+        }
     }
   block_input ();
   ohos_host_command ("bell");
@@ -1378,15 +1474,14 @@ ohos_update_begin (struct frame *f)
   probe_glyph_calls = 0;
   o->epoch++;
   probe_epoch = o->epoch;
+  o->frame_open
+      = o->renderer ? ohos_renderer_begin_frame (o->renderer) != 0 : false;
   {
-    char dbg[96];
-    snprintf (dbg, sizeof dbg, "OHOSDBG update-begin epoch=%u reads=%lu",
-              probe_epoch, probe_read_calls);
+    char dbg[128];
+    snprintf (dbg, sizeof dbg, "OHOSDBG update-begin epoch=%u reads=%lu open=%d",
+              probe_epoch, probe_read_calls, o->frame_open ? 1 : 0);
     ohos_log (dbg);
   }
-  /* Open a new redisplay pass: the host uses the epoch to detect lost
-     commands (a gap means the queue overflowed) and to discard commands
-     that belong to a geometry it no longer has.  */
   ohos_probe_log ("pop->draw-begin");
 }
 
@@ -1396,6 +1491,13 @@ ohos_update_end (struct frame *f)
   struct ohos_output *o = FRAME_OUTPUT_DATA (f);
   if (!o)
     return;
+  if (o->renderer)
+    {
+      if (o->frame_open)
+        ohos_renderer_end_frame (o->renderer);
+      else
+        o->need_flip = false;
+    }
   if (!f->pointer_invisible && !o->hourglass)
     MOUSE_HL_INFO (f)->mouse_face_defer = false;
 }
@@ -1432,11 +1534,11 @@ ohos_frame_up_to_date (struct frame *f)
     struct ohos_output *o = FRAME_OUTPUT_DATA (f);
     if (o->need_flip && !buffer_flipping_blocked_p ())
       {
-        ohos_draw_present ();
-        o->need_flip = false;
+        if (ohos_present_frame (f))
+          o->need_flip = false;
       }
+    FRAME_OUTPUT_DATA (f)->complete_p = !o->need_flip;
   }
-  FRAME_OUTPUT_DATA (f)->complete_p = true;
   unblock_input ();
 }
 
@@ -1459,8 +1561,8 @@ ohos_buffer_flipping_unblocked (struct frame *f)
   }
   if (!o->need_flip)
     return;
-  o->need_flip = false;
-  ohos_draw_present ();
+  if (ohos_present_frame (f))
+    o->need_flip = false;
 }
 
 static void
@@ -1582,6 +1684,38 @@ ohos_delete_frame (struct frame *f)
     return;
   while (o->scroll_bars)
     ohos_release_scroll_bar (f, o->scroll_bars);
+  {
+    /* Focus and mouse bookkeeping may still point at this frame.  Clear
+       it before the frame struct goes away: a later rehighlight must not
+       dereference a dead frame.  */
+    struct ohos_display_info *dpyinfo = FRAME_DISPLAY_INFO (f);
+
+    if (dpyinfo)
+      {
+	if (dpyinfo->focus_event_frame == f)
+	  dpyinfo->focus_event_frame = NULL;
+	if (dpyinfo->highlight_frame == f)
+	  dpyinfo->highlight_frame = NULL;
+	if (dpyinfo->last_mouse_frame == f)
+	  dpyinfo->last_mouse_frame = NULL;
+	if (dpyinfo->last_mouse_motion_frame == f)
+	  dpyinfo->last_mouse_motion_frame = NULL;
+	if (dpyinfo->last_mouse_glyph_frame == f)
+	  dpyinfo->last_mouse_glyph_frame = NULL;
+	if (FRAMEP (dpyinfo->focus_frame)
+	    && XFRAME (dpyinfo->focus_frame) == f)
+	  dpyinfo->focus_frame = Qnil;
+      }
+  }
+  ohos_frame_unregister (o->frame_id);
+  if (o->renderer)
+    {
+      ohos_renderer_destroy (o->renderer);
+      o->renderer = NULL;
+    }
+  o->frame_id = 0;
+  o->frame_open = false;
+  o->need_flip = false;
 }
 
 /* OHOS has no X resource database: frame parameters come from Lisp
@@ -1619,29 +1753,26 @@ ohos_handle_surface_resize (struct frame *f, int width, int height)
 {
   ohos_log ("OHOSDBG resize handler enter");
   struct ohos_output *o;
-  int cols, lines;
 
   if (!f || !FRAME_LIVE_P (f) || !FRAME_OHOS_P (f) || width <= 0
       || height <= 0)
     return;
   o = FRAME_OUTPUT_DATA (f);
-  if (FRAME_COLUMN_WIDTH (f) <= 0 || FRAME_LINE_HEIGHT (f) <= 0)
+  /* A surface may be reported while the frame is still being built,
+     before its font and face machinery exists.  The cached surface size
+     is adopted once ohos_create_frame finishes.  */
+  if (!FRAME_FONT (f) || FRAME_COLUMN_WIDTH (f) <= 1
+      || FRAME_LINE_HEIGHT (f) <= 1)
     return;
 
-  cols = width / FRAME_COLUMN_WIDTH (f);
-  lines = height / FRAME_LINE_HEIGHT (f);
   {
     char buf[160];
     snprintf (buf, sizeof buf,
-	      "surface_resize px=%dx%d cell=%dx%d cols=%d lines=%d",
-	      width, height, FRAME_COLUMN_WIDTH (f), FRAME_LINE_HEIGHT (f),
-	      cols, lines);
+	      "surface_resize px=%dx%d frame_px=%dx%d cell=%dx%d",
+	      width, height, FRAME_PIXEL_WIDTH (f), FRAME_PIXEL_HEIGHT (f),
+	      FRAME_COLUMN_WIDTH (f), FRAME_LINE_HEIGHT (f));
     ohos_log (buf);
   }
-  if (cols < 10)
-    cols = 10;
-  if (lines < 4)
-    lines = 4;
 
   /* Remember the surface size so ohos_set_window_size does not echo a
      resize command back to the host that reported it.  */
@@ -1649,16 +1780,15 @@ ohos_handle_surface_resize (struct frame *f, int width, int height)
   o->host_surface_height = height;
   o->surface_seen = true;
 
-  if (cols == FRAME_COLS (f) && lines == FRAME_LINES (f))
-    return;
-  /* change_frame_size takes PIXEL dimensions (it subtracts the
-     decorations and passes the result to adjust_frame_size).  Passing
-     columns and lines made the frame 232x73 *pixels*.  */
-  change_frame_size (f, cols * FRAME_COLUMN_WIDTH (f),
-		     lines * FRAME_LINE_HEIGHT (f), false, false, false);
-  /* change_frame_size does not go through set_window_size_hook when the
-     size came from the host, so publish the new pixel geometry here or
-     the host would keep its old bitmap.  */
+  if (width == FRAME_PIXEL_WIDTH (f) && height == FRAME_PIXEL_HEIGHT (f))
+    {
+      ohos_publish_frame_metrics (f);
+      return;
+    }
+  /* Surface pixels are the input to Emacs' pixelwise resize; Emacs owns
+     the final content rect (menu bar, scroll bars, min/max size).  Do
+     not round the surface down to a character grid here.  */
+  change_frame_size (f, width, height, false, false, false);
   ohos_publish_frame_metrics (f);
 }
 
@@ -1847,24 +1977,35 @@ ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
     }
   static int pending_resize_w;
   static int pending_resize_h;
-  static bool pending_resize;
+  static uint32_t pending_resize_frame_id;
   struct frame *boot_frame = ohos_boot_frame_ready ();
-  if (boot_frame && pending_resize)
+  if (boot_frame && pending_resize_frame_id)
     {
-      pending_resize = false;
-      ohos_handle_surface_resize (boot_frame, pending_resize_w,
-                                 pending_resize_h);
+      struct frame *target = ohos_frame_by_id (pending_resize_frame_id);
+      if (!target)
+	target = boot_frame;
+      pending_resize_frame_id = 0;
+      ohos_handle_surface_resize (target, pending_resize_w, pending_resize_h);
     }
   probe_read_calls++;
   ohos_log ("OHOSDBG read after probe");
+  uint32_t frame_id;
   unsigned key, modifiers;
   int count = 0;
   int mouse, button, mx, my, press, motion, wheel;
   (void) hold_quit;
 
-  while (ohos_pop_input (&key, &modifiers, &mouse, &button, &mx, &my,
-                         &press, &motion, &wheel))
+  while (ohos_pop_input (&frame_id, &key, &modifiers, &mouse, &button, &mx,
+                         &my, &press, &motion, &wheel))
     {
+      struct frame *event_frame = ohos_frame_by_id (frame_id);
+      Lisp_Object event_frame_obj;
+      if (!event_frame)
+	event_frame = ohos_boot_frame_ready ();
+      if (event_frame)
+	XSETFRAME (event_frame_obj, event_frame);
+      else
+	event_frame_obj = selected_frame;
       ohos_log ("OHOSDBG read pop event");
       struct input_event ev;
       int emods = 0;
@@ -1882,11 +2023,10 @@ ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
 	}
       if (key & OHOS_INPUT_EXPOSE_FLAG)
 	{
-	  struct frame *f = ohos_boot_frame_ready ();
-	  if (f)
+	  if (event_frame)
 	    {
-	      fset_redisplay (f);
-	      SET_FRAME_GARBAGED (f);
+	      fset_redisplay (event_frame);
+	      SET_FRAME_GARBAGED (event_frame);
 	    }
 	  continue;
 	}
@@ -1896,21 +2036,20 @@ ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
 	{
 	  int width = (int) (key & 0xffff);
 	  int height = (int) modifiers;
-	  struct frame *f = ohos_boot_frame_ready ();
-	  if (!f)
+	  if (!event_frame)
 	    {
 	      pending_resize_w = width;
 	      pending_resize_h = height;
-	      pending_resize = true;
+	      pending_resize_frame_id = frame_id;
 	    }
 	  else
-	    ohos_handle_surface_resize (f, width, height);
+	    ohos_handle_surface_resize (event_frame, width, height);
 	  continue;
 	}
 
       if (wheel)
 	{
-	  struct frame *f = SELECTED_FRAME ();
+	  struct frame *f = event_frame;
 	  if (f && FRAME_LIVE_P (f))
 	    {
 	      int cw = FRAME_COLUMN_WIDTH (f);
@@ -1932,7 +2071,7 @@ ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
 		ev.modifiers |= meta_modifier;
 	      XSETINT (ev.x, px);
 	      XSETINT (ev.y, py);
-	      ev.frame_or_window = selected_frame;
+	      ev.frame_or_window = event_frame_obj;
 	      ev.arg = Qnil;
 	      ev.timestamp = ohos_event_time ();
 	      kbd_buffer_store_event (&ev);
@@ -1945,13 +2084,13 @@ ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
 	{
 	  /* No EVENT: motion only updates the highlight state and must not
 	     add to the count of events read.  */
-	  bool moved = ohos_note_mouse_movement (SELECTED_FRAME (), mx, my);
+	  bool moved = ohos_note_mouse_movement (event_frame, mx, my);
 	  /* Pointer motion can arrive hundreds of times per second; log a
 	     short sample instead of formatting a line for every event.  */
 	  static int motion_logs;
 	  if (motion_logs++ < 20)
 	    {
-	      struct frame *df = SELECTED_FRAME ();
+	      struct frame *df = event_frame;
 	      Mouse_HLInfo *hl = df ? MOUSE_HL_INFO (df) : NULL;
 	      char dbg[192];
 	      snprintf (dbg, sizeof dbg,
@@ -1973,7 +2112,7 @@ ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
 	      dpyinfo->last_mouse_motion_x = mx;
 	      dpyinfo->last_mouse_motion_y = my;
 	    }
-	  ohos_note_mouse_movement (SELECTED_FRAME (), mx, my);
+	  ohos_note_mouse_movement (event_frame, mx, my);
 	  EVENT_INIT (ev);
 	  ev.kind = MOUSE_CLICK_EVENT;
 	  ev.code = button & 3;
@@ -1993,7 +2132,7 @@ ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
 	    ev.modifiers |= meta_modifier;
 	  XSETINT (ev.x, mx);
 	  XSETINT (ev.y, my);
-	  ev.frame_or_window = selected_frame;
+	  ev.frame_or_window = event_frame_obj;
 	  ev.arg = Qnil;
 	  ev.timestamp = ohos_event_time ();
 	  kbd_buffer_store_event (&ev);
@@ -2002,7 +2141,7 @@ ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
 	}
 
       EVENT_INIT (ev);
-      ev.frame_or_window = selected_frame;
+      ev.frame_or_window = event_frame_obj;
       ev.timestamp = ohos_event_time ();
 
       if (key & OHOS_INPUT_FOCUS_FLAG)
@@ -2014,17 +2153,17 @@ ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
 	  ev.modifiers = 0;
 	  if (dpyinfo)
 	    {
-	      dpyinfo->focus_event_frame = modifiers ? SELECTED_FRAME () : NULL;
+	      dpyinfo->focus_event_frame = modifiers ? event_frame : NULL;
 	      if (!modifiers)
 		{
 		  dpyinfo->focus_frame = Qnil;
 		  dpyinfo->highlight_frame = NULL;
-		  if (SELECTED_FRAME ())
-		    fset_redisplay (SELECTED_FRAME ());
+		  if (event_frame)
+		    fset_redisplay (event_frame);
 		}
 	    }
-	  if (modifiers && SELECTED_FRAME ())
-	    ohos_focus_frame (SELECTED_FRAME (), true);
+	  if (modifiers && event_frame)
+	    ohos_focus_frame (event_frame, true);
 	  kbd_buffer_store_event (&ev);
 	  count++;
 	  continue;
@@ -2229,12 +2368,14 @@ ohos_create_terminal (struct ohos_display_info *dpyinfo)
 }
 
 void
-ohos_set_title (const char *title)
+ohos_set_title (struct frame *f, const char *title)
 {
   const struct ohos_host_api *api = ohos_get_host_api ();
+  struct ohos_output *o = (f && FRAME_OHOS_P (f)) ? FRAME_OUTPUT_DATA (f)
+						  : NULL;
 
   if (api && api->frame.title)
-    api->frame.title (title);
+    api->frame.title (o ? o->frame_id : 0, title);
 }
 
 void
@@ -2253,20 +2394,29 @@ void
 ohos_publish_frame_metrics (struct frame *f)
 {
   struct font *font;
+  struct ohos_output *o;
   int ascent, descent;
 
   const struct ohos_host_api *api = ohos_get_host_api ();
 
-  if (!f || !FRAME_LIVE_P (f) || !FRAME_OHOS_P (f)
-      || !api || !api->frame.metrics)
+  if (!f || !FRAME_LIVE_P (f) || !FRAME_OHOS_P (f))
+    return;
+  o = FRAME_OUTPUT_DATA (f);
+  if (!o)
     return;
   font = FRAME_FONT (f);
   ascent = font ? font->ascent : FRAME_LINE_HEIGHT (f) * 3 / 4;
   descent = font ? font->descent : FRAME_LINE_HEIGHT (f) - ascent;
-  ohos_render_set_content_size (FRAME_PIXEL_WIDTH (f), FRAME_PIXEL_HEIGHT (f));
-  api->frame.metrics (FRAME_PIXEL_WIDTH (f), FRAME_PIXEL_HEIGHT (f),
-		      FRAME_COLUMN_WIDTH (f), FRAME_LINE_HEIGHT (f),
-		      ascent, descent);
+  if (o->renderer)
+    ohos_renderer_set_frame_size (o->renderer, FRAME_PIXEL_WIDTH (f),
+				  FRAME_PIXEL_HEIGHT (f),
+				  FRAME_COLUMN_WIDTH (f),
+				  FRAME_LINE_HEIGHT (f));
+  if (!api || !api->frame.metrics)
+    return;
+  api->frame.metrics (o->frame_id, FRAME_PIXEL_WIDTH (f),
+		      FRAME_PIXEL_HEIGHT (f), FRAME_COLUMN_WIDTH (f),
+		      FRAME_LINE_HEIGHT (f), ascent, descent);
 }
 
 struct redisplay_interface *

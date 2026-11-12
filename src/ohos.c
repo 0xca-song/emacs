@@ -1,9 +1,10 @@
 /* OHOS native bridge: the NAPI-facing side of the backend.
 
    Mirrors the role of android.c: it is the only place that knows about
-   the host callback ABI.  Emacs redisplay must not call the host
-   directly; it enqueues drawing commands here, and the ArkUI thread
-   drains them from ohos_pump_draw_commands.  */
+   the host callback ABI.  Surface events and input are immutable records
+   produced by the ArkUI thread and consumed by the Emacs thread.  Pixel
+   output never crosses this file: redisplay calls the statically linked
+   per-frame renderer directly.  */
 
 #include <config.h>
 #include <fcntl.h>
@@ -19,18 +20,6 @@
 #include "lisp.h"
 #include "ohosgui.h"
 #include "ohos_render.h"
-
-/* A full redraw on a 4K/320-column frame can exceed 30k glyph commands.
-   Keep enough headroom that a cold resize does not immediately overflow
-   the ring and force an epoch-gap repaint.  */
-
-
-/* IMAGE commands carry an owned RGBA copy.  A full ring of 4K/ETAF images
-   would otherwise pin tens of gigabytes; keep a bounded byte budget and
-   drop new images when the UI is too far behind.  */
-#define OHOS_IMAGE_BYTES_MAX (64u * 1024u * 1024u)
-
-static unsigned long draw_dropped;
 
 /* Temporary input-to-first-draw probe.  */
 static uint64_t probe_pop_ns;
@@ -69,29 +58,6 @@ ohos_probe_log (const char *tag)
    during very early startup, before the host calls the run entry.  */
 static const struct ohos_host_api *host_api;
 
-/* Emacs-side frame batch.  Drawing no longer calls the host per glyph.  */
-#define OHOS_DRAW_BATCH 8192
-static struct ohos_draw_command draw_batch[OHOS_DRAW_BATCH];
-static int draw_batch_n;
-
-static void
-ohos_flush_batch (void)
-{
-  if (draw_batch_n > 0)
-    {
-      ohos_render_submit (draw_batch, draw_batch_n);
-      draw_batch_n = 0;
-    }
-}
-
-static void
-ohos_queue_draw (const struct ohos_draw_command *c)
-{
-  if (draw_batch_n >= OHOS_DRAW_BATCH)
-    ohos_flush_batch ();
-  draw_batch[draw_batch_n++] = *c;
-}
-
 void
 ohos_set_host_api (const struct ohos_host_api *api)
 {
@@ -111,112 +77,137 @@ ohos_log (const char *s)
     host_api->frame.log (s);
 }
 
+/* ------------------------------------------------------------------ */
+/* Frame registry: frame_id -> frame + renderer.  Emacs thread only.  */
 
-void
-ohos_draw_clear (uint32_t bg)
+#define OHOS_MAX_FRAMES 64
+
+struct ohos_frame_slot
 {
-  struct ohos_draw_command c = { .op = OHOS_OP_CLEAR, .bg = bg };
-  ohos_queue_draw (&c);
+  uint32_t frame_id;
+  struct frame *frame;
+  struct ohos_renderer *renderer;
+};
+
+static struct ohos_frame_slot frame_slots[OHOS_MAX_FRAMES];
+static void ohos_drop_surface_events (uint32_t frame_id);
+
+uint32_t
+ohos_frame_register (struct frame *f, struct ohos_renderer *renderer)
+{
+  if (!f || !renderer)
+    return 0;
+  for (int i = 0; i < OHOS_MAX_FRAMES; i++)
+    if (frame_slots[i].frame_id == 0)
+      {
+        /* Prefer the lowest free id so a new frame can take over the
+           boot surface (id 1) after the previous frame was deleted.  */
+        uint32_t id = 1;
+        while (id <= OHOS_MAX_FRAMES && ohos_frame_by_id (id))
+          id++;
+        if (id > OHOS_MAX_FRAMES)
+          {
+            ohos_log ("OHOSDBG frame id space exhausted");
+            return 0;
+          }
+        frame_slots[i].frame_id = id;
+        frame_slots[i].frame = f;
+        frame_slots[i].renderer = renderer;
+        {
+          char dbg[96];
+          snprintf (dbg, sizeof dbg, "OHOSDBG frame register id=%u",
+                    frame_slots[i].frame_id);
+          ohos_log (dbg);
+        }
+        return frame_slots[i].frame_id;
+      }
+  ohos_log ("OHOSDBG frame registry full");
+  return 0;
 }
 
 void
-ohos_draw_fill (int x, int y, int w, int h, uint32_t color)
+ohos_frame_unregister (uint32_t frame_id)
 {
-  struct ohos_draw_command c = { .op = OHOS_OP_FILL, .x = x, .y = y,
-                                 .w = w, .h = h, .bg = color };
-  ohos_queue_draw (&c);
-}
-
-void
-ohos_draw_text (int x, int y, int w, int h, unsigned code,
-		uint32_t fg, uint32_t bg, uint32_t flags)
-{
-  struct ohos_draw_command c = { .op = OHOS_OP_TEXT, .x = x, .y = y,
-                                 .w = w, .h = h, .code = code,
-                                 .fg = fg, .bg = bg, .flags = flags };
-  ohos_queue_draw (&c);
-}
-
-void
-ohos_draw_image (int x, int y, int w, int h, const void *rgba, unsigned len)
-{
-  if (w <= 0 || h <= 0 || len == 0)
+  if (frame_id == 0)
     return;
-  /* Preserve ordering: submit everything queued before the image, then
-     submit the image while its pixel buffer is still alive.  */
-  ohos_flush_batch ();
-  struct ohos_draw_command c = { .op = OHOS_OP_IMAGE, .x = x, .y = y,
-                                 .w = w, .h = h, .ptr = rgba,
-                                 .ptr_len = len };
-  ohos_render_submit (&c, 1);
+  for (int i = 0; i < OHOS_MAX_FRAMES; i++)
+    if (frame_slots[i].frame_id == frame_id)
+      {
+        frame_slots[i].frame_id = 0;
+        frame_slots[i].frame = NULL;
+        frame_slots[i].renderer = NULL;
+        ohos_drop_surface_events (frame_id);
+        {
+          char dbg[96];
+          snprintf (dbg, sizeof dbg, "OHOSDBG frame unregister id=%u",
+                    frame_id);
+          ohos_log (dbg);
+        }
+        return;
+      }
 }
 
-void
-ohos_draw_cursor (int x, int y, int w, int h, int bar, uint32_t fg,
-		  uint32_t bg, uint32_t flags, int kind)
+struct frame *
+ohos_frame_by_id (uint32_t frame_id)
 {
-  struct ohos_draw_command c = { .op = OHOS_OP_CURSOR, .x = x, .y = y,
-                                 .w = w, .h = h, .code = (unsigned) bar,
-                                 .fg = fg, .bg = bg,
-                                 .flags = flags | ((uint32_t) kind << 1) };
-  ohos_queue_draw (&c);
+  for (int i = 0; i < OHOS_MAX_FRAMES; i++)
+    if (frame_slots[i].frame_id == frame_id)
+      return frame_slots[i].frame;
+  return NULL;
 }
 
-void
-ohos_draw_scroll (int x, int from_y, int width, int height, int to_y)
+struct ohos_renderer *
+ohos_renderer_by_frame_id (uint32_t frame_id)
 {
-  struct ohos_draw_command c = { .op = OHOS_OP_SCROLL, .x = x, .y = from_y,
-                                 .w = width, .h = height, .to_y = to_y };
-  ohos_queue_draw (&c);
+  for (int i = 0; i < OHOS_MAX_FRAMES; i++)
+    if (frame_slots[i].frame_id == frame_id)
+      return frame_slots[i].renderer;
+  return NULL;
 }
 
-void
-ohos_draw_present (void)
-{
-  ohos_log ("OHOSDBG emacs-present");
-  if (probe_present_pending)
-    {
-      probe_present_pending = false;
-    }
-  ohos_flush_batch ();
-  ohos_render_flush ();
-}
-
-
-void
-ohos_pump_draw_commands (void)
-{
-}
-
-
-
+/* ------------------------------------------------------------------ */
 /* Surface lifecycle events from the ArkUI thread.  Immutable events are
-   queued here; only the Emacs thread applies them to the renderer.  */
+   queued here; only the Emacs thread applies them to a frame context.  */
+
 struct ohos_surface_cmd
 {
   int kind; /* 0 created, 1 resized, 2 destroyed */
+  uint32_t frame_id;
   void *window;
   int width, height;
   uint64_t generation;
 };
 
-#define OHOS_SURFACE_CAP 16
+#define OHOS_SURFACE_CAP 32
 static struct ohos_surface_cmd surface_ring[OHOS_SURFACE_CAP];
 static unsigned surface_head, surface_tail, surface_count;
 static pthread_mutex_t surface_event_lock = PTHREAD_MUTEX_INITIALIZER;
-static void *surface_window;
+static pthread_cond_t surface_ready = PTHREAD_COND_INITIALIZER;
+static int boot_surface_width;
+static int boot_surface_height;
 static void ohos_signal_input (int was_empty);
 
 static void
-ohos_push_surface (int kind, void *window, int width, int height,
-                   uint64_t generation)
+ohos_push_surface (int kind, uint32_t frame_id, void *window, int width,
+                   int height, uint64_t generation, bool wake)
 {
+  if (frame_id == 1 && (kind == 0 || kind == 1) && width > 0 && height > 0)
+    {
+      pthread_mutex_lock (&surface_event_lock);
+      boot_surface_width = width;
+      boot_surface_height = height;
+      pthread_cond_broadcast (&surface_ready);
+      pthread_mutex_unlock (&surface_event_lock);
+    }
+
   pthread_mutex_lock (&surface_event_lock);
   /* Coalesce a pending resize: the newest size wins.  */
   if (kind == 1 && surface_count > 0)
     {
-      unsigned last = (surface_tail + OHOS_SURFACE_CAP - 1) & (OHOS_SURFACE_CAP - 1);
-      if (surface_ring[last].kind == 1)
+      unsigned last
+          = (surface_tail + OHOS_SURFACE_CAP - 1) & (OHOS_SURFACE_CAP - 1);
+      if (surface_ring[last].kind == 1
+          && surface_ring[last].frame_id == frame_id)
         {
           surface_ring[last].width = width;
           surface_ring[last].height = height;
@@ -233,6 +224,7 @@ ohos_push_surface (int kind, void *window, int width, int height,
     }
   struct ohos_surface_cmd *c = &surface_ring[surface_tail];
   c->kind = kind;
+  c->frame_id = frame_id;
   c->window = window;
   c->width = width;
   c->height = height;
@@ -240,57 +232,117 @@ ohos_push_surface (int kind, void *window, int width, int height,
   surface_tail = (surface_tail + 1) & (OHOS_SURFACE_CAP - 1);
   surface_count++;
   pthread_mutex_unlock (&surface_event_lock);
-  ohos_signal_input (surface_count == 1);
+  if (wake)
+    ohos_signal_input (surface_count == 1);
 }
 
 void
-ohos_surface_created (void *window, int width, int height, uint64_t generation)
+ohos_surface_created (uint32_t frame_id, void *window, int width, int height,
+                      uint64_t generation)
 {
   ohos_log ("OHOSDBG surface enqueue created");
-  ohos_push_surface (0, window, width, height, generation);
+  ohos_push_surface (0, frame_id, window, width, height, generation, true);
 }
 
 void
-ohos_surface_resized (int width, int height, uint64_t generation)
+ohos_surface_resized (uint32_t frame_id, int width, int height,
+                      uint64_t generation)
 {
-  ohos_push_surface (1, NULL, width, height, generation);
+  ohos_push_surface (1, frame_id, NULL, width, height, generation, true);
 }
 
 void
-ohos_surface_destroyed (uint64_t generation)
+ohos_surface_destroyed (uint32_t frame_id, uint64_t generation)
 {
-  ohos_push_surface (2, NULL, 0, 0, generation);
+  ohos_push_surface (2, frame_id, NULL, 0, 0, generation, true);
+}
+
+static void
+ohos_drop_surface_events (uint32_t frame_id)
+{
+  pthread_mutex_lock (&surface_event_lock);
+  for (unsigned i = 0; i < surface_count; i++)
+    {
+      unsigned index = (surface_head + i) & (OHOS_SURFACE_CAP - 1);
+      if (surface_ring[index].frame_id == frame_id)
+        surface_ring[index].kind = -1;
+    }
+  /* Compact the ring in place.  */
+  unsigned write = surface_head;
+  unsigned kept = 0;
+  for (unsigned i = 0; i < surface_count; i++)
+    {
+      unsigned index = (surface_head + i) & (OHOS_SURFACE_CAP - 1);
+      if (surface_ring[index].kind >= 0)
+        {
+          if (write != index)
+            surface_ring[write] = surface_ring[index];
+          write = (write + 1) & (OHOS_SURFACE_CAP - 1);
+          kept++;
+        }
+    }
+  surface_tail = write;
+  surface_count = kept;
+  pthread_mutex_unlock (&surface_event_lock);
 }
 
 void
 ohos_apply_surface_events (void)
 {
-  for (;;)
+  struct ohos_surface_cmd pending[OHOS_SURFACE_CAP];
+  unsigned n = 0;
+
+  pthread_mutex_lock (&surface_event_lock);
+  while (surface_count > 0)
     {
-      struct ohos_surface_cmd c;
-      pthread_mutex_lock (&surface_event_lock);
-      if (surface_count == 0)
-        {
-          pthread_mutex_unlock (&surface_event_lock);
-          return;
-        }
-      c = surface_ring[surface_head];
+      pending[n++] = surface_ring[surface_head];
       surface_head = (surface_head + 1) & (OHOS_SURFACE_CAP - 1);
       surface_count--;
-      pthread_mutex_unlock (&surface_event_lock);
+    }
+  pthread_mutex_unlock (&surface_event_lock);
 
-      if (c.kind == 0)
+  for (unsigned i = 0; i < n; i++)
+    {
+      struct ohos_surface_cmd *c = &pending[i];
+      struct ohos_renderer *renderer
+          = ohos_renderer_by_frame_id (c->frame_id);
+      if (!renderer)
         {
-          ohos_log ("OHOSDBG surface apply created");
-          surface_window = c.window;
-          ohos_render_notify_surface (c.window, c.width, c.height);
+          /* No frame context yet: keep the event for when it appears.
+             The boot surface is the only such case on this platform.  */
+          static int orphan_logs;
+          if (orphan_logs++ < 8)
+            {
+              char dbg[128];
+              snprintf (dbg, sizeof dbg,
+                        "OHOSDBG surface orphan frame=%u kind=%d gen=%llu",
+                        c->frame_id, c->kind,
+                        (unsigned long long) c->generation);
+              ohos_log (dbg);
+            }
+          /* It is already pending: do not wake the command loop again
+             or an orphan event would spin read_socket forever.  */
+          ohos_push_surface (c->kind, c->frame_id, c->window, c->width,
+                             c->height, c->generation, false);
+          continue;
         }
-      else if (c.kind == 1 && surface_window)
-        ohos_render_notify_surface (surface_window, c.width, c.height);
-      else if (c.kind == 2)
+      struct OhosSurfaceEvent event = {
+        .kind = (enum OhosSurfaceEventKind) c->kind,
+        .frame_id = c->frame_id,
+        .window = c->window,
+        .surface_w = c->width,
+        .surface_h = c->height,
+        .generation = c->generation,
+      };
+      ohos_renderer_apply_surface_event (renderer, &event);
+      /* Surface pixels drive the frame size.  Emacs computes the final
+         content rect (menu bar, scroll bars, min/max size) and publishes
+         it back through ohos_publish_frame_metrics.  */
+      if (c->kind == 0 || c->kind == 1)
         {
-          surface_window = NULL;
-          ohos_render_notify_reset ();
+          struct frame *f = ohos_frame_by_id (c->frame_id);
+          if (f)
+            ohos_handle_surface_resize (f, c->width, c->height);
         }
     }
 }
@@ -303,6 +355,7 @@ ohos_apply_surface_events (void)
 
 struct ohos_input_cmd
 {
+  uint32_t frame_id;
   unsigned key;
   unsigned modifiers;
   int mouse;
@@ -322,12 +375,12 @@ static uint64_t input_seq;
 static pthread_mutex_t input_lock = PTHREAD_MUTEX_INITIALIZER;
 static int input_pipe[2] = { -1, -1 };
 
-
 void
-ohos_input_raw (const char *data, size_t len)
+ohos_input_raw (uint32_t frame_id, const char *data, size_t len)
 {
   for (size_t i = 0; i < len; i++)
-    ohos_input_key (((unsigned char) data[i]) | OHOS_INPUT_RAW_FLAG, 0, 1);
+    ohos_input_key (frame_id, ((unsigned char) data[i]) | OHOS_INPUT_RAW_FLAG,
+                    0, 1);
 }
 
 void
@@ -352,11 +405,6 @@ ohos_create_input_pipe (void)
 static void
 ohos_signal_input (int was_empty)
 {
-  /* Always poke the pipe.  Signalling only when the queue was empty
-     loses a wakeup when a key arrives while Emacs is draining the
-     queue but after the previous byte was consumed: the event stays
-     queued until some later timer poll.  The pipe is non-blocking and
-     Emacs drains it in read_socket_hook, so an extra byte is cheap.  */
   (void) was_empty;
   if (input_pipe[1] >= 0)
     {
@@ -372,7 +420,8 @@ ohos_input_wait_fd (void)
 }
 
 int
-ohos_input_key (unsigned key, unsigned modifiers, int pressed)
+ohos_input_key (uint32_t frame_id, unsigned key, unsigned modifiers,
+                int pressed)
 {
   if (!pressed)
     return 0;
@@ -388,6 +437,7 @@ ohos_input_key (unsigned key, unsigned modifiers, int pressed)
     input_dropped++;
   else
     {
+      input_ring[input_tail].frame_id = frame_id;
       input_ring[input_tail].enqueue_ns = enqueue_ns;
       input_ring[input_tail].seq = ++input_seq;
       input_ring[input_tail].key = key;
@@ -404,7 +454,8 @@ ohos_input_key (unsigned key, unsigned modifiers, int pressed)
 }
 
 void
-ohos_input_mouse (int button, int x, int y, unsigned modifiers, int press)
+ohos_input_mouse (uint32_t frame_id, int button, int x, int y,
+                  unsigned modifiers, int press)
 {
   int was_empty;
 
@@ -414,6 +465,7 @@ ohos_input_mouse (int button, int x, int y, unsigned modifiers, int press)
     input_dropped++;
   else
     {
+      input_ring[input_tail].frame_id = frame_id;
       input_ring[input_tail].mouse = 1;
       input_ring[input_tail].motion = 0;
       input_ring[input_tail].wheel = 0;
@@ -432,9 +484,9 @@ ohos_input_mouse (int button, int x, int y, unsigned modifiers, int press)
 /* Pointer motion without a button change.  Mirrors android_input_motion:
    without this the backend never calls note_mouse_highlight, so there is
    no `mouse-face` (link / mode line highlight), no hand pointer, and
-   Emacs' `frame_make_pointer_visible' can never run (task book B-11).  */
+   Emacs' `frame_make_pointer_visible' can never run.  */
 void
-ohos_input_motion (int x, int y, unsigned modifiers)
+ohos_input_motion (uint32_t frame_id, int x, int y, unsigned modifiers)
 {
   int was_empty;
 
@@ -444,6 +496,7 @@ ohos_input_motion (int x, int y, unsigned modifiers)
     input_dropped++;
   else
     {
+      input_ring[input_tail].frame_id = frame_id;
       input_ring[input_tail].mouse = 1;
       input_ring[input_tail].motion = 1;
       input_ring[input_tail].wheel = 0;
@@ -460,7 +513,8 @@ ohos_input_motion (int x, int y, unsigned modifiers)
 }
 
 void
-ohos_input_wheel (int delta, int col, int row, unsigned modifiers)
+ohos_input_wheel (uint32_t frame_id, int delta, int col, int row,
+                  unsigned modifiers)
 {
   int was_empty;
 
@@ -470,6 +524,7 @@ ohos_input_wheel (int delta, int col, int row, unsigned modifiers)
     input_dropped++;
   else
     {
+      input_ring[input_tail].frame_id = frame_id;
       input_ring[input_tail].key = 0;
       input_ring[input_tail].modifiers = 0;
       input_ring[input_tail].mouse = 0;
@@ -488,21 +543,22 @@ ohos_input_wheel (int delta, int col, int row, unsigned modifiers)
 }
 
 int
-ohos_pop_input (unsigned *key, unsigned *modifiers, int *mouse,
-		int *button, int *x, int *y, int *press, int *motion,
-		int *wheel)
+ohos_pop_input (uint32_t *frame_id, unsigned *key, unsigned *modifiers,
+                int *mouse, int *button, int *x, int *y, int *press,
+                int *motion, int *wheel)
 {
   int found = 0;
   pthread_mutex_lock (&input_lock);
   if (input_count != 0)
     {
+      *frame_id = input_ring[input_head].frame_id;
       *key = input_ring[input_head].key;
       *modifiers = input_ring[input_head].modifiers;
       *mouse = input_ring[input_head].mouse;
       if (motion)
-	*motion = input_ring[input_head].motion;
+        *motion = input_ring[input_head].motion;
       if (wheel)
-	*wheel = input_ring[input_head].wheel;
+        *wheel = input_ring[input_head].wheel;
       *button = input_ring[input_head].button;
       *x = input_ring[input_head].x;
       *y = input_ring[input_head].y;
@@ -524,7 +580,8 @@ ohos_pop_input (unsigned *key, unsigned *modifiers, int *mouse,
           if (probe_logs < 100000)
             {
               char dbg[128];
-              snprintf (dbg, sizeof dbg, "OHOSDBG input-queue seq=%llu %.1f us",
+              snprintf (dbg, sizeof dbg,
+                        "OHOSDBG input-queue seq=%llu %.1f us",
                         (unsigned long long) seq,
                         (double) (probe_pop_ns - enqueue_ns) / 1000.0);
               ohos_log (dbg);
@@ -536,7 +593,7 @@ ohos_pop_input (unsigned *key, unsigned *modifiers, int *mouse,
 }
 
 void
-ohos_input_menubar (int index)
+ohos_input_menubar (uint32_t frame_id, int index)
 {
   ohos_log ("input menubar");
   int was_empty;
@@ -546,6 +603,7 @@ ohos_input_menubar (int index)
     input_dropped++;
   else
     {
+      input_ring[input_tail].frame_id = frame_id;
       input_ring[input_tail].key = OHOS_INPUT_MENUBAR_FLAG | (unsigned) index;
       input_ring[input_tail].modifiers = 0;
       input_ring[input_tail].mouse = 0;
@@ -560,7 +618,7 @@ ohos_input_menubar (int index)
 }
 
 void
-ohos_input_text (const char *text)
+ohos_input_text (uint32_t frame_id, const char *text)
 {
   const unsigned char *p = (const unsigned char *) text;
   if (!p)
@@ -570,47 +628,48 @@ ohos_input_text (const char *text)
       unsigned cp = 0;
       int n = 1;
       if (*p < 0x80)
-	cp = *p;
+        cp = *p;
       else if ((*p & 0xe0) == 0xc0 && p[1])
-	{
-	  cp = ((*p & 0x1f) << 6) | (p[1] & 0x3f);
-	  n = 2;
-	}
+        {
+          cp = ((*p & 0x1f) << 6) | (p[1] & 0x3f);
+          n = 2;
+        }
       else if ((*p & 0xf0) == 0xe0 && p[1] && p[2])
-	{
-	  cp = ((*p & 0x0f) << 12) | ((p[1] & 0x3f) << 6)
-	    | (p[2] & 0x3f);
-	  n = 3;
-	}
+        {
+          cp = ((*p & 0x0f) << 12) | ((p[1] & 0x3f) << 6)
+               | (p[2] & 0x3f);
+          n = 3;
+        }
       else if ((*p & 0xf8) == 0xf0 && p[1] && p[2] && p[3])
-	{
-	  cp = ((*p & 0x07) << 18) | ((p[1] & 0x3f) << 12)
-	    | ((p[2] & 0x3f) << 6) | (p[3] & 0x3f);
-	  n = 4;
-	}
+        {
+          cp = ((*p & 0x07) << 18) | ((p[1] & 0x3f) << 12)
+               | ((p[2] & 0x3f) << 6) | (p[3] & 0x3f);
+          n = 4;
+        }
       else
-	{
-	  p++;
-	  continue;
-	}
+        {
+          p++;
+          continue;
+        }
       struct timespec tts;
       clock_gettime (CLOCK_MONOTONIC, &tts);
       pthread_mutex_lock (&input_lock);
       if (input_count == OHOS_INPUT_CAP)
-	input_dropped++;
+        input_dropped++;
       else
-	{
-	  input_ring[input_tail].enqueue_ns
-	      = (uint64_t) tts.tv_sec * 1000000000ull + tts.tv_nsec;
-	  input_ring[input_tail].seq = ++input_seq;
-	  input_ring[input_tail].key = cp | OHOS_INPUT_TEXT_FLAG;
-	  input_ring[input_tail].modifiers = 0;
-	  input_ring[input_tail].mouse = 0;
-	  input_ring[input_tail].motion = 0;
-	  input_ring[input_tail].wheel = 0;
-	  input_tail = (input_tail + 1) & OHOS_INPUT_MASK;
-	  input_count++;
-	}
+        {
+          input_ring[input_tail].frame_id = frame_id;
+          input_ring[input_tail].enqueue_ns
+              = (uint64_t) tts.tv_sec * 1000000000ull + tts.tv_nsec;
+          input_ring[input_tail].seq = ++input_seq;
+          input_ring[input_tail].key = cp | OHOS_INPUT_TEXT_FLAG;
+          input_ring[input_tail].modifiers = 0;
+          input_ring[input_tail].mouse = 0;
+          input_ring[input_tail].motion = 0;
+          input_ring[input_tail].wheel = 0;
+          input_tail = (input_tail + 1) & OHOS_INPUT_MASK;
+          input_count++;
+        }
       pthread_mutex_unlock (&input_lock);
       p += n;
     }
@@ -622,7 +681,7 @@ ohos_input_text (const char *text)
 }
 
 void
-ohos_input_expose (int x, int y, int width, int height)
+ohos_input_expose (uint32_t frame_id, int x, int y, int width, int height)
 {
   int was_empty;
 
@@ -632,6 +691,7 @@ ohos_input_expose (int x, int y, int width, int height)
     input_dropped++;
   else
     {
+      input_ring[input_tail].frame_id = frame_id;
       input_ring[input_tail].key = OHOS_INPUT_EXPOSE_FLAG;
       input_ring[input_tail].modifiers = 0;
       input_ring[input_tail].mouse = 0;
@@ -647,20 +707,12 @@ ohos_input_expose (int x, int y, int width, int height)
   ohos_signal_input (was_empty);
 }
 
-static int ohos_last_surface_width;
-static int ohos_last_surface_height;
-static pthread_mutex_t surface_lock = PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t surface_ready = PTHREAD_COND_INITIALIZER;
-
-/* The host reports the surface size from the UI thread, usually while Emacs
-   is still starting and before any frame exists.  Remember it so frame
-   creation can adopt the real geometry instead of inventing one.  */
 void
 ohos_last_surface_size (int *width, int *height)
 {
   pthread_mutex_lock (&surface_event_lock);
-  *width = ohos_last_surface_width;
-  *height = ohos_last_surface_height;
+  *width = boot_surface_width;
+  *height = boot_surface_height;
   pthread_mutex_unlock (&surface_event_lock);
 }
 
@@ -683,29 +735,33 @@ ohos_wait_surface_size (int timeout_ms)
     }
 
   pthread_mutex_lock (&surface_event_lock);
-  while (ohos_last_surface_width <= 0)
+  while (boot_surface_width <= 0)
     {
-      if (pthread_cond_timedwait (&surface_ready, &surface_lock, &deadline)
-	  == ETIMEDOUT)
-	break;
+      if (pthread_cond_timedwait (&surface_ready, &surface_event_lock,
+                                  &deadline)
+          == ETIMEDOUT)
+        break;
     }
-  ready = ohos_last_surface_width > 0;
+  ready = boot_surface_width > 0;
   pthread_mutex_unlock (&surface_event_lock);
   return ready;
 }
 
 void
-ohos_input_resize (int width, int height)
+ohos_input_resize (uint32_t frame_id, int width, int height)
 {
   if (width <= 0 || height <= 0)
     return;
   int was_empty;
 
-  pthread_mutex_lock (&surface_event_lock);
-  ohos_last_surface_width = width;
-  ohos_last_surface_height = height;
-  pthread_cond_broadcast (&surface_ready);
-  pthread_mutex_unlock (&surface_event_lock);
+  if (frame_id == 1)
+    {
+      pthread_mutex_lock (&surface_event_lock);
+      boot_surface_width = width;
+      boot_surface_height = height;
+      pthread_cond_broadcast (&surface_ready);
+      pthread_mutex_unlock (&surface_event_lock);
+    }
 
   pthread_mutex_lock (&input_lock);
   was_empty = (input_count == 0);
@@ -713,8 +769,9 @@ ohos_input_resize (int width, int height)
     input_dropped++;
   else
     {
+      input_ring[input_tail].frame_id = frame_id;
       input_ring[input_tail].key = OHOS_INPUT_RESIZE_FLAG
-	| ((unsigned) width & 0xffffu);
+                                  | ((unsigned) width & 0xffffu);
       input_ring[input_tail].modifiers = (unsigned) height;
       input_ring[input_tail].mouse = 0;
       input_ring[input_tail].wheel = 0;
@@ -726,7 +783,7 @@ ohos_input_resize (int width, int height)
 }
 
 void
-ohos_input_focus (int focused)
+ohos_input_focus (uint32_t frame_id, int focused)
 {
   int was_empty;
 
@@ -736,6 +793,7 @@ ohos_input_focus (int focused)
     input_dropped++;
   else
     {
+      input_ring[input_tail].frame_id = frame_id;
       input_ring[input_tail].key = OHOS_INPUT_FOCUS_FLAG;
       input_ring[input_tail].modifiers = focused ? 1 : 0;
       input_tail = (input_tail + 1) & OHOS_INPUT_MASK;
@@ -852,8 +910,8 @@ ohos_host_result (int id, int index, const char *text)
 }
 
 int
-ohos_host_wait_result (int id, int timeout_ms, int *index,
-		       char *text, int cap)
+ohos_host_wait_result (int id, int timeout_ms, int *index, char *text,
+                       int cap)
 {
   /* A negative timeout waits forever: menus stay open until the host
      answers or sends menu-close.  */
@@ -869,57 +927,57 @@ ohos_host_wait_result (int id, int timeout_ms, int *index,
 
       pthread_mutex_lock (&result_lock);
       if (result_id == id)
-	{
-	  matched = 1;
-	  got_index = result_index;
-	  strncpy (got_text, result_text, sizeof got_text - 1);
-	  got_text[sizeof got_text - 1] = '\0';
-	  result_id = -1;
-	  result_index = -1;
-	  result_text[0] = '\0';
-	}
+        {
+          matched = 1;
+          got_index = result_index;
+          strncpy (got_text, result_text, sizeof got_text - 1);
+          got_text[sizeof got_text - 1] = '\0';
+          result_id = -1;
+          result_index = -1;
+          result_text[0] = '\0';
+        }
       pthread_mutex_unlock (&result_lock);
       if (matched)
-	{
-	  if (index)
-	    *index = got_index;
-	  if (text && cap > 0)
-	    {
-	      strncpy (text, got_text, cap - 1);
-	      text[cap - 1] = '\0';
-	    }
-	  return 1;
-	}
+        {
+          if (index)
+            *index = got_index;
+          if (text && cap > 0)
+            {
+              strncpy (text, got_text, cap - 1);
+              text[cap - 1] = '\0';
+            }
+          return 1;
+        }
 
       if (result_pipe[0] < 0)
-	{
-	  struct timespec ts = { 0, 5 * 1000 * 1000 };
-	  if (!infinite && remaining <= 0)
-	    return 0;
-	  nanosleep (&ts, NULL);
-	  if (!infinite)
-	    remaining -= 5;
-	  continue;
-	}
+        {
+          struct timespec ts = { 0, 5 * 1000 * 1000 };
+          if (!infinite && remaining <= 0)
+            return 0;
+          nanosleep (&ts, NULL);
+          if (!infinite)
+            remaining -= 5;
+          continue;
+        }
 
       int wait = infinite ? 20 : (remaining < 20 ? remaining : 20);
       if (wait < 0)
-	wait = 0;
+        wait = 0;
       struct pollfd pfd;
       pfd.fd = result_pipe[0];
       pfd.events = POLLIN;
       pfd.revents = 0;
       int rc = poll (&pfd, 1, wait);
       if (rc > 0 && (pfd.revents & POLLIN))
-	{
-	  char buf[32];
-	  while (read (result_pipe[0], buf, sizeof buf) > 0)
-	    ;
-	}
+        {
+          char buf[32];
+          while (read (result_pipe[0], buf, sizeof buf) > 0)
+            ;
+        }
       if (!infinite && remaining <= 20 && rc == 0)
-	return 0;
+        return 0;
       if (!infinite)
-	remaining -= wait;
+        remaining -= wait;
     }
 }
 

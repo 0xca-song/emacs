@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include "lisp.h"
 #include "ohos_host_abi.h"
+#include "ohos_render.h"
 #include "frame.h"
 #include "termhooks.h"
 #include "dispextern.h"
@@ -94,6 +95,11 @@ struct ohos_output
   struct ohos_display_info *display_info;
   struct font *font;
   int fontset;
+  /* Stable cross-thread key of this frame, and the per-frame pixel
+     backend.  Both are created in ohos_create_frame and released in
+     ohos_delete_frame.  */
+  uint32_t frame_id;
+  struct ohos_renderer *renderer;
   int width, height;
   uintptr_t parent_desc;
   uintptr_t root_window;
@@ -121,6 +127,7 @@ struct ohos_output
   /* Redisplay / interaction state.  */
   bool complete_p;		/* frame fully drawn in this update */
   bool update_in_progress;
+  bool frame_open;		/* begin_frame accepted this pass */
   bool need_flip;		/* END queued but present deferred */
   unsigned epoch;		/* current redisplay pass number */
   bool hourglass;		/* busy indicator active */
@@ -238,9 +245,8 @@ void ohos_log (const char *s);
 void ohos_set_host_api (const struct ohos_host_api *api);
 const struct ohos_host_api *ohos_get_host_api (void);
 
-/* Native draw command queue.  Emacs redisplay only enqueues commands;
-   the ArkUI host thread drains them with ohos_pump_draw_commands.  */
-void ohos_set_title (const char *title);
+/* Per-frame window title.  */
+void ohos_set_title (struct frame *f, const char *title);
 
 /* ------------------------------------------------------------------ */
 /* Host (ArkUI) chrome channel.
@@ -290,18 +296,14 @@ void ohos_font_metrics (int ascent, int descent, int height,
 void ohos_set_clipboard (const char *b64);
 
 /* ------------------------------------------------------------------ */
-/* Draw command stream shared with the ArkUI host.
+/* Per-frame pixel backend.
 
-   Emacs redisplay only enqueues commands; the host thread drains them in
-   batches so it can apply a whole batch with a single lock.  BEGIN/END
-   bracket one redisplay pass so the host can detect lost commands (the
-   epoch sequence has a gap) and ask for a full repaint.  */
+   Redisplay binds every drawing operation to its frame; there is no
+   process-global renderer, queue or command protocol.  */
 
-unsigned long ohos_draw_dropped_count (void);
-int ohos_draw_pending (void);
+struct ohos_renderer *ohos_frame_renderer (struct frame *f);
 
-/* Frame geometry published to the host so it can allocate a bitmap of
-   exactly the frame pixels instead of guessing from a cell grid.  */
+/* Frame geometry published to the host and to the frame renderer.  */
 void ohos_publish_frame_metrics (struct frame *f);
 /* Called once the first redisplay of a frame finished.  */
 void ohos_menubar_mark_ready (void);
@@ -309,20 +311,9 @@ bool ohos_menubar_ready_p (void);
 
 void ohos_initialize_frame_menubar (struct frame *f);
 
-void ohos_draw_clear (uint32_t bg);
-void ohos_draw_fill (int x, int y, int w, int h, uint32_t color);
-void ohos_draw_text (int x, int y, int w, int h, unsigned code,
-		     uint32_t fg, uint32_t bg, uint32_t flags);
-void ohos_draw_image (int x, int y, int w, int h, const void *rgba,
-		      unsigned len);
-void ohos_draw_cursor (int x, int y, int w, int h, int bar,
-		       uint32_t fg, uint32_t bg, uint32_t flags, int kind);
-void ohos_draw_scroll (int x, int from_y, int width, int height,
-			 int to_y);
-void ohos_draw_present (void);
-void ohos_pump_draw_commands (void);
-
-/* UI thread -> Emacs input queue.  */
+/* UI thread -> Emacs input queue.  Every event names the frame it was
+   produced for; the Emacs thread routes it independently of the global
+   selected frame.  */
 #define OHOS_INPUT_TEXT_FLAG 0x80000000u
 #define OHOS_INPUT_RAW_FLAG  0x40000000u
 #define OHOS_INPUT_FOCUS_FLAG 0x20000000u
@@ -330,38 +321,50 @@ void ohos_pump_draw_commands (void);
 #define OHOS_INPUT_EXPOSE_FLAG 0x08000000u
 #define OHOS_INPUT_MENUBAR_FLAG 0x04000000u
 void ohos_create_input_pipe (void);
-void ohos_input_raw (const char *data, size_t len);
-void ohos_input_menubar (int index);
+void ohos_input_raw (uint32_t frame_id, const char *data, size_t len);
+void ohos_input_menubar (uint32_t frame_id, int index);
 int ohos_input_wait_fd (void);
-int ohos_input_key (unsigned key, unsigned modifiers, int pressed);
+int ohos_input_key (uint32_t frame_id, unsigned key, unsigned modifiers,
+		    int pressed);
 uint64_t ohos_probe_pop_ns (void);
 bool ohos_probe_pending (void);
 void ohos_probe_log (const char *tag);
-int ohos_pop_input (unsigned *key, unsigned *modifiers, int *mouse,
-		    int *button, int *x, int *y, int *press, int *motion,
-		    int *wheel);
-void ohos_input_wheel (int delta, int col, int row, unsigned modifiers);
-void ohos_input_mouse (int button, int x, int y, unsigned modifiers,
-		       int press);
+int ohos_pop_input (uint32_t *frame_id, unsigned *key, unsigned *modifiers,
+		    int *mouse, int *button, int *x, int *y, int *press,
+		    int *motion, int *wheel);
+void ohos_input_wheel (uint32_t frame_id, int delta, int col, int row,
+		       unsigned modifiers);
+void ohos_input_mouse (uint32_t frame_id, int button, int x, int y,
+		       unsigned modifiers, int press);
 /* Pointer motion only: drives note_mouse_highlight (mouse-face, hand
    pointer) and `frame->mouse_moved'.  Coordinates are frame pixels.  */
-void ohos_input_motion (int x, int y, unsigned modifiers);
-void ohos_input_text (const char *text);
-void ohos_input_focus (int focused);
+void ohos_input_motion (uint32_t frame_id, int x, int y,
+			unsigned modifiers);
+void ohos_input_text (uint32_t frame_id, const char *text);
+void ohos_input_focus (uint32_t frame_id, int focused);
 /* UI thread: the XComponent surface now has WIDTH x HEIGHT pixels.
    Emacs adopts that geometry so the native frame fills the surface.  */
-void ohos_input_resize (int width, int height);
+void ohos_input_resize (uint32_t frame_id, int width, int height);
 void ohos_last_surface_size (int *width, int *height);
 bool ohos_wait_surface_size (int timeout_ms);
 /* Host thread: the surface was rebuilt or re-exposed, so the frame must
    be repainted.  Emacs marks the frame garbaged and redisplays.  */
-void ohos_input_expose (int x, int y, int width, int height);
+void ohos_input_expose (uint32_t frame_id, int x, int y, int width,
+			int height);
 void ohos_apply_surface_events (void);
 void ohos_note_frame_ready (void);
-void ohos_surface_created (void *window, int width, int height,
-                           uint64_t generation);
-void ohos_surface_resized (int width, int height, uint64_t generation);
-void ohos_surface_destroyed (uint64_t generation);
+void ohos_surface_created (uint32_t frame_id, void *window, int width,
+			   int height, uint64_t generation);
+void ohos_surface_resized (uint32_t frame_id, int width, int height,
+			   uint64_t generation);
+void ohos_surface_destroyed (uint32_t frame_id, uint64_t generation);
+
+/* Frame registry: frame_id -> frame/renderer, maintained by ohos.c.  */
+uint32_t ohos_frame_register (struct frame *f,
+			      struct ohos_renderer *renderer);
+void ohos_frame_unregister (uint32_t frame_id);
+struct frame *ohos_frame_by_id (uint32_t frame_id);
+struct ohos_renderer *ohos_renderer_by_frame_id (uint32_t frame_id);
 
 #ifdef __cplusplus
 }

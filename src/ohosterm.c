@@ -172,7 +172,7 @@ ohos_term_init (void)
      FocusIn when the window is mapped: the event is queued before any
      Lisp runs, so it is processed during startup and blink-cursor finds
      the frame focused when it first checks.  */
-  ohos_input_focus (1);
+  ohos_input_focus (1, 1);
   int input_fd = ohos_input_wait_fd ();
   if (input_fd >= 0)
     add_keyboard_wait_descriptor (input_fd);

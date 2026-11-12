@@ -5,7 +5,7 @@
 
      struct ohos_emacs_api  host -> Emacs: lifecycle, input, surface
                             events and command channel.
-     struct ohos_host_api   Emacs -> host: frame properties, logging,
+     struct ohos_host_api   Emacs -> host: per-frame properties, logging,
                             clipboard and wakeups.  Drawing does not cross
                             this ABI; it goes to the statically linked
                             renderer on the Emacs thread.
@@ -13,6 +13,11 @@
    The host resolves the single exported symbol `ohos_emacs_api' and calls
    its `run' entry with the host API.  No other C symbol is part of the
    contract; both libraries hide everything else at link time.
+
+   Every surface or input callback carries the `frame_id' assigned by the
+   Emacs side, so the backend can route it to one frame context without
+   consulting the global selected frame.  The one XComponent host uses
+   frame_id 1 for its boot window.
 
    Host command channel (Emacs -> host, drained by take_command): one
    newline-free string per command.
@@ -43,33 +48,9 @@
 extern "C" {
 #endif
 
-#define OHOS_GUI_ABI_VERSION 10
-
-/* Draw command stream shared by redisplay and the host.  The layout is
-   part of the ABI; keep the app-side mirror in sync with the static
-   assertions in gui/draw_protocol.h.  */
-enum ohos_draw_opcode
-{
-  OHOS_OP_CLEAR = 1,
-  OHOS_OP_FILL,
-  OHOS_OP_TEXT,
-  OHOS_OP_CURSOR,
-  OHOS_OP_SCROLL,
-  OHOS_OP_IMAGE
-};
-
-struct ohos_draw_command
-{
-  int op;
-  int x, y, w, h;
-  int to_y;
-  unsigned code;
-  uint32_t fg, bg;
-  uint32_t flags;
-  /* IMAGE op: RGBA pixels owned by the queue while it is being drained.  */
-  const void *ptr;
-  unsigned ptr_len;
-};
+/* 11: per-frame renderer; draw command protocol removed; every input and
+   surface callback is routed by frame_id.  */
+#define OHOS_GUI_ABI_VERSION 11
 
 struct ohos_host_api
 {
@@ -77,9 +58,11 @@ struct ohos_host_api
 
   struct
   {
-    void (*metrics) (int width, int height, int cell_width, int cell_height,
-		     int ascent, int descent);
-    void (*title) (const char *title);
+    /* Exact content geometry of FRAME_ID.  The host may size its window
+       from this, but never scales or shifts the rendered content.  */
+    void (*metrics) (uint32_t frame_id, int width, int height, int cell_width,
+		     int cell_height, int ascent, int descent);
+    void (*title) (uint32_t frame_id, const char *title);
     /* Base64 payload produced by Emacs for the system pasteboard.  */
     void (*clipboard) (const char *base64);
     void (*log) (const char *line);
@@ -97,23 +80,31 @@ struct ohos_emacs_api
      the process and returns Emacs' main return value.  */
   int (*run) (int argc, char **argv, const struct ohos_host_api *host);
 
-  int (*input_key) (unsigned key, unsigned modifiers, int pressed);
-  void (*input_text) (const char *text);
-  void (*input_menubar) (int index);
-  void (*input_raw) (const char *data, size_t len);
-  void (*input_mouse) (int button, int x, int y,
+  int (*input_key) (uint32_t frame_id, unsigned key, unsigned modifiers,
+		    int pressed);
+  void (*input_text) (uint32_t frame_id, const char *text);
+  void (*input_menubar) (uint32_t frame_id, int index);
+  void (*input_raw) (uint32_t frame_id, const char *data, size_t len);
+  void (*input_mouse) (uint32_t frame_id, int button, int x, int y,
 		       unsigned modifiers, int press);
-  void (*input_wheel) (int delta, int col, int row, unsigned modifiers);
-  void (*input_motion) (int x, int y, unsigned modifiers);
-  void (*input_focus) (int focused);
-  void (*input_resize) (int width, int height);
-  void (*input_expose) (int x, int y, int width, int height);
+  void (*input_wheel) (uint32_t frame_id, int delta, int col, int row,
+		       unsigned modifiers);
+  void (*input_motion) (uint32_t frame_id, int x, int y,
+			unsigned modifiers);
+  void (*input_focus) (uint32_t frame_id, int focused);
+  /* Legacy explicit resize request.  New hosts should only report surface
+     events; input_resize remains for compatibility and routes to the
+     same frame resize path.  */
+  void (*input_resize) (uint32_t frame_id, int width, int height);
+  void (*input_expose) (uint32_t frame_id, int x, int y, int width,
+			int height);
   /* Surface lifecycle, called on the ArkUI thread.  These only enqueue
      immutable events; the renderer is touched exclusively by Emacs.  */
-  void (*surface_created) (void *window, int width, int height,
+  void (*surface_created) (uint32_t frame_id, void *window, int width,
+			   int height, uint64_t generation);
+  void (*surface_resized) (uint32_t frame_id, int width, int height,
 			   uint64_t generation);
-  void (*surface_resized) (int width, int height, uint64_t generation);
-  void (*surface_destroyed) (uint64_t generation);
+  void (*surface_destroyed) (uint32_t frame_id, uint64_t generation);
   void (*font_metrics) (int ascent, int descent, int height,
 			int space_width, int underline_position,
 			int underline_thickness);

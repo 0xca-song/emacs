@@ -127,7 +127,7 @@ ohos_set_name_internal (struct frame *f, Lisp_Object name)
     return;
   encoded = ENCODE_UTF_8 (name);
   text = SSDATA (encoded);
-  ohos_set_title (text);
+  ohos_set_title (f, text);
 }
 
 static void
@@ -447,6 +447,10 @@ ohos_set_window_size (struct frame *f, bool change_gravity,
     f->win_gravity = NorthWestGravity;
   o->width = width;
   o->height = height;
+  /* The frame pixel size is authoritative now, so push it to the
+     renderer before any early return: the common user-resize path ends
+     here with the frame already matching the surface.  */
+  ohos_publish_frame_metrics (f);
 
   /* A resize that matches the surface size the ArkUI page reported
      came from the user resizing the window; echoing it back would
@@ -469,7 +473,6 @@ ohos_set_window_size (struct frame *f, bool change_gravity,
 
   o->geometry_serial++;
   ohos_host_command ("resize %d %d", width, height);
-  ohos_publish_frame_metrics (f);
   ohos_initialize_frame_menubar (f);
 }
 
@@ -708,10 +711,25 @@ ohos_create_frame (struct terminal *terminal, Lisp_Object parms)
   f->output_method = output_ohos;
   f->output_data.ohos = xzalloc (sizeof *f->output_data.ohos);
   f->output_data.ohos->display_info = terminal->display_info.ohos;
+  f->output_data.ohos->renderer = ohos_renderer_create ();
+  if (!f->output_data.ohos->renderer)
+    error ("Cannot allocate the OHOS frame renderer");
+  f->output_data.ohos->frame_id
+    = ohos_frame_register (f, f->output_data.ohos->renderer);
+  if (f->output_data.ohos->frame_id == 0)
+    {
+      ohos_renderer_destroy (f->output_data.ohos->renderer);
+      f->output_data.ohos->renderer = NULL;
+      error ("Cannot register the OHOS frame");
+    }
   {
     int sw = 0, sh = 0;
 
-    ohos_last_surface_size (&sw, &sh);
+    /* Only the boot frame is bound to the one XComponent this host
+       creates.  A later frame gets its own surface event when the UI
+       creates its window.  */
+    if (f->output_data.ohos->frame_id == 1)
+      ohos_last_surface_size (&sw, &sh);
     f->output_data.ohos->width = sw > 0 ? sw : 800;
     f->output_data.ohos->height = sh > 0 ? sh : 600;
   }
@@ -816,13 +834,23 @@ ohos_create_frame (struct terminal *terminal, Lisp_Object parms)
      realize_basic_faces, which aborts when they are missing.  */
   init_frame_faces (f);
   ohos_log ("ohos_create_frame faces done");
-  /* The window that just got a frame is the foreground window.  Focus
-     events from ArkUI can arrive before the frame exists, and without
-     `highlight_frame' redisplay draws the inactive (hollow) cursor for
-     ever: `get_window_cursor_type' marks a frame inactive when
-     `f != FRAME_DISPLAY_INFO (f)->highlight_frame'.  */
-  FRAME_DISPLAY_INFO (f)->focus_frame = frame;
-  FRAME_DISPLAY_INFO (f)->highlight_frame = f;
+  /* The boot window owns the input focus.  Do not let a later frame
+     without a native surface steal it: focus events from ArkUI name the
+     frame explicitly.  A frame still needs a highlight_frame, otherwise
+     redisplay draws the inactive (hollow) cursor for ever.  */
+  {
+    struct ohos_display_info *dpyinfo = FRAME_DISPLAY_INFO (f);
+
+    if (NILP (dpyinfo->focus_frame)
+	|| !FRAMEP (dpyinfo->focus_frame)
+	|| !FRAME_LIVE_P (XFRAME (dpyinfo->focus_frame)))
+      {
+	dpyinfo->focus_frame = frame;
+	dpyinfo->highlight_frame = f;
+      }
+    else if (!dpyinfo->highlight_frame)
+      dpyinfo->highlight_frame = f;
+  }
 
 
 
@@ -882,16 +910,23 @@ ohos_create_frame (struct terminal *terminal, Lisp_Object parms)
   }
   /* Realize the standard faces and publish the initial title.  */
   ohos_set_name_internal (f, f->name);
+  /* The surface event may have arrived before this frame existed.  Only
+     now, with fonts and faces initialized, is it safe to turn surface
+     pixels into a frame resize.  */
+  ohos_apply_surface_events ();
   {
-    /* Adopt the geometry the host already reported: the startup screen
-       decides between the fancy and plain layouts from (frame-height), so
-       the frame must be its real size before Lisp first looks at it.  */
+    /* If a surface event was consumed while the boot frame was still
+       being initialized the resize handler deferred it; adopt the cached
+       surface size now that fonts and faces are ready.  */
     int sw = 0, sh = 0;
 
-    ohos_last_surface_size (&sw, &sh);
-    if (sw > 0 && sh > 0)
+    if (f->output_data.ohos->frame_id == 1)
+      ohos_last_surface_size (&sw, &sh);
+    if (sw > 0 && sh > 0
+        && (sw != FRAME_PIXEL_WIDTH (f) || sh != FRAME_PIXEL_HEIGHT (f)))
       change_frame_size (f, sw, sh, false, false, false);
   }
+  ohos_publish_frame_metrics (f);
   unbind_to (count, Qnil);
   ohos_note_frame_ready ();
   return f;
@@ -915,7 +950,7 @@ DEFUN ("ohos-set-title", Fohos_set_title, Sohos_set_title, 1, 1, 0,
   (Lisp_Object title)
 {
   CHECK_STRING (title);
-  ohos_set_title (SSDATA (title));
+  ohos_set_title (SELECTED_FRAME (), SSDATA (title));
   return Qnil;
 }
 

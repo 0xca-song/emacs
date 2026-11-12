@@ -921,8 +921,13 @@ ohosfont_draw_gstring (struct glyph_string *s, int x, int y,
       if (width < 0)
         width = 0;
       x += LGLYPH_XOFF (lglyph);
-      ohos_draw_text (x, y, width, line_height, (unsigned) code,
-                      ohosfont_fg (s), ohosfont_bg (s), flags);
+      {
+        struct ohos_renderer *renderer = ohos_frame_renderer (s->f);
+        if (renderer)
+          ohos_renderer_text (renderer, x, y, width, line_height,
+                              (unsigned) code, ohosfont_fg (s),
+                              ohosfont_bg (s), flags);
+      }
       x += width;
     }
   return (int) (s->cmp_to - s->cmp_from);
@@ -964,8 +969,8 @@ ohosfont_draw (struct glyph_string *s, int from, int to, int x, int y,
 
       if (w <= 0)
         continue;
-      ohos_draw_text (x, y, w, line_height, g->u.ch,
-                      ohosfont_fg (s), ohosfont_bg (s), flags);
+      ohos_renderer_text (ohos_frame_renderer (s->f), x, y, w, line_height,
+                          g->u.ch, ohosfont_fg (s), ohosfont_bg (s), flags);
       x += w;
     }
   return to - from;
