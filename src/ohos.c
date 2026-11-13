@@ -803,6 +803,55 @@ ohos_input_focus (uint32_t frame_id, int focused)
   ohos_signal_input (was_empty);
 }
 
+void
+ohos_input_close_request (uint32_t frame_id)
+{
+  int was_empty;
+
+  pthread_mutex_lock (&input_lock);
+  was_empty = (input_count == 0);
+  if (input_count == OHOS_INPUT_CAP)
+    input_dropped++;
+  else
+    {
+      input_ring[input_tail].frame_id = frame_id;
+      input_ring[input_tail].key = OHOS_INPUT_CLOSE_FLAG;
+      input_ring[input_tail].modifiers = 0;
+      input_ring[input_tail].mouse = 0;
+      input_ring[input_tail].motion = 0;
+      input_ring[input_tail].wheel = 0;
+      input_tail = (input_tail + 1) & OHOS_INPUT_MASK;
+      input_count++;
+    }
+  pthread_mutex_unlock (&input_lock);
+  ohos_signal_input (was_empty);
+}
+
+void
+ohos_input_window_create_failed (uint32_t frame_id, const char *reason)
+{
+  int was_empty;
+  (void) reason;
+
+  pthread_mutex_lock (&input_lock);
+  was_empty = (input_count == 0);
+  if (input_count == OHOS_INPUT_CAP)
+    input_dropped++;
+  else
+    {
+      input_ring[input_tail].frame_id = frame_id;
+      input_ring[input_tail].key = OHOS_INPUT_WINDOW_FAILED_FLAG;
+      input_ring[input_tail].modifiers = 0;
+      input_ring[input_tail].mouse = 0;
+      input_ring[input_tail].motion = 0;
+      input_ring[input_tail].wheel = 0;
+      input_tail = (input_tail + 1) & OHOS_INPUT_MASK;
+      input_count++;
+    }
+  pthread_mutex_unlock (&input_lock);
+  ohos_signal_input (was_empty);
+}
+
 /* ------------------------------------------------------------------ */
 /* Host (ArkUI) chrome channel: Emacs -> UI thread.                   */
 

@@ -3109,6 +3109,12 @@ killed.  */
 		 : XFIXNUM (arg) & INT_MAX);
   else
     exit_code = EXIT_SUCCESS;
+#ifdef HAVE_OHOS_GUI
+  /* Emacs runs on a pthread.  The HarmonyOS appspawn helper's exit()
+     aborts when called from a non-main thread; _exit terminates the
+     process without running the atexit chain that triggers it.  */
+  _exit (exit_code);
+#endif
   exit (exit_code);
 }
 

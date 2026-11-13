@@ -472,7 +472,13 @@ ohos_set_window_size (struct frame *f, bool change_gravity,
     return;
 
   o->geometry_serial++;
-  ohos_host_command ("resize %d %d", width, height);
+  {
+    const struct ohos_host_api *api = ohos_get_host_api ();
+    if (api && api->frame.set_window_size)
+      api->frame.set_window_size (o->frame_id, width, height);
+    else
+      ohos_host_command ("resize %d %d", width, height);
+  }
   ohos_initialize_frame_menubar (f);
 }
 
@@ -504,7 +510,13 @@ ohos_set_offset (struct frame *f, register int xoff, register int yoff,
   if (change_gravity)
     o->geometry_serial++;
   if (xoff >= 0 || yoff >= 0)
-    ohos_host_command ("move %d %d", f->left_pos, f->top_pos);
+    {
+      const struct ohos_host_api *api = ohos_get_host_api ();
+      if (api && api->frame.set_window_position)
+        api->frame.set_window_position (o->frame_id, f->left_pos, f->top_pos);
+      else
+        ohos_host_command ("move %d %d", f->left_pos, f->top_pos);
+    }
 }
 
 static void
@@ -927,6 +939,42 @@ ohos_create_frame (struct terminal *terminal, Lisp_Object parms)
       change_frame_size (f, sw, sh, false, false, false);
   }
   ohos_publish_frame_metrics (f);
+  {
+    /* The boot frame uses the main window created by EntryAbility.  Every
+       later frame asks the UI to create a subwindow; this call is
+       asynchronous and must not block the Emacs thread.  */
+    const struct ohos_host_api *api = ohos_get_host_api ();
+    if (f->output_data.ohos->frame_id != 1 && api
+        && api->frame.create_window)
+      {
+        struct ohos_window_params params = { 0 };
+        Lisp_Object encoded = ENCODE_UTF_8 (f->name);
+        char title[256];
+        uint32_t parent_id = 0;
+
+        snprintf (title, sizeof title, "%s",
+                  STRINGP (encoded) ? SSDATA (encoded) : "Emacs");
+        if (FRAME_PARENT_FRAME (f) && FRAME_OHOS_P (FRAME_PARENT_FRAME (f)))
+          {
+            struct ohos_output *parent
+              = FRAME_OUTPUT_DATA (FRAME_PARENT_FRAME (f));
+            if (parent)
+              parent_id = parent->frame_id;
+          }
+        params.width = FRAME_PIXEL_WIDTH (f);
+        params.height = FRAME_PIXEL_HEIGHT (f);
+        params.x = f->left_pos;
+        params.y = f->top_pos;
+        params.parent_frame_id = parent_id;
+        params.undecorated
+          = !NILP (get_frame_param (f, Qundecorated)) ? 1 : 0;
+        params.dialog = 0;
+        params.title = title;
+        if (api->frame.create_window (f->output_data.ohos->frame_id, &params)
+            != 0)
+          ohos_log ("create_window rejected");
+      }
+  }
   unbind_to (count, Qnil);
   ohos_note_frame_ready ();
   return f;

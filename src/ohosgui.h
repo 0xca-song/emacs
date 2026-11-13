@@ -320,6 +320,8 @@ void ohos_initialize_frame_menubar (struct frame *f);
 #define OHOS_INPUT_RESIZE_FLAG 0x10000000u
 #define OHOS_INPUT_EXPOSE_FLAG 0x08000000u
 #define OHOS_INPUT_MENUBAR_FLAG 0x04000000u
+#define OHOS_INPUT_CLOSE_FLAG 0x02000000u
+#define OHOS_INPUT_WINDOW_FAILED_FLAG 0x01000000u
 void ohos_create_input_pipe (void);
 void ohos_input_raw (uint32_t frame_id, const char *data, size_t len);
 void ohos_input_menubar (uint32_t frame_id, int index);
@@ -342,6 +344,9 @@ void ohos_input_motion (uint32_t frame_id, int x, int y,
 			unsigned modifiers);
 void ohos_input_text (uint32_t frame_id, const char *text);
 void ohos_input_focus (uint32_t frame_id, int focused);
+void ohos_input_close_request (uint32_t frame_id);
+void ohos_input_window_create_failed (uint32_t frame_id,
+				      const char *reason);
 /* UI thread: the XComponent surface now has WIDTH x HEIGHT pixels.
    Emacs adopts that geometry so the native frame fills the surface.  */
 void ohos_input_resize (uint32_t frame_id, int width, int height);

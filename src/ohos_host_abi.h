@@ -48,9 +48,20 @@
 extern "C" {
 #endif
 
-/* 11: per-frame renderer; draw command protocol removed; every input and
-   surface callback is routed by frame_id.  */
-#define OHOS_GUI_ABI_VERSION 11
+/* 12: per-frame window lifecycle and close/create notifications.  */
+#define OHOS_GUI_ABI_VERSION 12
+
+struct ohos_window_params
+{
+  int width;
+  int height;
+  int x;
+  int y;
+  uint32_t parent_frame_id;
+  int undecorated;
+  int dialog;
+  const char *title;
+};
 
 struct ohos_host_api
 {
@@ -63,6 +74,16 @@ struct ohos_host_api
     void (*metrics) (uint32_t frame_id, int width, int height, int cell_width,
 		     int cell_height, int ascent, int descent);
     void (*title) (uint32_t frame_id, const char *title);
+    /* Per-frame native window lifecycle.  create_window is asynchronous:
+       the host queues it, returns 0 when accepted, and later reports
+       surface_created or window_create_failed.  */
+    int (*create_window) (uint32_t frame_id,
+			  const struct ohos_window_params *params);
+    void (*destroy_window) (uint32_t frame_id);
+    void (*raise_window) (uint32_t frame_id);
+    void (*set_window_title) (uint32_t frame_id, const char *title);
+    void (*set_window_size) (uint32_t frame_id, int width, int height);
+    void (*set_window_position) (uint32_t frame_id, int x, int y);
     /* Base64 payload produced by Emacs for the system pasteboard.  */
     void (*clipboard) (const char *base64);
     void (*log) (const char *line);
@@ -105,6 +126,11 @@ struct ohos_emacs_api
   void (*surface_resized) (uint32_t frame_id, int width, int height,
 			   uint64_t generation);
   void (*surface_destroyed) (uint32_t frame_id, uint64_t generation);
+  /* The user clicked the window close button.  Emacs must decide whether
+     to delete the frame; the host does not destroy the window directly.  */
+  void (*close_request) (uint32_t frame_id);
+  /* The host could not create the native window for FRAME_ID.  */
+  void (*window_create_failed) (uint32_t frame_id, const char *reason);
   void (*font_metrics) (int ascent, int descent, int height,
 			int space_width, int underline_position,
 			int underline_thickness);

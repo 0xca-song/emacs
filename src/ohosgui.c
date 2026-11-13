@@ -1396,8 +1396,13 @@ ohos_focus_frame (struct frame *f, bool noactivate)
 static void
 ohos_frame_raise_lower (struct frame *f, bool raise_flag)
 {
-  (void) f;
-  ohos_host_command (raise_flag ? "raise" : "lower");
+  struct ohos_output *o = FRAME_OUTPUT_DATA (f);
+  const struct ohos_host_api *api = ohos_get_host_api ();
+
+  if (raise_flag && o && api && api->frame.raise_window)
+    api->frame.raise_window (o->frame_id);
+  else
+    ohos_host_command (raise_flag ? "raise" : "lower");
 }
 
 static void
@@ -1713,6 +1718,11 @@ ohos_delete_frame (struct frame *f)
       ohos_renderer_destroy (o->renderer);
       o->renderer = NULL;
     }
+  {
+    const struct ohos_host_api *api = ohos_get_host_api ();
+    if (o->frame_id && api && api->frame.destroy_window)
+      api->frame.destroy_window (o->frame_id);
+  }
   o->frame_id = 0;
   o->frame_open = false;
   o->need_flip = false;
@@ -2144,6 +2154,28 @@ ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
       ev.frame_or_window = event_frame_obj;
       ev.timestamp = ohos_event_time ();
 
+      if (key & OHOS_INPUT_CLOSE_FLAG)
+	{
+	  /* The UI close button asks Emacs to decide.  Let the standard
+	     delete-frame event path run delete-frame-functions and the
+	     unsaved-buffer prompts.  */
+	  ev.kind = DELETE_WINDOW_EVENT;
+	  ev.code = 0;
+	  ev.modifiers = 0;
+	  kbd_buffer_store_event (&ev);
+	  count++;
+	  continue;
+	}
+      if (key & OHOS_INPUT_WINDOW_FAILED_FLAG)
+	{
+	  char dbg[96];
+	  snprintf (dbg, sizeof dbg, "window create failed frame=%u",
+		    (unsigned) frame_id);
+	  ohos_log (dbg);
+	  if (event_frame && frame_id != 1)
+	    delete_frame (event_frame_obj, Qnoelisp);
+	  continue;
+	}
       if (key & OHOS_INPUT_FOCUS_FLAG)
 	{
 	  struct ohos_display_info *dpyinfo = terminal->display_info.ohos;
@@ -2153,17 +2185,26 @@ ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
 	  ev.modifiers = 0;
 	  if (dpyinfo)
 	    {
-	      dpyinfo->focus_event_frame = modifiers ? event_frame : NULL;
-	      if (!modifiers)
+	      if (modifiers)
 		{
-		  dpyinfo->focus_frame = Qnil;
-		  dpyinfo->highlight_frame = NULL;
-		  if (event_frame)
-		    fset_redisplay (event_frame);
+		  dpyinfo->focus_event_frame = event_frame;
+		  dpyinfo->focus_frame = event_frame_obj;
+		  if (event_frame && SELECTED_FRAME () != event_frame)
+		    Fselect_frame (event_frame_obj, Qnil);
+		  ohos_frame_rehighlight (dpyinfo);
+		}
+	      else
+		{
+		  dpyinfo->focus_event_frame = NULL;
+		  if (event_frame && FRAMEP (dpyinfo->focus_frame)
+		      && XFRAME (dpyinfo->focus_frame) == event_frame)
+		    {
+		      dpyinfo->focus_frame = Qnil;
+		      dpyinfo->highlight_frame = NULL;
+		      fset_redisplay (event_frame);
+		    }
 		}
 	    }
-	  if (modifiers && event_frame)
-	    ohos_focus_frame (event_frame, true);
 	  kbd_buffer_store_event (&ev);
 	  count++;
 	  continue;
@@ -2376,6 +2417,8 @@ ohos_set_title (struct frame *f, const char *title)
 
   if (api && api->frame.title)
     api->frame.title (o ? o->frame_id : 0, title);
+  if (o && api && api->frame.set_window_title)
+    api->frame.set_window_title (o->frame_id, title);
 }
 
 void
