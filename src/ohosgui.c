@@ -753,7 +753,8 @@ ohos_define_frame_cursor (struct frame *f, Emacs_Cursor cursor)
     ohos_log (dbg);
   }
   o->current_cursor = cursor;
-  ohos_host_command ("cursor %s", ohos_cursor_name (cursor));
+  ohos_host_command ("cursor %u %s", o->frame_id,
+			     ohos_cursor_name (cursor));
 }
 
 /* Fill S's overhang fields from the font metrics.  */
@@ -902,7 +903,7 @@ ohos_show_hourglass (struct frame *f)
   if (popup_activated ())
     return;
   o->hourglass = true;
-  ohos_host_command ("hourglass 1");
+  ohos_host_command ("hourglass %u 1", o->frame_id);
 }
 
 static void
@@ -913,7 +914,7 @@ ohos_hide_hourglass (struct frame *f)
   if (!o->hourglass)
     return;
   o->hourglass = false;
-  ohos_host_command ("hourglass 0");
+  ohos_host_command ("hourglass %u 0", o->frame_id);
   if (!f->pointer_invisible)
     ohos_define_frame_cursor (f, o->text_cursor);
 }
@@ -1402,7 +1403,8 @@ ohos_frame_raise_lower (struct frame *f, bool raise_flag)
   if (raise_flag && o && api && api->frame.raise_window)
     api->frame.raise_window (o->frame_id);
   else
-    ohos_host_command (raise_flag ? "raise" : "lower");
+    ohos_host_command ("%s %u", raise_flag ? "raise" : "lower",
+		       o ? o->frame_id : 1);
 }
 
 static void
@@ -1419,7 +1421,7 @@ ohos_set_frame_alpha (struct frame *f)
   if (o->alpha_hint == percent)
     return;
   o->alpha_hint = percent;
-  ohos_host_command ("alpha %d", percent);
+  ohos_host_command ("alpha %u %d", o->frame_id, percent);
 }
 
 static void
@@ -1438,7 +1440,7 @@ ohos_ring_bell (struct frame *f)
         }
     }
   block_input ();
-  ohos_host_command ("bell");
+  ohos_host_command ("bell %u", FRAME_OUTPUT_DATA (f)->frame_id);
   unblock_input ();
 }
 
@@ -1456,7 +1458,8 @@ ohos_toggle_invisible_pointer (struct frame *f, bool invisible)
   f->pointer_invisible = invisible;
   o->current_cursor = invisible ? (Emacs_Cursor) OHOS_CURSOR_NONE
     : (Emacs_Cursor) OHOS_CURSOR_TEXT;
-  ohos_host_command ("cursor %s", invisible ? "none" : "text");
+  ohos_host_command ("cursor %u %s", o->frame_id,
+			     invisible ? "none" : "text");
   unblock_input ();
 }
 

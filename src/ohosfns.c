@@ -477,7 +477,7 @@ ohos_set_window_size (struct frame *f, bool change_gravity,
     if (api && api->frame.set_window_size)
       api->frame.set_window_size (o->frame_id, width, height);
     else
-      ohos_host_command ("resize %d %d", width, height);
+      ohos_host_command ("resize %u %d %d", o->frame_id, width, height);
   }
   ohos_initialize_frame_menubar (f);
 }
@@ -515,7 +515,8 @@ ohos_set_offset (struct frame *f, register int xoff, register int yoff,
       if (api && api->frame.set_window_position)
         api->frame.set_window_position (o->frame_id, f->left_pos, f->top_pos);
       else
-        ohos_host_command ("move %d %d", f->left_pos, f->top_pos);
+        ohos_host_command ("move %u %d %d", o->frame_id, f->left_pos,
+			   f->top_pos);
     }
 }
 
@@ -665,7 +666,7 @@ ohos_fullscreen_hook (struct frame *f)
       break;
     }
   o->fullscreen_hint = value;
-  ohos_host_command ("fullscreen %d", value);
+  ohos_host_command ("fullscreen %u %d", o->frame_id, value);
 }
 
 void
@@ -674,7 +675,8 @@ ohos_frame_visible_invisible (struct frame *f, bool visible)
   struct ohos_output *o = FRAME_OUTPUT_DATA (f);
 
   o->window_shown = visible;
-  ohos_host_command ("window-visible %d", visible ? 1 : 0);
+  ohos_host_command ("window-visible %u %d", o->frame_id,
+			     visible ? 1 : 0);
   if (visible)
     {
       SET_FRAME_ICONIFIED (f, false);
@@ -691,7 +693,7 @@ ohos_iconify_frame (struct frame *f)
   FRAME_OUTPUT_DATA (f)->iconified = 1;
   SET_FRAME_ICONIFIED (f, true);
   SET_FRAME_VISIBLE (f, false);
-  ohos_host_command ("minimize");
+  ohos_host_command ("minimize %u", FRAME_OUTPUT_DATA (f)->frame_id);
 }
 
 /* ------------------------------ frame lifecycle ------------------- */
