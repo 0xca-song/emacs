@@ -706,10 +706,33 @@ ohos_unwind_create_frame (Lisp_Object frame)
   (void) frame;
 }
 
+static bool
+ohos_has_live_frame (void)
+{
+  Lisp_Object tail;
+
+  for (tail = Vframe_list; CONSP (tail); tail = XCDR (tail))
+    {
+      Lisp_Object frame = XCAR (tail);
+
+      if (FRAMEP (frame) && FRAME_LIVE_P (XFRAME (frame))
+	  && FRAME_OHOS_P (XFRAME (frame)))
+	return true;
+    }
+  return false;
+}
+
 struct frame *
 ohos_create_frame (struct terminal *terminal, Lisp_Object parms)
 {
   ohos_log ("ohos_create_frame enter");
+  /* The boot frame is created before any OHOS frame exists.  Every later
+     frame is gated: multi-window is a blocked product feature on API 24.  */
+  if (!ohos_multi_window_enabled && ohos_has_live_frame ())
+    {
+      ohos_log ("multi-window blocked: set ohos-multi-window-enabled t");
+      error ("Multi-window support is blocked; set `ohos-multi-window-enabled' to t");
+    }
   if (!terminal)
     terminal = ohos_find_terminal ();
   if (!terminal)
@@ -1394,4 +1417,11 @@ syms_of_ohosfns (void)
 A string containing the color name, or nil to use the frame background
 color.  */);
   Vx_cursor_fore_pixel = Qnil;
+
+  DEFVAR_BOOL ("ohos-multi-window-enabled", ohos_multi_window_enabled,
+	       doc: /* Non-nil enables experimental multi-window support.
+It is nil by default because HarmonyOS API 24 subwindows cannot be
+raised below their parent and lack a system minimize button.  Set it to
+t in your init file only when testing the experimental implementation.  */);
+  ohos_multi_window_enabled = false;
 }
