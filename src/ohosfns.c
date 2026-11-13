@@ -995,6 +995,15 @@ PARMS is an alist of frame parameters.  */)
   return obj;
 }
 
+DEFUN ("ohos-make-child-frame", Fohos_make_child_frame,
+       Sohos_make_child_frame, 0, 0, 0,
+       doc: /* Create a native OHOS child frame of the selected frame.  */)
+  (void)
+{
+  Lisp_Object parms = list1 (Fcons (Qparent_frame, selected_frame));
+  return Fohos_create_frame (parms);
+}
+
 DEFUN ("ohos-set-title", Fohos_set_title, Sohos_set_title, 1, 1, 0,
        doc: /* Set the native window title to TITLE.  */)
   (Lisp_Object title)
@@ -1357,6 +1366,7 @@ void
 syms_of_ohosfns (void)
 {
   defsubr (&Sohos_create_frame);
+  defsubr (&Sohos_make_child_frame);
   defsubr (&Sohos_display_planes);
   defsubr (&Sohos_set_title);
   defsubr (&Sohos_set_clipboard);
