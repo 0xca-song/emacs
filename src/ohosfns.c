@@ -942,6 +942,15 @@ ohos_create_frame (struct terminal *terminal, Lisp_Object parms)
   }
   ohos_publish_frame_metrics (f);
   {
+    /* Fohos_create_frame bypasses make-frame's parameter application,
+       so apply parent-frame explicitly before the native window is
+       requested.  */
+    Lisp_Object parent = Fassq (Qparent_frame, parms);
+
+    if (!NILP (parent))
+      ohos_set_parent_frame (f, XCDR (parent), Qnil);
+  }
+  {
     /* The boot frame uses the main window created by EntryAbility.  Every
        later frame asks the UI to create a subwindow; this call is
        asynchronous and must not block the Emacs thread.  */
@@ -996,7 +1005,7 @@ PARMS is an alist of frame parameters.  */)
 }
 
 DEFUN ("ohos-make-child-frame", Fohos_make_child_frame,
-       Sohos_make_child_frame, 0, 0, 0,
+       Sohos_make_child_frame, 0, 0, "",
        doc: /* Create a native OHOS child frame of the selected frame.  */)
   (void)
 {
