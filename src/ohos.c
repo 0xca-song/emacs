@@ -598,7 +598,12 @@ ohos_pop_input (uint32_t *frame_id, unsigned *key, unsigned *modifiers,
 void
 ohos_input_menubar (uint32_t frame_id, int index)
 {
-  ohos_log ("input menubar");
+  {
+    char dbg[64];
+    snprintf (dbg, sizeof dbg, "input menubar frame=%u index=%d",
+              frame_id, index);
+    ohos_log (dbg);
+  }
   int was_empty;
   pthread_mutex_lock (&input_lock);
   was_empty = (input_count == 0);
