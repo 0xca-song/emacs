@@ -249,37 +249,36 @@ const struct ohos_host_api *ohos_get_host_api (void);
 void ohos_set_title (struct frame *f, const char *title);
 
 /* ------------------------------------------------------------------ */
-/* Host (ArkUI) chrome channel.
+/* Typed host (ArkUI) channel.  All operations carry frame_id and are
+   copied into the host's typed event mailbox; no command strings.  */
 
-   Window operations that only ArkTS can perform (move/resize the native
-   window, change its decoration, show a menu panel, post a
-   notification) are queued as short text commands.  The ArkUI page
-   drains the queue from its UI thread with `ohos_host_take_command',
-   applies the command, and reports interactive results back with
-   `ohos_host_menu_result'.  */
-
-#define OHOS_HOST_CMD_MAX 8192
 #define OHOS_HOST_RESULT_TEXT 65536
 
-void ohos_host_command (const char *fmt, ...)
-  ATTRIBUTE_FORMAT_PRINTF (1, 2);
-int ohos_host_take_command (char *buf, int cap);
-
-/* Request/response pair for operations that must return a value to
-   Emacs (a menu selection, the clipboard contents).  Emacs allocates a
-   small integer ID, queues the request, then waits for the host to call
-   `ohos_host_result'.  */
 void ohos_host_result (int id, int index, const char *text);
 int ohos_host_wait_result (int id, int timeout_ms, int *index,
 			   char *text, int cap);
-
-/* Convenience wrappers used by the menu and selection backends.  */
 void ohos_host_menu_result (int id, int index);
+void ohos_host_request_result (int id, int status, const char *text,
+			       size_t len);
 int ohos_menu_wait_result (int id, int timeout_ms);
 
-/* Drain any queued chrome command.  Used by the input pump so a busy
-   loop still lets window operations reach the host.  */
-void ohos_host_drain (void);
+void ohos_host_set_cursor (uint32_t frame_id, int cursor);
+void ohos_host_set_hourglass (uint32_t frame_id, int on);
+void ohos_host_bell (uint32_t frame_id);
+void ohos_host_set_alpha (uint32_t frame_id, int percent);
+void ohos_host_lower_window (uint32_t frame_id);
+void ohos_host_set_visible (uint32_t frame_id, int visible);
+void ohos_host_set_fullscreen (uint32_t frame_id, int fullscreen);
+void ohos_host_minimize_window (uint32_t frame_id);
+void ohos_host_pointer_warp (uint32_t frame_id, int x, int y);
+void ohos_host_set_no_focus_on_map (uint32_t frame_id, int no_focus);
+void ohos_host_set_no_accept_focus (uint32_t frame_id, int no_accept);
+int ohos_host_menu_bar (uint32_t frame_id, const char *text, size_t len);
+int ohos_host_menu_show (uint32_t frame_id, int menu_id, int flags,
+			 int dialog, const char *text, size_t len);
+void ohos_host_menu_close (uint32_t frame_id, int menu_id);
+int ohos_host_request (uint32_t frame_id, int kind, int request_id,
+		       const char *text, size_t len);
 
 /* True when a native OHOS terminal is up and the host channel can be
    used.  */

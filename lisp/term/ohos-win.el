@@ -9,7 +9,7 @@
 ;;
 ;; Selection handling uses the HarmonyOS pasteboard, which is only
 ;; reachable from ArkTS.  The C primitives in ohosselect.c forward every
-;; request to the ArkUI host over the host command channel, so the
+;; request to the ArkUI host over the typed host channel, so the
 ;; generic selection plumbing (`gui-set-selection', `gui-get-selection',
 ;; interprogram cut/paste) works unchanged.
 
@@ -24,7 +24,6 @@
 (declare-function ohos-set-title "ohosfns.c" (title))
 (declare-function ohos-notify "ohosfns.c" (title body &optional extra))
 (declare-function ohos-battery "ohosfns.c" ())
-(declare-function ohos-frame-host-operation "ohosfns.c" (command))
 (declare-function ohos-get-selection "ohosselect.c" (&optional selection))
 (declare-function ohos-set-selection "ohosselect.c" (selection string))
 (declare-function ohos-selection-owner-p "ohosselect.c"
@@ -154,11 +153,6 @@ The values come from the ArkUI host, which reads BatteryInfo."
   (interactive)
   (setq battery-status-function #'ohos-battery-status)
   (battery-mode 1))
-
-(defun ohos-pick-host-command (command)
-  "Send COMMAND to the ArkUI host.
-COMMAND is a raw host command string, for example \"resize 640 480\"."
-  (ohos-frame-host-operation command))
 
 ;;; Menus.
 
@@ -399,8 +393,7 @@ Return the chosen command when it was executed."
         (condition-case err
             (load ohos-dev-file t t)
           (error
-           (ohos-frame-host-operation
-            (format "cursor dev-err-%s" (car err)))))))))
+           (message "OHOS dev load error: %s" (car err))))))))
 
 (defun ohos-dev-watch ()
   "Start polling the development file."

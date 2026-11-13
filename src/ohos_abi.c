@@ -43,8 +43,8 @@ static const struct ohos_emacs_api emacs_api =
   .window_create_failed = ohos_input_window_create_failed,
   .font_metrics = ohos_font_metrics,
   .set_display_metrics = ohos_set_display_metrics,
-  .take_command = ohos_host_take_command,
-  .resolve_command = ohos_host_result,
+  .menu_result = ohos_host_menu_result,
+  .request_result = ohos_host_request_result,
 };
 
 const struct ohos_emacs_api *

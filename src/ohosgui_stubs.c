@@ -61,7 +61,11 @@ check_x_display_info (Lisp_Object frame)
 void
 frame_set_mouse_pixel_position (struct frame *f, int x, int y)
 {
-  ohos_host_command ("pointer-warp %d %d", x, y);
+  {
+    struct ohos_output *o = FRAME_OUTPUT_DATA (f);
+    if (o)
+      ohos_host_pointer_warp (o->frame_id, x, y);
+  }
 }
 
 /* Names for the keysyms the OHOS key bridge produces (see

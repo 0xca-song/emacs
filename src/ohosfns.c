@@ -5,8 +5,8 @@
 
    OHOS windows are owned by ArkUI, not by the application: Emacs cannot
    create or reparent a native window directly.  Window operations are
-   therefore forwarded to the ArkUI page through the host command
-   channel (`ohos_host_command'), which applies them to the
+   therefore forwarded to the ArkUI page through the typed host API,
+   which applies them to the
    window.Window object of the ability.  */
 
 #include <config.h>
@@ -476,8 +476,6 @@ ohos_set_window_size (struct frame *f, bool change_gravity,
     const struct ohos_host_api *api = ohos_get_host_api ();
     if (api && api->frame.set_window_size)
       api->frame.set_window_size (o->frame_id, width, height);
-    else
-      ohos_host_command ("resize %u %d %d", o->frame_id, width, height);
   }
   ohos_initialize_frame_menubar (f);
 }
@@ -514,9 +512,6 @@ ohos_set_offset (struct frame *f, register int xoff, register int yoff,
       const struct ohos_host_api *api = ohos_get_host_api ();
       if (api && api->frame.set_window_position)
         api->frame.set_window_position (o->frame_id, f->left_pos, f->top_pos);
-      else
-        ohos_host_command ("move %u %d %d", o->frame_id, f->left_pos,
-			   f->top_pos);
     }
 }
 
@@ -577,7 +572,9 @@ ohos_set_no_focus_on_map (struct frame *f, Lisp_Object new_value,
   if (!EQ (new_value, old_value))
     {
       FRAME_NO_FOCUS_ON_MAP (f) = !NILP (new_value);
-      ohos_host_command ("no-focus-on-map %d", !NILP (new_value));
+      struct ohos_output *o = FRAME_OUTPUT_DATA (f);
+      if (o)
+	ohos_host_set_no_focus_on_map (o->frame_id, !NILP (new_value));
     }
 }
 
@@ -588,7 +585,9 @@ ohos_set_no_accept_focus (struct frame *f, Lisp_Object new_value,
   if (!EQ (new_value, old_value))
     {
       FRAME_NO_ACCEPT_FOCUS (f) = !NILP (new_value);
-      ohos_host_command ("no-accept-focus %d", !NILP (new_value));
+      struct ohos_output *o = FRAME_OUTPUT_DATA (f);
+      if (o)
+	ohos_host_set_no_accept_focus (o->frame_id, !NILP (new_value));
     }
 }
 
@@ -666,7 +665,7 @@ ohos_fullscreen_hook (struct frame *f)
       break;
     }
   o->fullscreen_hint = value;
-  ohos_host_command ("fullscreen %u %d", o->frame_id, value);
+  ohos_host_set_fullscreen (o->frame_id, value);
 }
 
 void
@@ -675,8 +674,7 @@ ohos_frame_visible_invisible (struct frame *f, bool visible)
   struct ohos_output *o = FRAME_OUTPUT_DATA (f);
 
   o->window_shown = visible;
-  ohos_host_command ("window-visible %u %d", o->frame_id,
-			     visible ? 1 : 0);
+  ohos_host_set_visible (o->frame_id, visible ? 1 : 0);
   if (visible)
     {
       SET_FRAME_ICONIFIED (f, false);
@@ -693,7 +691,7 @@ ohos_iconify_frame (struct frame *f)
   FRAME_OUTPUT_DATA (f)->iconified = 1;
   SET_FRAME_ICONIFIED (f, true);
   SET_FRAME_VISIBLE (f, false);
-  ohos_host_command ("minimize %u", FRAME_OUTPUT_DATA (f)->frame_id);
+  ohos_host_minimize_window (FRAME_OUTPUT_DATA (f)->frame_id);
 }
 
 /* ------------------------------ frame lifecycle ------------------- */
@@ -1123,7 +1121,13 @@ HarmonyOS NotificationKit session.  */)
   ohos_json_escape (SSDATA (encoded_body), body_buf, sizeof body_buf);
   snprintf (payload, sizeof payload, "{\"title\":\"%s\",\"text\":\"%s\"}",
 	    title_buf, body_buf);
-  ohos_host_command ("notify %s", payload);
+  {
+    struct frame *f = SELECTED_FRAME ();
+    uint32_t frame_id = (f && FRAME_OHOS_P (f))
+      ? FRAME_OUTPUT_DATA (f)->frame_id : 1;
+    ohos_host_request (frame_id, OHOS_REQUEST_NOTIFY, 0, payload,
+		       strlen (payload));
+  }
   return Qnil;
 }
 
@@ -1142,7 +1146,14 @@ URI, not a POSIX path; HOME remains the application runtime.  */)
     return Qnil;
   if (next_user_dir_id < 0)
     next_user_dir_id = 0x21000000;
-  ohos_host_command ("pick-user-dir %d", id);
+  {
+    struct frame *f = SELECTED_FRAME ();
+    uint32_t frame_id = (f && FRAME_OHOS_P (f))
+      ? FRAME_OUTPUT_DATA (f)->frame_id : 1;
+    if (ohos_host_request (frame_id, OHOS_REQUEST_PICK_USER_DIR, id, NULL, 0)
+	!= 0)
+      return Qnil;
+  }
   text[0] = '\0';
   if (!ohos_host_wait_result (id, 30000, NULL, text, sizeof text))
     return Qnil;
@@ -1166,26 +1177,19 @@ or nil when no host is available or the query timed out.  */)
     return Qnil;
   if (next_battery_id < 0)
     next_battery_id = 0x20000000;
-  ohos_host_command ("battery %d", id);
+  {
+    struct frame *f = SELECTED_FRAME ();
+    uint32_t frame_id = (f && FRAME_OHOS_P (f))
+      ? FRAME_OUTPUT_DATA (f)->frame_id : 1;
+    if (ohos_host_request (frame_id, OHOS_REQUEST_BATTERY, id, NULL, 0) != 0)
+      return Qnil;
+  }
   text[0] = '\0';
   if (!ohos_host_wait_result (id, 3000, NULL, text, sizeof text))
     return Qnil;
   if (text[0] == '\0')
     return Qnil;
   return build_string (text);
-}
-
-DEFUN ("ohos-frame-host-operation", Fohos_frame_host_operation,
-       Sohos_frame_host_operation, 1, 1, 0,
-       doc: /* Send COMMAND to the ArkUI host.
-COMMAND is a short text command understood by the ArkUI page, for
-example \"resize 640 480\" or \"notify hello\".  The host applies it to
-the native window or to a system service.  */)
-  (Lisp_Object command)
-{
-  CHECK_STRING (command);
-  ohos_host_command ("%s", SSDATA (command));
-  return Qnil;
 }
 
 /* ------------------------------------------------------------------ */
@@ -1402,7 +1406,6 @@ syms_of_ohosfns (void)
   defsubr (&Sohos_display_planes);
   defsubr (&Sohos_set_title);
   defsubr (&Sohos_set_clipboard);
-  defsubr (&Sohos_frame_host_operation);
   defsubr (&Sohos_user_directory);
   defsubr (&Sohos_notify);
   defsubr (&Sohos_battery);

@@ -863,13 +863,6 @@ ohos_input_window_create_failed (uint32_t frame_id, const char *reason)
 /* ------------------------------------------------------------------ */
 /* Host (ArkUI) chrome channel: Emacs -> UI thread.                   */
 
-#define OHOS_HOST_QUEUE_CAP 32
-
-static char host_cmds[OHOS_HOST_QUEUE_CAP][OHOS_HOST_CMD_MAX];
-static unsigned host_head, host_tail, host_count;
-static unsigned long host_dropped;
-static pthread_mutex_t host_lock = PTHREAD_MUTEX_INITIALIZER;
-
 /* One-slot answer channel: the UI thread stores the result of the
    pending request and wakes the Emacs thread through `result_pipe'.  */
 
@@ -895,53 +888,6 @@ ohos_host_queue_init (void)
     }
   else
     result_pipe[0] = result_pipe[1] = -1;
-}
-
-void
-ohos_host_command (const char *fmt, ...)
-{
-  va_list ap;
-  char buf[OHOS_HOST_CMD_MAX];
-
-  ohos_host_queue_init ();
-  va_start (ap, fmt);
-  vsnprintf (buf, sizeof buf, fmt, ap);
-  va_end (ap);
-
-  pthread_mutex_lock (&host_lock);
-  if (host_count == OHOS_HOST_QUEUE_CAP)
-    host_dropped++;
-  else
-    {
-      strncpy (host_cmds[host_tail], buf, OHOS_HOST_CMD_MAX - 1);
-      host_cmds[host_tail][OHOS_HOST_CMD_MAX - 1] = '\0';
-      host_tail = (host_tail + 1) % OHOS_HOST_QUEUE_CAP;
-      host_count++;
-    }
-  pthread_mutex_unlock (&host_lock);
-  if (host_api && host_api->frame.host_wakeup)
-    host_api->frame.host_wakeup ();
-}
-
-int
-ohos_host_take_command (char *buf, int cap)
-{
-  int found = 0;
-
-  if (!buf || cap <= 0)
-    return 0;
-  ohos_host_queue_init ();
-  pthread_mutex_lock (&host_lock);
-  if (host_count != 0)
-    {
-      strncpy (buf, host_cmds[host_head], cap - 1);
-      buf[cap - 1] = '\0';
-      host_head = (host_head + 1) % OHOS_HOST_QUEUE_CAP;
-      host_count--;
-      found = 1;
-    }
-  pthread_mutex_unlock (&host_lock);
-  return found;
 }
 
 void
@@ -1039,6 +985,129 @@ ohos_host_wait_result (int id, int timeout_ms, int *index, char *text,
 }
 
 void
+ohos_host_request_result (int id, int status, const char *text, size_t len)
+{
+  char buf[OHOS_HOST_RESULT_TEXT];
+  size_t n = len < sizeof buf - 1 ? len : sizeof buf - 1;
+
+  if (text && n)
+    memcpy (buf, text, n);
+  buf[n] = '\0';
+  ohos_host_result (id, status, buf);
+}
+
+void
+ohos_host_set_cursor (uint32_t frame_id, int cursor)
+{
+  if (host_api && host_api->frame.set_cursor)
+    host_api->frame.set_cursor (frame_id, cursor);
+}
+
+void
+ohos_host_set_hourglass (uint32_t frame_id, int on)
+{
+  if (host_api && host_api->frame.set_hourglass)
+    host_api->frame.set_hourglass (frame_id, on);
+}
+
+void
+ohos_host_bell (uint32_t frame_id)
+{
+  if (host_api && host_api->frame.bell)
+    host_api->frame.bell (frame_id);
+}
+
+void
+ohos_host_set_alpha (uint32_t frame_id, int percent)
+{
+  if (host_api && host_api->frame.set_alpha)
+    host_api->frame.set_alpha (frame_id, percent);
+}
+
+void
+ohos_host_lower_window (uint32_t frame_id)
+{
+  if (host_api && host_api->frame.lower_window)
+    host_api->frame.lower_window (frame_id);
+}
+
+void
+ohos_host_set_visible (uint32_t frame_id, int visible)
+{
+  if (host_api && host_api->frame.set_visible)
+    host_api->frame.set_visible (frame_id, visible);
+}
+
+void
+ohos_host_set_fullscreen (uint32_t frame_id, int fullscreen)
+{
+  if (host_api && host_api->frame.set_fullscreen)
+    host_api->frame.set_fullscreen (frame_id, fullscreen);
+}
+
+void
+ohos_host_minimize_window (uint32_t frame_id)
+{
+  if (host_api && host_api->frame.minimize_window)
+    host_api->frame.minimize_window (frame_id);
+}
+
+void
+ohos_host_pointer_warp (uint32_t frame_id, int x, int y)
+{
+  if (host_api && host_api->frame.pointer_warp)
+    host_api->frame.pointer_warp (frame_id, x, y);
+}
+
+void
+ohos_host_set_no_focus_on_map (uint32_t frame_id, int no_focus)
+{
+  if (host_api && host_api->frame.set_no_focus_on_map)
+    host_api->frame.set_no_focus_on_map (frame_id, no_focus);
+}
+
+void
+ohos_host_set_no_accept_focus (uint32_t frame_id, int no_accept)
+{
+  if (host_api && host_api->frame.set_no_accept_focus)
+    host_api->frame.set_no_accept_focus (frame_id, no_accept);
+}
+
+int
+ohos_host_menu_bar (uint32_t frame_id, const char *text, size_t len)
+{
+  if (host_api && host_api->frame.menu_bar)
+    return host_api->frame.menu_bar (frame_id, text, len);
+  return -1;
+}
+
+int
+ohos_host_menu_show (uint32_t frame_id, int menu_id, int flags, int dialog,
+		     const char *text, size_t len)
+{
+  if (host_api && host_api->frame.menu_show)
+    return host_api->frame.menu_show (frame_id, menu_id, flags, dialog, text,
+				      len);
+  return -1;
+}
+
+void
+ohos_host_menu_close (uint32_t frame_id, int menu_id)
+{
+  if (host_api && host_api->frame.menu_close)
+    host_api->frame.menu_close (frame_id, menu_id);
+}
+
+int
+ohos_host_request (uint32_t frame_id, int kind, int request_id,
+		   const char *text, size_t len)
+{
+  if (host_api && host_api->frame.request)
+    return host_api->frame.request (frame_id, kind, request_id, text, len);
+  return -1;
+}
+
+void
 ohos_host_menu_result (int id, int index)
 {
   ohos_host_result (id, index, NULL);
@@ -1051,12 +1120,4 @@ ohos_menu_wait_result (int id, int timeout_ms)
   if (!ohos_host_wait_result (id, timeout_ms, &index, NULL, 0))
     return -2;
   return index;
-}
-
-void
-ohos_host_drain (void)
-{
-  char buf[OHOS_HOST_CMD_MAX];
-  while (ohos_host_take_command (buf, sizeof buf))
-    ;
 }

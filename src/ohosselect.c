@@ -50,7 +50,14 @@ clipboard is empty or the ArkUI host did not answer in time.  */)
   if (next_selection_id < 0)
     next_selection_id = 0x40000000;
   text[0] = '\0';
-  ohos_host_command ("clipboard-get %d", id);
+  {
+    struct frame *f = SELECTED_FRAME ();
+    uint32_t frame_id = (f && FRAME_OHOS_P (f))
+      ? FRAME_OUTPUT_DATA (f)->frame_id : 1;
+    if (ohos_host_request (frame_id, OHOS_REQUEST_CLIPBOARD_GET, id, NULL, 0)
+	!= 0)
+      return Qnil;
+  }
   if (!ohos_host_wait_result (id, 10000, NULL, text, sizeof text))
     return Qnil;
   if (text[0] == '\0')

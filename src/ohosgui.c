@@ -734,6 +734,27 @@ ohos_cursor_name (Emacs_Cursor cursor)
     }
 }
 
+static int
+ohos_cursor_kind (Emacs_Cursor cursor)
+{
+  switch ((int) (intptr_t) cursor)
+    {
+    case OHOS_CURSOR_TEXT: return OHOS_HOST_CURSOR_TEXT;
+    case OHOS_CURSOR_HAND: return OHOS_HOST_CURSOR_HAND;
+    case OHOS_CURSOR_HOURGLASS: return OHOS_HOST_CURSOR_HOURGLASS;
+    case OHOS_CURSOR_HDRAG:
+    case OHOS_CURSOR_LEFT_RIGHT:
+    case OHOS_CURSOR_LEFT_EDGE:
+    case OHOS_CURSOR_RIGHT_EDGE: return OHOS_HOST_CURSOR_HDRAG;
+    case OHOS_CURSOR_VDRAG:
+    case OHOS_CURSOR_UP_DOWN:
+    case OHOS_CURSOR_TOP_EDGE:
+    case OHOS_CURSOR_BOTTOM_EDGE: return OHOS_HOST_CURSOR_VDRAG;
+    case OHOS_CURSOR_NONE: return OHOS_HOST_CURSOR_NONE;
+    default: return OHOS_HOST_CURSOR_DEFAULT;
+    }
+}
+
 static void
 ohos_define_frame_cursor (struct frame *f, Emacs_Cursor cursor)
 {
@@ -753,8 +774,7 @@ ohos_define_frame_cursor (struct frame *f, Emacs_Cursor cursor)
     ohos_log (dbg);
   }
   o->current_cursor = cursor;
-  ohos_host_command ("cursor %u %s", o->frame_id,
-			     ohos_cursor_name (cursor));
+  ohos_host_set_cursor (o->frame_id, ohos_cursor_kind (cursor));
 }
 
 /* Fill S's overhang fields from the font metrics.  */
@@ -903,7 +923,7 @@ ohos_show_hourglass (struct frame *f)
   if (popup_activated ())
     return;
   o->hourglass = true;
-  ohos_host_command ("hourglass %u 1", o->frame_id);
+  ohos_host_set_hourglass (o->frame_id, 1);
 }
 
 static void
@@ -914,7 +934,7 @@ ohos_hide_hourglass (struct frame *f)
   if (!o->hourglass)
     return;
   o->hourglass = false;
-  ohos_host_command ("hourglass %u 0", o->frame_id);
+  ohos_host_set_hourglass (o->frame_id, 0);
   if (!f->pointer_invisible)
     ohos_define_frame_cursor (f, o->text_cursor);
 }
@@ -1400,11 +1420,12 @@ ohos_frame_raise_lower (struct frame *f, bool raise_flag)
   struct ohos_output *o = FRAME_OUTPUT_DATA (f);
   const struct ohos_host_api *api = ohos_get_host_api ();
 
-  if (raise_flag && o && api && api->frame.raise_window)
+  if (!o)
+    return;
+  if (raise_flag && api && api->frame.raise_window)
     api->frame.raise_window (o->frame_id);
-  else
-    ohos_host_command ("%s %u", raise_flag ? "raise" : "lower",
-		       o ? o->frame_id : 1);
+  else if (!raise_flag)
+    ohos_host_lower_window (o->frame_id);
 }
 
 static void
@@ -1421,7 +1442,7 @@ ohos_set_frame_alpha (struct frame *f)
   if (o->alpha_hint == percent)
     return;
   o->alpha_hint = percent;
-  ohos_host_command ("alpha %u %d", o->frame_id, percent);
+  ohos_host_set_alpha (o->frame_id, percent);
 }
 
 static void
@@ -1440,7 +1461,7 @@ ohos_ring_bell (struct frame *f)
         }
     }
   block_input ();
-  ohos_host_command ("bell %u", FRAME_OUTPUT_DATA (f)->frame_id);
+  ohos_host_bell (FRAME_OUTPUT_DATA (f)->frame_id);
   unblock_input ();
 }
 
@@ -1458,8 +1479,8 @@ ohos_toggle_invisible_pointer (struct frame *f, bool invisible)
   f->pointer_invisible = invisible;
   o->current_cursor = invisible ? (Emacs_Cursor) OHOS_CURSOR_NONE
     : (Emacs_Cursor) OHOS_CURSOR_TEXT;
-  ohos_host_command ("cursor %u %s", o->frame_id,
-			     invisible ? "none" : "text");
+  ohos_host_set_cursor (o->frame_id, invisible ? OHOS_HOST_CURSOR_NONE
+					       : OHOS_HOST_CURSOR_TEXT);
   unblock_input ();
 }
 
@@ -2322,7 +2343,7 @@ ohos_init_frame_cursors (struct frame *f)
   o->current_cursor = (Emacs_Cursor) OHOS_CURSOR_TEXT;
 }
 
-/* True when the native OHOS terminal exists, i.e. the host command
+/* True when the native OHOS terminal exists, i.e. the typed host
    channel has a consumer.  */
 
 bool

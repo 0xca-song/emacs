@@ -32,10 +32,6 @@
    backends.  A negative timeout means "wait forever".  */
 #define OHOS_MENU_TIMEOUT_MS (-1)
 
-/* Refuse to send a menu whose JSON would be truncated by the host
-   command channel (OHOS_HOST_CMD_MAX).  */
-#define OHOS_MENU_JSON_MAX 6000
-
 /* A growable JSON buffer.  */
 
 struct ohos_json
@@ -197,7 +193,7 @@ ohos_cancel_menu (int id)
   if (!popup_activated_flag)
     return;
   popup_activated_flag = 0;
-  ohos_host_command ("menu-close %u %d", popup_frame_id, id);
+  ohos_host_menu_close (popup_frame_id, id);
 }
 
 int
@@ -483,29 +479,13 @@ ohos_menu_show (struct frame *f, int x, int y, int menuflags,
   json = ohos_menu_json (title, menuflags, dialog);
   record_unwind_protect_ptr (xfree, json);
 
-  /* The host command channel truncates at OHOS_HOST_CMD_MAX, so a large
-     menu is pushed in numbered chunks; the host reassembles them and only
-     then parses the JSON.  */
-  {
-    size_t len = strlen (json);
-    size_t chunk = 4000;
-    size_t total = (len + chunk - 1) / chunk;
-
-    if (total > 1)
-      {
-	size_t k;
-
-	for (k = 0; k < total; k++)
-	  {
-	    size_t off = k * chunk;
-	    size_t n = len - off < chunk ? len - off : chunk;
-
-	    ohos_host_command ("menu-part %u %d %zu %zu %.*s",
-			       frame_id, id, k, total, (int) n, json + off);
-	  }
-	ohos_log ("menu_show sent in parts");
-      }
-  }
+  if (ohos_host_menu_show (frame_id, id, menuflags, dialog ? 1 : 0,
+			  json, strlen (json)) != 0)
+    {
+      ohos_log ("menu_show rejected");
+      unblock_input ();
+      return unbind_to (count, Qnil);
+    }
 
   /* Dismiss the panel if Emacs leaves this function abnormally.  */
   record_unwind_protect_int (ohos_cancel_menu, id);
@@ -513,14 +493,6 @@ ohos_menu_show (struct frame *f, int x, int y, int menuflags,
   ohos_log ("menu_show json built");
   popup_frame_id = frame_id;
   popup_activated_flag = 1;
-  /* A chunked menu was already announced with its `menu-part' stream and
-     the host opened it when the last chunk arrived; sending `menu-open'
-     again made the page build the same popup twice and report the same id
-     twice, so the second open could not be matched to an answer.  */
-  if (strlen (json) <= 4000)
-    ohos_host_command ("menu-open %u %d %s %s", frame_id, id,
-		       dialog ? "dialog" : "menu", json);
-
   answered = ohos_host_wait_result (id, OHOS_MENU_TIMEOUT_MS, &index,
 				    NULL, 0);
   popup_activated_flag = 0;
@@ -635,7 +607,11 @@ ohos_publish_menu_bar (struct frame *f)
       {
 	snprintf (last[slot], sizeof last[slot], "%s", json.data);
 	valid[slot] = true;
-	ohos_host_command ("menubar %u %s", ohos_frame_id (f), json.data);
+	{
+	  int len = (int) strlen (json.data);
+	  if (ohos_host_menu_bar (ohos_frame_id (f), json.data, len) != 0)
+	    ohos_log ("menubar publish rejected");
+	}
       }
   }
   xfree (json.data);
