@@ -308,8 +308,11 @@ ohos_apply_surface_events (void)
           = ohos_renderer_by_frame_id (c->frame_id);
       if (!renderer)
         {
-          /* No frame context yet: keep the event for when it appears.
-             The boot surface is the only such case on this platform.  */
+          /* A destroy event for an unknown frame is stale: the frame was
+             already deleted, so there is nobody to notify.  Creation and
+             resize can arrive before their frame and stay pending.  */
+          if (c->kind == 2)
+            continue;
           static int orphan_logs;
           if (orphan_logs++ < 8)
             {
