@@ -180,6 +180,15 @@ ohos_clear_popup_flag (int value)
   popup_activated_flag = value;
 }
 
+static uint32_t
+ohos_frame_id (struct frame *f)
+{
+  struct ohos_output *o = f ? FRAME_OUTPUT_DATA (f) : NULL;
+  return o ? o->frame_id : 1;
+}
+
+static uint32_t popup_frame_id = 1;
+
 /* Unwind-protect handler: if the menu is still up when Emacs leaves
    (C-g, quit, error), ask the host to dismiss the panel.  */
 static void
@@ -188,7 +197,7 @@ ohos_cancel_menu (int id)
   if (!popup_activated_flag)
     return;
   popup_activated_flag = 0;
-  ohos_host_command ("menu-close %d", id);
+  ohos_host_command ("menu-close %u %d", popup_frame_id, id);
 }
 
 int
@@ -448,10 +457,11 @@ ohos_menu_show (struct frame *f, int x, int y, int menuflags,
   char *json;
   int id, index;
   bool answered, dialog = pending_dialog;
+  uint32_t frame_id = ohos_frame_id (f);
 
   pending_dialog = false;
 
-  (void) f; (void) x; (void) y;
+  (void) x; (void) y;
   if (error_name)
     *error_name = NULL;
   /* Plain ASCII only: no string conversion, so this cannot itself fail
@@ -490,8 +500,8 @@ ohos_menu_show (struct frame *f, int x, int y, int menuflags,
 	    size_t off = k * chunk;
 	    size_t n = len - off < chunk ? len - off : chunk;
 
-	    ohos_host_command ("menu-part %d %zu %zu %.*s",
-			       id, k, total, (int) n, json + off);
+	    ohos_host_command ("menu-part %u %d %zu %zu %.*s",
+			       frame_id, id, k, total, (int) n, json + off);
 	  }
 	ohos_log ("menu_show sent in parts");
       }
@@ -501,13 +511,14 @@ ohos_menu_show (struct frame *f, int x, int y, int menuflags,
   record_unwind_protect_int (ohos_cancel_menu, id);
 
   ohos_log ("menu_show json built");
+  popup_frame_id = frame_id;
   popup_activated_flag = 1;
   /* A chunked menu was already announced with its `menu-part' stream and
      the host opened it when the last chunk arrived; sending `menu-open'
      again made the page build the same popup twice and report the same id
      twice, so the second open could not be matched to an answer.  */
   if (strlen (json) <= 4000)
-    ohos_host_command ("menu-open %d %s %s", id,
+    ohos_host_command ("menu-open %u %d %s %s", frame_id, id,
 		       dialog ? "dialog" : "menu", json);
 
   answered = ohos_host_wait_result (id, OHOS_MENU_TIMEOUT_MS, &index,
@@ -616,12 +627,15 @@ ohos_publish_menu_bar (struct frame *f)
   /* Publish only on change: redisplay calls this for every frame update and
      the host does not need to rebuild the bar for identical contents.  */
   {
-    static char last[4096];
+    static char last[64][4096];
+    static bool valid[64];
+    uint32_t slot = ohos_frame_id (f) % 64;
 
-    if (strcmp (last, json.data) != 0)
+    if (!valid[slot] || strcmp (last[slot], json.data) != 0)
       {
-	snprintf (last, sizeof last, "%s", json.data);
-	ohos_host_command ("menubar %s", json.data);
+	snprintf (last[slot], sizeof last[slot], "%s", json.data);
+	valid[slot] = true;
+	ohos_host_command ("menubar %u %s", ohos_frame_id (f), json.data);
       }
   }
   xfree (json.data);

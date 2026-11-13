@@ -2026,6 +2026,8 @@ ohos_read_socket (struct terminal *terminal, struct input_event *hold_quit)
       if (key & OHOS_INPUT_MENUBAR_FLAG)
 	{
 	  ohos_log ("menubar dispatch");
+	  if (event_frame && SELECTED_FRAME () != event_frame)
+	    Fselect_frame (event_frame_obj, Qnil);
 	  Lisp_Object fn = intern ("ohos-menu-bar-open-index");
 	  Lisp_Object args[2] = { fn, make_fixnum ((int) (key & 0xffff)) };
 	  Ffuncall (2, args);
