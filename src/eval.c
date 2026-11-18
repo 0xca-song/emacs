@@ -1877,7 +1877,18 @@ process_quit_flag (void)
   Lisp_Object flag = Vquit_flag;
   Vquit_flag = Qnil;
   if (EQ (flag, Qkill_emacs))
-    Fkill_emacs (Qnil, Qnil);
+    {
+#ifdef HAVE_OHOS_GUI
+      /* The ArkUI host owns the application lifetime.  A quit flag
+         asking to kill Emacs must not call exit() from the Emacs
+         thread, which would abort the whole HAP process.  */
+      extern void ohos_log (const char *);
+      ohos_log ("ignoring kill-emacs quit flag");
+      return;
+#else
+      Fkill_emacs (Qnil, Qnil);
+#endif
+    }
   if (EQ (Vthrow_on_input, flag))
     Fthrow (Vthrow_on_input, Qt);
   quit ();

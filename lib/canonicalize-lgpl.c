@@ -34,6 +34,12 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+/* The OHOS libc exports rawmemchr but its <string.h> does not declare
+   it; configure's link test therefore reports HAVE_RAWMEMCHR.  */
+#if defined __OHOS__
+extern void *rawmemchr (void const *, int);
+#endif
+
 #include <eloop-threshold.h>
 #include <filename.h>
 #include <idx.h>

@@ -32,6 +32,12 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 
 #define MAIN_PROGRAM
 #include "lisp.h"
+
+#ifdef HAVE_OHOS_GUI
+/* Native OHOS startup/fatal diagnostics; implemented in ohos.c.  */
+extern void ohos_log (const char *);
+#include <dlfcn.h>
+#endif
 #include "sysstdio.h"
 
 #ifdef HAVE_ANDROID
@@ -934,7 +940,7 @@ dump_error_to_string (int result)
 static char *
 load_pdump (int argc, char **argv, char *dump_file)
 {
-#if defined HAVE_ANDROID && !defined ANDROID_STUBIFY
+#if (defined HAVE_ANDROID && !defined ANDROID_STUBIFY) || defined HAVE_OHOS
   int skip_args = 0, result;
 
   while (skip_args < argc - 1)
@@ -2172,9 +2178,15 @@ Using an Emacs configured with --with-x-toolkit=lucid does not have this problem
     syms_of_callproc ();
   /* egetenv is a pretty low-level facility, which may get called in
      many circumstances; it seems flimsy to put off initializing it
-     until calling init_callproc.  Do not do it when dumping.  */
+     until calling init_callproc.  Do not do it when dumping, except on
+     HarmonyOS, where the dump is produced on the target device and must
+     therefore use that device's environment to find its Lisp files.  */
+#ifdef HAVE_OHOS
+  set_initial_environment ();
+#else
   if (!will_dump_p ())
     set_initial_environment ();
+#endif
 
   /* Has to run after the environment is set up. */
   init_atimer ();
@@ -2435,6 +2447,14 @@ Using an Emacs configured with --with-x-toolkit=lucid does not have this problem
       syms_of_fontset ();
       syms_of_xsettings ();
 #endif /* HAVE_PGTK */
+#ifdef HAVE_OHOS_GUI
+      syms_of_ohosgui ();
+      syms_of_ohosfont ();
+      syms_of_fontset ();
+      syms_of_xfaces ();
+      syms_of_fringe ();
+      syms_of_image ();
+#endif /* HAVE_OHOS_GUI */
 #ifdef HAVE_HAIKU
       syms_of_haikuterm ();
       syms_of_haikufns ();
@@ -2976,6 +2996,21 @@ killed.  */
 {
   int exit_code;
 
+#ifdef HAVE_OHOS_GUI
+  {
+    char buf[256];
+    void *caller = __builtin_return_address (0);
+    Dl_info info;
+    const char *name = "?";
+    if (dladdr (caller, &info) && info.dli_sname)
+      name = info.dli_sname;
+    snprintf (buf, sizeof buf, "Fkill_emacs arg=%ld restart=%d caller=%s",
+	      FIXNUMP (arg) ? (long) XFIXNUM (arg) : -999L,
+	      NILP (restart) ? 0 : 1, name);
+    ohos_log (buf);
+  }
+#endif
+
 #ifndef WINDOWSNT
   /* Do some checking before shutting down Emacs, because errors
      can't be meaningfully reported afterwards.  */
@@ -3085,6 +3120,12 @@ killed.  */
 		 : XFIXNUM (arg) & INT_MAX);
   else
     exit_code = EXIT_SUCCESS;
+#ifdef HAVE_OHOS_GUI
+  /* Emacs runs on a pthread.  The HarmonyOS appspawn helper's exit()
+     aborts when called from a non-main thread; _exit terminates the
+     process without running the atexit chain that triggers it.  */
+  _exit (exit_code);
+#endif
   exit (exit_code);
 }
 

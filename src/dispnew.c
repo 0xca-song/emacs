@@ -7307,8 +7307,19 @@ init_display_interactive (void)
     }
 #endif
 
+#ifdef HAVE_OHOS_GUI
+  if (!inhibit_window_system)
+    {
+#ifdef HAVE_OHOS_GUI
+      Vinitial_window_system = Qohos;
+#endif
+      ohos_term_init ();
+      return;
+    }
+#endif
+
 #ifdef HAVE_HAIKU
-  if (!inhibit_window_system && !will_dump_p ())
+  if (!inhibit_window_system)
     {
       Vinitial_window_system = Qhaiku;
       return;

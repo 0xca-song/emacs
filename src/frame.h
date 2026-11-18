@@ -659,6 +659,7 @@ struct frame
     struct pgtk_output *pgtk;		/* From pgtkterm.h. */
     struct haiku_output *haiku;		/* From haikuterm.h. */
     struct android_output *android;	/* From androidterm.h.  */
+    struct ohos_output *ohos;		/* From ohosgui.h.  */
   }
   output_data;
 
@@ -957,6 +958,7 @@ default_pixels_per_inch_y (void)
 #else
 #define FRAME_HAIKU_P(f) ((f)->output_method == output_haiku)
 #endif
+#define FRAME_OHOS_P(f) ((f)->output_method == output_ohos)
 #ifndef HAVE_ANDROID
 #define FRAME_ANDROID_P(f) false
 #else
@@ -983,6 +985,9 @@ default_pixels_per_inch_y (void)
 #ifdef HAVE_ANDROID
 #define FRAME_WINDOW_P(f) FRAME_ANDROID_P (f)
 #endif
+#ifdef HAVE_OHOS_GUI
+#define FRAME_WINDOW_P(f) FRAME_OHOS_P (f)
+#endif
 #ifndef FRAME_WINDOW_P
 #define FRAME_WINDOW_P(f) ((void) (f), false)
 #endif
@@ -996,16 +1001,16 @@ default_pixels_per_inch_y (void)
 #define FRAME_RES_Y(f)						\
   (eassert (FRAME_WINDOW_P (f)), FRAME_DISPLAY_INFO (f)->resy)
 
-#ifdef HAVE_ANDROID
+#if defined HAVE_ANDROID || defined HAVE_OHOS
 
-/* Android systems use a font scaling factor independent from the
+/* Android and OHOS use a font scaling factor independent from the
    display DPI.  */
 
 #define FRAME_RES(f)						\
   (eassert (FRAME_WINDOW_P (f)),				\
    FRAME_DISPLAY_INFO (f)->font_resolution)
 
-#else /* !HAVE_ANDROID */
+#else /* !HAVE_ANDROID && !HAVE_OHOS */
 #define FRAME_RES(f) FRAME_RES_Y (f)
 #endif /* HAVE_ANDROID */
 
@@ -1626,6 +1631,14 @@ FRAME_INTERNAL_BORDER_WIDTH (struct frame *f)
 	     : frame_dimension (f->internal_border_width))
 	  : frame_dimension (f->internal_border_width));
 }
+
+#ifdef HAVE_OHOS_GUI
+/* Avoid the inline helper's dependency on window-system macros.  */
+#define FRAME_INTERNAL_BORDER_WIDTH(f) frame_dimension ((f)->internal_border_width)
+#define STORE_NATIVE_RECT(nr, x_, y_, w_, h_) \
+  do { (nr).x = (x_); (nr).y = (y_); (nr).width = (w_); (nr).height = (h_); \
+       (nr).gx = (x_); (nr).gy = (y_); } while (0)
+#endif
 
 /* Pixel-size of window divider lines.  */
 INLINE int

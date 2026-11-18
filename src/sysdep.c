@@ -20,7 +20,12 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 #include <config.h>
 
 #include <execinfo.h>
+#include <ucontext.h>
 #include "sysstdio.h"
+#ifdef HAVE_OHOS_GUI
+#include <dlfcn.h>
+extern void ohos_log (const char *);
+#endif
 #ifdef HAVE_PWD_H
 #include <pwd.h>
 #include <grp.h>
@@ -1916,6 +1921,22 @@ static struct sigaction old_sigsegv_handler;
 static void
 handle_sigsegv (int sig, siginfo_t *siginfo, void *arg)
 {
+#ifdef HAVE_OHOS
+  /* HarmonyOS has no equivalent of a tombstone, so print the faulting
+     address and program counter for debugging.  The register names
+     differ between architectures; only aarch64 is handled here.  */
+#if defined __aarch64__
+  {
+    ucontext_t *uc = (ucontext_t *) arg;
+    fprintf (stderr, "\n[SIGSEGV addr=%p pc=%p sp=%p]\n",
+	     siginfo ? siginfo->si_addr : NULL,
+	     uc ? (void *) uc->uc_mcontext.pc : NULL,
+	     uc ? (void *) uc->uc_mcontext.sp : NULL);
+    fflush (stderr);
+  }
+#endif
+#endif
+
   /* Hard GC error may lead to stack overflow caused by
      too nested calls to mark_object.  No way to survive.  */
   bool fatal = gc_in_progress;
@@ -2400,6 +2421,17 @@ renameat_noreplace (int srcfd, char const *src, int dstfd, char const *dst)
 void
 emacs_abort (void)
 {
+#ifdef HAVE_OHOS_GUI
+  {
+    char buf[256];
+    Dl_info info;
+    const char *name = "?";
+    if (dladdr (__builtin_return_address (0), &info) && info.dli_sname)
+      name = info.dli_sname;
+    snprintf (buf, sizeof buf, "emacs_abort caller=%s", name);
+    ohos_log (buf);
+  }
+#endif
   terminate_due_to_signal (SIGABRT, 40);
 }
 #endif
@@ -2578,7 +2610,8 @@ emacs_pipe (int fd[2])
 
 #if !(defined HAVE_ANDROID && !defined ANDROID_STUBIFY)
 
-#ifndef POSIX_CLOSE_RESTART
+#if !defined POSIX_CLOSE_RESTART || defined HAVE_OHOS
+# undef POSIX_CLOSE_RESTART
 # define POSIX_CLOSE_RESTART 1
 static int
 posix_close (int fd, int flag)

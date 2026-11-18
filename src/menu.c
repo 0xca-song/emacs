@@ -48,7 +48,7 @@ static bool
 have_boxes (void)
 {
 #if defined (USE_X_TOOLKIT) || defined (USE_GTK) || defined (HAVE_NTGUI) || defined (HAVE_NS) \
-  || defined (HAVE_HAIKU) || defined (HAVE_ANDROID)
+  || defined (HAVE_HAIKU) || defined (HAVE_ANDROID) || defined (HAVE_OHOS_GUI)
   if (FRAME_WINDOW_P (XFRAME (Vmenu_updating_frame)))
     return 1;
 #endif
@@ -167,7 +167,7 @@ ensure_menu_items (int items)
     }
 }
 
-#if defined HAVE_EXT_MENU_BAR || defined HAVE_ANDROID
+#if defined HAVE_EXT_MENU_BAR || defined HAVE_ANDROID || defined HAVE_OHOS_GUI
 
 /* Begin a submenu.  */
 
@@ -421,7 +421,7 @@ single_menu_item (Lisp_Object key, Lisp_Object item, Lisp_Object dummy, void *sk
 
 #if defined (USE_X_TOOLKIT) || defined (USE_GTK) || defined (HAVE_NS)	\
   || defined (HAVE_NTGUI) || defined (HAVE_HAIKU) || defined (HAVE_PGTK) \
-  || defined (HAVE_ANDROID)
+  || defined (HAVE_ANDROID) || defined (HAVE_OHOS_GUI)
   /* Display a submenu using the toolkit.  */
   if (FRAME_WINDOW_P (XFRAME (Vmenu_updating_frame))
       && ! (NILP (map) || NILP (enabled)))

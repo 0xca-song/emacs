@@ -156,6 +156,28 @@ typedef struct pgtk_bitmap_record Bitmap_Record;
 # define COLOR_TABLE_SUPPORT 1
 #endif
 
+#ifdef HAVE_OHOS_GUI
+typedef struct ohos_bitmap_record Bitmap_Record;
+/* Pixels live in the backend pixmap (struct ohos_pixmap), which is also
+   the x_image, so decoders read and write it directly.  */
+#define GET_PIXEL(img, x, y) \
+  ohos_get_pixel ((struct ohos_pixmap *) (img), (x), (y))
+#define PUT_PIXEL(img, x, y, pixel) \
+  ohos_put_pixel ((struct ohos_pixmap *) (img), (x), (y), (pixel))
+#define NO_PIXMAP 0
+#define PIX_MASK_RETAIN 0
+#define PIX_MASK_DRAW 1
+#define RGB_TO_ULONG(r, g, b) (((r) << 16) | ((g) << 8) | (b))
+#define ARGB_TO_ULONG(a, r, g, b) \
+  (((a) << 24) | ((r) << 16) | ((g) << 8) | (b))
+#define RED_FROM_ULONG(color) (((color) >> 16) & 0xff)
+#define GREEN_FROM_ULONG(color) (((color) >> 8) & 0xff)
+#define BLUE_FROM_ULONG(color) ((color) & 0xff)
+#define RED16_FROM_ULONG(color) (RED_FROM_ULONG (color) * 0x101)
+#define GREEN16_FROM_ULONG(color) (GREEN_FROM_ULONG (color) * 0x101)
+#define BLUE16_FROM_ULONG(color) (BLUE_FROM_ULONG (color) * 0x101)
+#endif
+
 #ifdef HAVE_HAIKU
 #include "haiku_support.h"
 typedef struct haiku_bitmap_record Bitmap_Record;
@@ -4049,7 +4071,20 @@ image_create_x_image_and_pixmap_1 (struct frame *f, int width, int height, int d
                                    Emacs_Pix_Container *pimg,
                                    Emacs_Pixmap *pixmap, Picture *picture)
 {
-#ifdef USE_CAIRO
+#ifdef HAVE_OHOS_GUI
+  eassert (input_blocked_p ());
+
+  /* The pixmap is the x_image: decoders write into it directly.  */
+  *pixmap = ohos_create_pixmap (width, height, depth);
+  if (*pixmap == NO_PIXMAP)
+    {
+      *pimg = NULL;
+      image_error ("Unable to create pixmap");
+      return false;
+    }
+  *pimg = *pixmap;
+  return 1;
+#elif defined USE_CAIRO
   eassert (input_blocked_p ());
 
   /* Allocate a pixmap of the same size.  */
@@ -4213,11 +4248,12 @@ image_destroy_x_image (Emacs_Pix_Container pimg)
   eassert (input_blocked_p ());
   if (pimg)
     {
-#if defined USE_CAIRO || defined HAVE_HAIKU || defined HAVE_NS
+#if defined USE_CAIRO || defined HAVE_HAIKU || defined HAVE_NS \
+  || defined HAVE_OHOS_GUI
       /* On these systems, Emacs_Pix_Containers always point to the same
 	 data as pixmaps in `struct image', and therefore must never be
 	 freed separately.  */
-#endif	/* USE_CAIRO || HAVE_HAIKU || HAVE_NS */
+#endif	/* USE_CAIRO || HAVE_HAIKU || HAVE_NS || HAVE_OHOS_GUI */
 #ifdef HAVE_NTGUI
       /* Data will be freed by DestroyObject.  */
       pimg->data = NULL;
@@ -4236,7 +4272,8 @@ static void
 gui_put_x_image (struct frame *f, Emacs_Pix_Container pimg,
                  Emacs_Pixmap pixmap, int width, int height)
 {
-#if defined USE_CAIRO || defined HAVE_HAIKU || defined HAVE_NS
+#if defined USE_CAIRO || defined HAVE_HAIKU || defined HAVE_NS \
+  || defined HAVE_OHOS_GUI
   eassert (pimg == pixmap);
 #elif defined HAVE_X_WINDOWS
   GC gc;
@@ -4352,7 +4389,7 @@ image_unget_x_image_or_dc (struct image *img, bool mask_p,
 static Emacs_Pix_Container
 image_get_x_image (struct frame *f, struct image *img, bool mask_p)
 {
-#if defined USE_CAIRO || defined (HAVE_HAIKU)
+#if defined USE_CAIRO || defined (HAVE_HAIKU) || defined HAVE_OHOS_GUI
   return !mask_p ? img->pixmap : img->mask;
 #elif defined HAVE_X_WINDOWS || defined HAVE_ANDROID
   XImage *ximg_in_img = !mask_p ? img->ximg : img->mask_img;
@@ -4384,7 +4421,7 @@ image_get_x_image (struct frame *f, struct image *img, bool mask_p)
 static void
 image_unget_x_image (struct image *img, bool mask_p, Emacs_Pix_Container ximg)
 {
-#ifdef USE_CAIRO
+#if defined USE_CAIRO || defined HAVE_OHOS_GUI
 #elif defined HAVE_X_WINDOWS || defined HAVE_ANDROID
   XImage *ximg_in_img = !mask_p ? img->ximg : img->mask_img;
 
@@ -6888,7 +6925,7 @@ lookup_rgb_color (struct frame *f, int r, int g, int b)
 #ifdef HAVE_NTGUI
   return PALETTERGB (r >> 8, g >> 8, b >> 8);
 #elif defined USE_CAIRO || defined HAVE_NS || defined HAVE_HAIKU	\
-  || defined HAVE_ANDROID
+  || defined HAVE_ANDROID || defined HAVE_OHOS_GUI
   return RGB_TO_ULONG (r >> 8, g >> 8, b >> 8);
 #else
   xsignal1 (Qfile_error,
@@ -12941,6 +12978,21 @@ initialize_image_type (struct image_type const *type)
 
 /* Array of supported image types.  */
 
+#ifdef HAVE_OHOS_GUI
+extern bool ohos_svg_image_p (Lisp_Object);
+extern bool ohos_svg_load (struct frame *, struct image *);
+
+#endif
+
+#ifdef HAVE_OHOS_GUI
+/* The port's SVG type: Emacs' own svg loader needs librsvg, which is not
+   available in this build, so the port decodes SVG itself (nanosvg) and
+   stores the pixels through the same pixmap primitives.  */
+extern bool ohos_svg_image_p (Lisp_Object);
+extern bool ohos_svg_load (struct frame *, struct image *);
+extern void ohos_image_free (struct frame *, struct image *);
+#endif
+
 static struct image_type const image_types[] =
 {
 #ifdef HAVE_GHOSTSCRIPT
@@ -12980,6 +13032,9 @@ static struct image_type const image_types[] =
    IMAGE_TYPE_INIT (init_webp_functions) },
 #endif
  { SYMBOL_INDEX (Qxbm), xbm_image_p, xbm_load, image_clear_image },
+#ifdef HAVE_OHOS_GUI
+ { SYMBOL_INDEX (Qsvg), ohos_svg_image_p, ohos_svg_load, ohos_image_free },
+#endif
  { SYMBOL_INDEX (Qpbm), pbm_image_p, pbm_load, image_clear_image },
 };
 
@@ -13157,6 +13212,11 @@ non-numeric, there is no explicit limit on the size of images.  */);
 #if defined (HAVE_GIF) || defined (HAVE_NATIVE_IMAGE_API)
   DEFSYM (Qgif, "gif");
   add_image_type (Qgif);
+#endif
+
+#ifdef HAVE_OHOS_GUI
+  add_image_type (Qpng);
+  add_image_type (Qsvg);
 #endif
 
 #if defined (HAVE_PNG) || defined (HAVE_NATIVE_IMAGE_API)

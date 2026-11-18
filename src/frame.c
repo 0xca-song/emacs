@@ -116,7 +116,11 @@ decode_any_frame (register Lisp_Object frame)
 bool
 display_available (void)
 {
+#ifdef HAVE_OHOS_GUI
+  return true;
+#else
   return x_display_list != NULL;
+#endif
 }
 #endif
 
@@ -318,6 +322,10 @@ See also `frame-live-p'.  */)
       return Qhaiku;
     case output_android:
       return Qandroid;
+#ifdef HAVE_OHOS_GUI
+    case output_ohos:
+      return Qohos;
+#endif
     default:
       emacs_abort ();
     }

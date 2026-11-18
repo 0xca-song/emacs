@@ -1422,6 +1422,13 @@ the root directory.  */)
       else			/* ~user/filename */
 	{
 	  char *nmhome = user_homedir (nm + 1);
+#ifdef HAVE_OHOS
+	  /* HarmonyOS applications have no /etc/passwd entry, so the
+	     login name (derived from the uid) cannot be looked up.
+	     Expand such ~USER names to the process' home directory.  */
+	  if (!nmhome)
+	    nmhome = (char *) get_homedir ();
+#endif
 	  if (nmhome)
 	    {
 	      ptrdiff_t nmhomelen = strlen (nmhome);
@@ -1945,6 +1952,15 @@ char const *
 get_homedir (void)
 {
   char const *home = egetenv ("HOME");
+
+#ifdef HAVE_OHOS
+  /* The HarmonyOS application starts Emacs with HOME set, but the
+     Lisp environment list may not have been populated when this is
+     first called (in particular when a pdump is in use).  Fall back to
+     the real process environment.  */
+  if (!home)
+    home = getenv ("HOME");
+#endif
 
 #ifdef WINDOWSNT
   /* getpw* functions return UTF-8 encoded file names, whereas egetenv

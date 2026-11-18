@@ -175,6 +175,22 @@ fi
 AC_CANONICAL_HOST
 AC_CANONICAL_BUILD
 
+AC_ARG_WITH([ohos-gui],
+  [AS_HELP_STRING([--without-ohos-gui],
+    [do not build the native HarmonyOS GUI backend])],
+  [],
+  [with_ohos_gui=auto])
+
+# Detect HarmonyOS NEXT, whose C library is musl based but whose
+# headers advertise a few POSIX.1-2024 facilities that the library
+# does not actually provide.
+case $host in
+  *-ohos*)
+    AC_DEFINE([HAVE_OHOS], [1],
+      [Define to 1 if compiling for HarmonyOS NEXT.])
+    ;;
+esac
+
 AS_IF([test "$XCONFIGURE" = "android"],[
   # Initialize the Android NDK build system.  Make sure to use the
   # passed through NDK path.
@@ -2622,7 +2638,20 @@ ANDROID_LIBS=
 # the cross-compiler.
 ANDROID_BUILD_CFLAGS=
 REALLY_ANDROID=
+OHOS_OBJ=
 CM_OBJ="cm.o"
+
+AS_CASE([$host],
+  [*-ohos*], [
+    AS_IF([test "x$with_ohos_gui" != "xno"], [
+      window_system=ohos
+      no_x=yes
+      OHOS_OBJ="ohosgui.o ohosimage.o ohos.o ohos_abi.o ohosterm.o ohosfns.o ohosfont.o ohosmenu.o ohosselect.o ohosgui_stubs.o"
+      AC_DEFINE([HAVE_OHOS_GUI], [1],
+        [Define to 1 if building the native OHOS GUI backend.])
+    ])
+  ])
+AC_SUBST([OHOS_OBJ])
 
 AS_IF([test "$ANDROID" = "yes"],[
   window_system=android
@@ -3213,6 +3242,9 @@ dnl use the toolkit if we have gtk, or X11R5 or newer.
   ;;
   android )
     term_header=androidterm.h
+  ;;
+  ohos )
+    term_header=ohosgui.h
   ;;
 esac
 
@@ -4386,6 +4418,10 @@ if test "${with_toolkit_scroll_bars}" != "no"; then
     AC_DEFINE([USE_TOOLKIT_SCROLL_BARS])
     USE_TOOLKIT_SCROLL_BARS=yes
   fi
+elif test "${window_system}" = "ohos"; then
+  dnl Native OHOS scroll bars are not implemented yet; the frame uses
+  dnl Emacs' non-toolkit scroll bar code.
+  USE_TOOLKIT_SCROLL_BARS=no
 elif test "${window_system}" != "x11" && test "${window_system}" != "none"; then
   AC_MSG_ERROR([Non-toolkit scroll bars are not implemented for your system])
 fi
@@ -5340,6 +5376,7 @@ if test "${with_png}" != no; then
   elif test "${HAVE_X11}" = "yes" || test "${HAVE_W32}" = "yes" \
        || test "${HAVE_NS}" = "yes" || test "${HAVE_BE_APP}" = "yes" \
        || test "$window_system" = "pgtk" \
+       || test "$window_system" = "ohos" \
        || test "${REALLY_ANDROID}" = "yes"; then
     EMACS_CHECK_MODULES([PNG], [libpng >= 1.0.0])
     if test $HAVE_PNG = yes; then

@@ -67,6 +67,9 @@ typedef struct
 {
   int x, y;
   unsigned width, height;
+#ifdef HAVE_OHOS_GUI
+  int gx, gy;
+#endif
 } Emacs_Rectangle;
 
 /* XGCValues-like struct used by non-X GUI code.  */
@@ -163,6 +166,15 @@ typedef Emacs_Pixmap Emacs_Pix_Container;
 typedef Emacs_Pixmap Emacs_Pix_Context;
 #endif
 
+#ifdef HAVE_OHOS_GUI
+typedef struct ohos_display_info Display_Info;
+typedef void *Emacs_Pixmap;
+typedef void *Emacs_Cursor;
+typedef void *Emacs_Pix_Container;
+typedef void *Emacs_Pix_Context;
+typedef unsigned long RGB_PIXEL_COLOR;
+#endif
+
 #ifdef HAVE_ANDROID
 #include "androidgui.h"
 typedef struct android_display_info Display_Info;
@@ -179,6 +191,9 @@ typedef struct android_image *Emacs_Pix_Context;
 typedef void *Emacs_Cursor;
 #endif
 
+#ifdef HAVE_OHOS_GUI
+#define NativeRectangle Emacs_Rectangle
+#endif
 #ifndef NativeRectangle
 #define NativeRectangle int
 #endif
