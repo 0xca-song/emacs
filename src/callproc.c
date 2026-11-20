@@ -51,6 +51,10 @@ extern char **environ;
 
 #include "lisp.h"
 
+#if defined HAVE_OHOS
+# include "ohosproc.h"
+#endif
+
 #ifdef SETUP_SLAVE_PTY
 # include <sys/stream.h>
 # include <sys/stropts.h>
@@ -1289,7 +1293,15 @@ child_setup (int in, int out, int err, char **new_argv, char **env,
   setpgid (0, 0);
   tcsetpgrp (0, pid);
 
+#if defined HAVE_OHOS
+  /* Programs bundled with the app cannot be exec'd by the sandbox;
+     the userspace loader in ohosproc.c runs them instead.  */
+  int errnum = ohos_child_loader
+    ? ohos_exec_bundled (new_argv, env)
+    : emacs_exec_file (new_argv[0], new_argv, env);
+#else
   int errnum = emacs_exec_file (new_argv[0], new_argv, env);
+#endif
   exec_failed (new_argv[0], errnum);
 
 #else /* MSDOS */
@@ -1454,13 +1466,26 @@ emacs_spawn (pid_t *newpid, int std_in, int std_out, int std_err,
     return 1;
 #endif /* defined HAVE_ANDROID && !defined ANDROID_STUBIFY */
 
+#if defined HAVE_OHOS
+  /* The OHOS sandbox refuses execve on app-private files.  Bundled ELF
+     programs and #! scripts are run by the userspace loader in a plain
+     fork() child, which can also replace vfork/posix_spawn because the
+     child must not share the parent's address space.  */
+  bool ohos_loader = ohos_bundled_program_p (argv[0], cwd) != 0;
+  ohos_child_loader = ohos_loader;
+#endif /* HAVE_OHOS */
+
 
 #if USABLE_POSIX_SPAWN
   /* Prefer the simpler `posix_spawn' if available.  `posix_spawn'
      doesn't yet support setting up pseudoterminals, so we fall back
      to `vfork' if we're supposed to use a pseudoterminal.  */
 
-  bool use_posix_spawn = pty_name == NULL;
+  bool use_posix_spawn = pty_name == NULL
+#if defined HAVE_OHOS
+    && !ohos_loader
+#endif
+    ;
 
   posix_spawn_file_actions_t actions;
   posix_spawnattr_t attributes;
@@ -1533,7 +1558,12 @@ emacs_spawn (pid_t *newpid, int std_in, int std_out, int std_err,
   else
     pid = VFORK ();
 #else
-  pid = vfork ();
+#if defined HAVE_OHOS
+  if (ohos_loader)
+    pid = fork ();
+  else
+#endif
+    pid = vfork ();
 #endif
 
   newpid = newpid_volatile;
@@ -1547,6 +1577,11 @@ emacs_spawn (pid_t *newpid, int std_in, int std_out, int std_err,
   std_err = stderr_volatile;
   envp = envp_volatile;
   oldset = oldset_volatile;
+
+#if defined HAVE_OHOS
+  if (pid != 0)
+    ohos_child_loader = 0;
+#endif
 
   if (pid == 0)
 #endif /* not WINDOWSNT */
