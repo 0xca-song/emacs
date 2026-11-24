@@ -42,19 +42,21 @@
 (defmacro ohos-bundled-elf-selftest--check (name expected form)
   "Run FORM and record PASS/FAIL for NAME against EXPECTED."
   (declare (indent 2))
-  `(let* ((expected ,expected)
-          (actual (condition-case err
-                      ,form
-                    (error (format "ERROR %S" err))))
-          (ok (equal actual expected)))
+  `(progn
+     (ohos-bundled-elf-selftest--write "BEGIN %s\n" ,name)
+     (let* ((expected ,expected)
+            (actual (condition-case err
+                        ,form
+                      (error (format "ERROR %S" err))))
+            (ok (equal actual expected)))
      (if ok
          (setq ohos-bundled-elf-selftest--pass
                (1+ ohos-bundled-elf-selftest--pass))
        (setq ohos-bundled-elf-selftest--fail
              (1+ ohos-bundled-elf-selftest--fail)))
-     (ohos-bundled-elf-selftest--write
-      "%s %-26s expected=%S actual=%S\n"
-      (if ok "PASS" "FAIL") ,name expected actual)))
+       (ohos-bundled-elf-selftest--write
+        "%s %-26s expected=%S actual=%S\n"
+        (if ok "PASS" "FAIL") ,name expected actual))))
 
 (defun ohos-bundled-elf-selftest--call (program args &optional env)
   "Run PROGRAM synchronously and return (RC . OUTPUT)."
@@ -86,37 +88,55 @@
   (setq ohos-bundled-elf-selftest--pass 0
         ohos-bundled-elf-selftest--fail 0)
   (delete-file ohos-bundled-elf-selftest-file)
+  ;; The report lives in the app sandbox.  Make it readable by hdc so the
+  ;; release-mode baseline can be inspected even if the app dies during a
+  ;; check (test-only effect; this function runs only for demo=selftest).
+  (let ((dir (getenv "HOME")))
+    ;; Open the sandbox path components so hdc can read the report.  The
+    ;; selftest runs only for demo=selftest, so this is test-only.
+    (dotimes (_ 6)
+      (ignore-errors (set-file-modes dir #o755))
+      (setq dir (file-name-directory (directory-file-name dir)))))
   (ohos-bundled-elf-selftest--write
-   "emacs=%S\nlibexec=%S\nexec-path=%S\n"
+   "time=%s pid=%d emacs=%S\nlibexec=%S\nexec-path=%S\n"
+   (format-time-string "%Y-%m-%dT%H:%M:%S%z") (emacs-pid)
    (emacs-version) (ohos-bundled-elf-selftest--elf "hello") exec-path)
+  (ignore-errors (set-file-modes ohos-bundled-elf-selftest-file #o644))
+
+  ;; Fork + exec of a system binary: if release forbids creating processes,
+  ;; this is where the app dies, before any bundled-program check.
+  (ohos-bundled-elf-selftest--check "fork-exec-system" 0
+    (car (ohos-bundled-elf-selftest--call "/system/bin/true" nil)))
 
   ;; Dynamic, static and static-PIE images.
   (ohos-bundled-elf-selftest--check "hello-argv" 0
     (car (ohos-bundled-elf-selftest--call
-          "hello" '("arg one" "中文"))))
+          (ohos-bundled-elf-selftest--elf "hello") '("arg one" "中文"))))
   (ohos-bundled-elf-selftest--check "hello-argv-text" t
     (not (null (string-match-p
                 "argv\\[1\\]=arg one"
                 (cdr (ohos-bundled-elf-selftest--call
-                      "hello" '("arg one" "中文")))))))
+                      (ohos-bundled-elf-selftest--elf "hello")
+                      '("arg one" "中文")))))))
   (ohos-bundled-elf-selftest--check "hello-static" 0
-    (car (ohos-bundled-elf-selftest--call "hello-static" '("static"))))
+    (car (ohos-bundled-elf-selftest--call (ohos-bundled-elf-selftest--elf "hello-static") '("static"))))
   (ohos-bundled-elf-selftest--check "hello-pie" 0
-    (car (ohos-bundled-elf-selftest--call "hello-pie" '("pie"))))
+    (car (ohos-bundled-elf-selftest--call (ohos-bundled-elf-selftest--elf "hello-pie") '("pie"))))
   (ohos-bundled-elf-selftest--check "cpphello" 0
-    (car (ohos-bundled-elf-selftest--call "cpphello" nil)))
+    (car (ohos-bundled-elf-selftest--call (ohos-bundled-elf-selftest--elf "cpphello") nil)))
   (ohos-bundled-elf-selftest--check "cjk-file-name" 0
-    (car (ohos-bundled-elf-selftest--call "hello 中文" '("x"))))
+    (car (ohos-bundled-elf-selftest--call (ohos-bundled-elf-selftest--elf "hello 中文") '("x"))))
   (ohos-bundled-elf-selftest--check "many-args" 0
     (car (ohos-bundled-elf-selftest--call
-          "hello" (append (make-list 60 "arg with space") '("last")))))
+          (ohos-bundled-elf-selftest--elf "hello") (append (make-list 60 "arg with space") '("last")))))
 
   ;; Environment and working directory.
   (ohos-bundled-elf-selftest--check "environment" t
     (not (null (string-match-p
                 "env=value with space"
                 (cdr (ohos-bundled-elf-selftest--call
-                      "hello" nil '("OHOS_BUNDLED_TEST=value with space")))))))
+                      (ohos-bundled-elf-selftest--elf "hello")
+                      nil '("OHOS_BUNDLED_TEST=value with space")))))))
   (ohos-bundled-elf-selftest--check "cwd" t
     (let* ((runtime (file-name-directory
                      (directory-file-name (getenv "HOME"))))
@@ -124,13 +144,15 @@
       (not (null
             (string-match-p
              (concat "cwd=" (regexp-quote (directory-file-name runtime)))
-             (cdr (ohos-bundled-elf-selftest--call "hello" nil)))))))
+             (cdr (ohos-bundled-elf-selftest--call
+                   (ohos-bundled-elf-selftest--elf "hello") nil)))))))
 
   ;; Standard input, standard output and standard error.
   (ohos-bundled-elf-selftest--check "stdin-pipe" "line-1\nline-2\n"
     (with-temp-buffer
       (insert "line-1\nline-2\n")
-      (let ((rc (call-process-region (point-min) (point-max) "cat" t t)))
+      (let ((rc (call-process-region (point-min) (point-max)
+                                     (ohos-bundled-elf-selftest--elf "cat") t t)))
         (if (eq rc 0) (buffer-string) (format "rc=%S" rc)))))
   (ohos-bundled-elf-selftest--check "stderr-split" "err-line\n"
     (let* ((errfile (expand-file-name "selftest-stderr.txt" (getenv "HOME")))
@@ -138,7 +160,8 @@
       (unwind-protect
           (progn
             (delete-file errfile)
-            (call-process "err" nil (list out errfile))
+            (call-process (ohos-bundled-elf-selftest--elf "err")
+                          nil (list out errfile))
             (with-temp-buffer
               (insert-file-contents errfile)
               (buffer-string)))
@@ -146,9 +169,11 @@
 
   ;; Exit status and signals.
   (ohos-bundled-elf-selftest--check "exit-code" 7
-    (car (ohos-bundled-elf-selftest--call "exit" '("7"))))
+    (car (ohos-bundled-elf-selftest--call
+          (ohos-bundled-elf-selftest--elf "exit") '("7"))))
   (ohos-bundled-elf-selftest--check "signal" '(signal 15)
-    (let* ((proc (start-process "selftest-term" nil "term"))
+    (let* ((proc (start-process "selftest-term" nil
+                                (ohos-bundled-elf-selftest--elf "term")))
            (pid (process-id proc)))
       (accept-process-output nil 0.5)
       (signal-process pid 'SIGTERM)
@@ -159,17 +184,22 @@
   (ohos-bundled-elf-selftest--check "async-delete" 0
     (let* ((procs (mapcar (lambda (i)
                             (start-process (format "selftest-par-%d" i) nil
-                                           "sleep" "20"))
+                                           (ohos-bundled-elf-selftest--elf "sleep")
+                                           "20"))
                           (number-sequence 1 5))))
       (mapc #'delete-process procs)
       (length (seq-filter (lambda (p) (process-live-p p)) procs))))
   (ohos-bundled-elf-selftest--check "pty" 0
-    (let ((proc (make-process :name "selftest-pty" :command '("hello" "pty")
+    (let ((proc (make-process :name "selftest-pty"
+                              :command (list (ohos-bundled-elf-selftest--elf "hello")
+                                             "pty")
                               :connection-type 'pty :noquery t)))
       (ohos-bundled-elf-selftest--wait proc 10)
       (process-exit-status proc)))
   (ohos-bundled-elf-selftest--check "make-process-pipe" 0
-    (let ((proc (make-process :name "selftest-pipe" :command '("hello" "pipe")
+    (let ((proc (make-process :name "selftest-pipe"
+                              :command (list (ohos-bundled-elf-selftest--elf "hello")
+                                             "pipe")
                               :connection-type 'pipe :noquery t)))
       (ohos-bundled-elf-selftest--wait proc 10)
       (process-exit-status proc)))
@@ -178,7 +208,8 @@
   (ohos-bundled-elf-selftest--check "child-exec" t
     (not (null (string-match-p
                 "child-exec-ok"
-                (cdr (ohos-bundled-elf-selftest--call "spawn" nil))))))
+                (cdr (ohos-bundled-elf-selftest--call
+                      (ohos-bundled-elf-selftest--elf "spawn") nil))))))
 
   ;; #! scripts in the app data directory.
   (ohos-bundled-elf-selftest--check "script" 0
@@ -214,7 +245,15 @@
    "SUMMARY pass=%d fail=%d\n"
    ohos-bundled-elf-selftest--pass ohos-bundled-elf-selftest--fail)
   (message "bundled-elf selftest: %d passed, %d failed"
-           ohos-bundled-elf-selftest--pass ohos-bundled-elf-selftest--fail))
+           ohos-bundled-elf-selftest--pass ohos-bundled-elf-selftest--fail)
+  ;; Startup will select *scratch* after this eval; show the report once
+  ;; the command loop is running so it can be captured with screenCap.
+  (run-with-timer
+   2 nil
+   (lambda ()
+     (ignore-errors
+       (switch-to-buffer (find-file-noselect ohos-bundled-elf-selftest-file))
+       (goto-char (point-min))))))
 
 (provide 'ohos-bundled-elf-selftest)
 ;;; ohos-bundled-elf-selftest.el ends here

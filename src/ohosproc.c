@@ -33,6 +33,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
@@ -368,6 +369,258 @@ ohos_elf_close (struct ohos_elf *img)
   return 0;
 }
 
+/* ---- Signed bundle library mapping -------------------------------- */
+
+static const char *
+ohos_bundle_dir (void)
+{
+  const char *env = getenv ("EMACS_OHOS_BUNDLE_LIBS");
+  if (env && env[0] == '/')
+    return env;
+  return OHOS_BUNDLE_LIBS;
+}
+
+/* A bundle library name is a leaf file name, never a path.  */
+static int
+ohos_valid_lib_name (const char *name)
+{
+  if (!name || strncmp (name, "libohos_exec_", 13) != 0)
+    return 0;
+  size_t n = strlen (name);
+  if (n < 17 || strcmp (name + n - 3, ".so") != 0)
+    return 0;
+  for (size_t i = 0; i < n; i++)
+    {
+      char c = name[i];
+      if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+	    || (c >= '0' && c <= '9') || c == '_' || c == '.'
+	    || c == '-'))
+	return 0;
+    }
+  return 1;
+}
+
+/* Read the runtime/libexec stub at PATH.  Value 1 when it is a stub,
+   with the target library name copied into LIBNAME.  */
+static int
+ohos_read_stub (const char *path, char *libname, size_t size)
+{
+  char buf[192];
+  static const char magic[] = "OHOS-BUNDLE/1\n";
+  long n;
+  int fd = syscall (SYS_openat, AT_FDCWD, path, O_RDONLY | O_CLOEXEC, 0);
+  if (fd < 0)
+    return 0;
+  n = syscall (SYS_read, fd, buf, sizeof buf - 1);
+  syscall (SYS_close, fd);
+  if (n <= (long) (sizeof magic - 1))
+    return 0;
+  buf[n] = '\0';
+  if (strncmp (buf, magic, sizeof magic - 1) != 0)
+    return 0;
+  char *start = buf + sizeof magic - 1;
+  char *nl = strchr (start, '\n');
+  if (nl)
+    *nl = '\0';
+  size_t len = strlen (start);
+  if (len == 0 || len >= size || !ohos_valid_lib_name (start))
+    return 0;
+  memcpy (libname, start, len + 1);
+  return 1;
+}
+
+static unsigned long long
+ohos_align_up (unsigned long long v, unsigned long long a)
+{
+  return (v + a - 1) & ~(a - 1);
+}
+
+/* Fill ENTRY and PHDR from the mapped image.  */
+static int
+ohos_set_entry (struct ohos_elf *img, const char *path)
+{
+  img->entry = img->bias + img->eh.e_entry;
+  img->phdr = 0;
+  for (unsigned i = 0; i < img->phnum; i++)
+    {
+      Elf64_Phdr *ph = &img->ph[i];
+      if (ph->p_type != PT_LOAD)
+	continue;
+      if (img->eh.e_phoff >= ph->p_offset
+	  && img->eh.e_phoff < ph->p_offset + ph->p_filesz)
+	{
+	  img->phdr = img->bias + ph->p_vaddr
+	    + (img->eh.e_phoff - ph->p_offset);
+	  break;
+	}
+    }
+  if (!img->phdr)
+    {
+      ohos_msg ("cannot locate program headers", path, 0);
+      return -1;
+    }
+  return 0;
+}
+
+/* Map an image directly from a signed file.  All executable pages are
+   file-backed; only .bss and the reservation use anonymous memory, and
+   never with PROT_EXEC.  */
+static int
+ohos_map_file_image (struct ohos_elf *img, const char *path)
+{
+  size_t span = img->max_page - img->min_page;
+  unsigned long long align = OHOS_PAGE_SIZE;
+
+  for (unsigned i = 0; i < img->phnum; i++)
+    if (img->ph[i].p_type == PT_LOAD
+	&& img->ph[i].p_align > align
+	&& img->ph[i].p_align <= (1UL << 20))
+      align = img->ph[i].p_align;
+
+  /* Reject W+X segments and overlapping segments with different
+     protections; such images cannot be mapped without RWX pages.  */
+  for (unsigned i = 0; i < img->phnum; i++)
+    {
+      Elf64_Phdr *a = &img->ph[i];
+      if (a->p_type != PT_LOAD)
+	continue;
+      if ((a->p_flags & PF_W) && (a->p_flags & PF_X))
+	{
+	  ohos_msg ("RWX segment", path, 0);
+	  return ENOEXEC;
+	}
+      unsigned long long as = a->p_vaddr & ~(OHOS_PAGE_SIZE - 1);
+      unsigned long long ae = ohos_align_up (a->p_vaddr + a->p_memsz,
+					     OHOS_PAGE_SIZE);
+      for (unsigned j = i + 1; j < img->phnum; j++)
+	{
+	  Elf64_Phdr *b = &img->ph[j];
+	  if (b->p_type != PT_LOAD)
+	    continue;
+	  unsigned long long bs = b->p_vaddr & ~(OHOS_PAGE_SIZE - 1);
+	  unsigned long long be = ohos_align_up (b->p_vaddr + b->p_memsz,
+						 OHOS_PAGE_SIZE);
+	  if (as < be && bs < ae && a->p_flags != b->p_flags)
+	    {
+	      ohos_msg ("overlapping segments with different protections",
+			path, 0);
+	      return ENOEXEC;
+	    }
+	}
+    }
+
+  uintptr_t base;
+  if (img->eh.e_type == ET_EXEC)
+    {
+      uintptr_t self = (uintptr_t) &ohos_map_file_image;
+      uintptr_t here = (uintptr_t) __builtin_frame_address (0);
+      if ((self >= img->min_page && self < img->max_page)
+	  || (here >= img->min_page && here < img->max_page))
+	{
+	  ohos_msg ("image overlaps the loader", path, 0);
+	  return ENOEXEC;
+	}
+      base = (uintptr_t) img->min_page;
+    }
+  else
+    {
+      size_t rlen = span + align;
+      void *res = (void *) syscall (SYS_mmap, NULL, rlen, PROT_NONE,
+				    MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+      if ((long) res < 0 && res != MAP_FAILED)
+	{
+	  ohos_msg ("reserve failed", path, (int) -(long) res);
+	  return ENOMEM;
+	}
+      if (res == MAP_FAILED)
+	{
+	  ohos_msg ("reserve failed", path, errno);
+	  return ENOMEM;
+	}
+      base = ((uintptr_t) res + align - 1) & ~(uintptr_t) (align - 1);
+      if (base > (uintptr_t) res)
+	syscall (SYS_munmap, res, base - (uintptr_t) res);
+      uintptr_t tail = base + span;
+      uintptr_t end = (uintptr_t) res + rlen;
+      if (end > tail)
+	syscall (SYS_munmap, (void *) tail, end - tail);
+    }
+  img->bias = base - img->min_page;
+
+  for (unsigned i = 0; i < img->phnum; i++)
+    {
+      Elf64_Phdr *ph = &img->ph[i];
+      if (ph->p_type != PT_LOAD || ph->p_filesz == 0)
+	continue;
+      int prot = PROT_READ;
+      if (ph->p_flags & PF_W) prot |= PROT_WRITE;
+      if (ph->p_flags & PF_X) prot |= PROT_EXEC;
+      unsigned long long vstart = ph->p_vaddr & ~(OHOS_PAGE_SIZE - 1);
+      unsigned long long fstart = ph->p_offset & ~(OHOS_PAGE_SIZE - 1);
+      unsigned long long page_end = ohos_align_up (ph->p_vaddr + ph->p_filesz,
+						   OHOS_PAGE_SIZE);
+      if (page_end > vstart)
+	{
+	  long r = syscall (SYS_mmap, (void *) (img->bias + vstart),
+			    page_end - vstart, prot,
+			    MAP_PRIVATE | MAP_FIXED, img->fd, fstart);
+	  if (r < 0)
+	    {
+	      ohos_msg ("file mmap failed", path, (int) -r);
+	      return ENOEXEC;
+	    }
+	}
+    }
+
+  /* Zero the tail of the last file page and map .bss anonymously.  */
+  for (unsigned i = 0; i < img->phnum; i++)
+    {
+      Elf64_Phdr *ph = &img->ph[i];
+      if (ph->p_type != PT_LOAD || ph->p_memsz <= ph->p_filesz)
+	continue;
+      int prot = PROT_READ;
+      if (ph->p_flags & PF_W) prot |= PROT_WRITE;
+      if (ph->p_flags & PF_X) prot |= PROT_EXEC;
+
+      unsigned long long bss_start;
+      if (ph->p_filesz == 0)
+	{
+	  bss_start = ph->p_vaddr & ~(OHOS_PAGE_SIZE - 1);
+	}
+      else
+	{
+	  unsigned long long pad = ph->p_vaddr + ph->p_filesz;
+	  unsigned long long pad_page_end = ohos_align_up (pad, OHOS_PAGE_SIZE);
+	  if (pad < pad_page_end)
+	    {
+	      uintptr_t page = img->bias + (pad & ~(OHOS_PAGE_SIZE - 1));
+	      if (!(prot & PROT_WRITE))
+		syscall (SYS_mprotect, (void *) page, OHOS_PAGE_SIZE,
+			 PROT_READ | PROT_WRITE);
+	      memset ((void *) (img->bias + pad), 0, pad_page_end - pad);
+	      if (!(prot & PROT_WRITE))
+		syscall (SYS_mprotect, (void *) page, OHOS_PAGE_SIZE, prot);
+	    }
+	  bss_start = pad_page_end;
+	}
+      unsigned long long bss_end = ohos_align_up (ph->p_vaddr + ph->p_memsz,
+						  OHOS_PAGE_SIZE);
+      if (bss_end > bss_start)
+	{
+	  long r = syscall (SYS_mmap, (void *) (img->bias + bss_start),
+			    bss_end - bss_start, PROT_READ | PROT_WRITE,
+			    MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS, -1, 0);
+	  if (r < 0)
+	    {
+	      ohos_msg ("bss mmap failed", path, (int) -r);
+	      return ENOMEM;
+	    }
+	}
+    }
+
+  return ohos_set_entry (img, path) ? ENOEXEC : 0;
+}
+
 /* Turn off every inherited signal disposition so the target sees the
    post-exec state.  */
 static void
@@ -577,6 +830,86 @@ ohos_jump (uintptr_t sp, uintptr_t entry)
 }
 
 
+/* Map LIBNAME from the signed HAP native library directory and run it.
+   Executable pages are file-backed; no anonymous executable memory is
+   created.  Value is an errno value on failure.  */
+static int
+ohos_load_bundle_image (const char *libname, char *const argv[],
+			char *const envp[])
+{
+  char path[OHOS_MAX_PATH];
+  const char *dir = ohos_bundle_dir ();
+  size_t dl = strlen (dir);
+  size_t nl = strlen (libname);
+
+  if (!ohos_valid_lib_name (libname) || dl == 0)
+    return ENOEXEC;
+  if (dl + nl + 2 >= sizeof path)
+    return ENAMETOOLONG;
+  memcpy (path, dir, dl);
+  path[dl] = '/';
+  memcpy (path + dl + 1, libname, nl + 1);
+
+  struct ohos_elf main_img, interp_img;
+  struct ohos_elf *interp = NULL;
+
+  ohos_reset_signals ();
+  {
+    struct rlimit rl;
+    long maxfd = 1024;
+    if (syscall (SYS_getrlimit, RLIMIT_NOFILE, &rl) == 0
+	&& rl.rlim_cur != RLIM_INFINITY && rl.rlim_cur < 65536)
+      maxfd = (long) rl.rlim_cur;
+    for (long fd = 3; fd < maxfd; fd++)
+      syscall (SYS_close, fd);
+  }
+
+  if (ohos_elf_open (&main_img, path))
+    return ENOEXEC;
+  int rc = ohos_map_file_image (&main_img, path);
+  if (rc)
+    {
+      ohos_elf_close (&main_img);
+      return rc;
+    }
+  ohos_elf_close (&main_img);
+
+  if (main_img.is_dynamic)
+    {
+      const char *interp_path = main_img.interp;
+      if (syscall (SYS_faccessat, AT_FDCWD, interp_path, R_OK, 0) != 0)
+	{
+	  static const char fallback[] = "/system/lib/ld-musl-aarch64.so.1";
+	  if (syscall (SYS_faccessat, AT_FDCWD, fallback, R_OK, 0) != 0)
+	    {
+	      ohos_msg ("no dynamic linker", interp_path, errno);
+	      return ENOENT;
+	    }
+	  interp_path = fallback;
+	}
+      if (ohos_elf_open (&interp_img, interp_path))
+	return ENOEXEC;
+      rc = ohos_map_file_image (&interp_img, interp_path);
+      if (rc)
+	{
+	  ohos_elf_close (&interp_img);
+	  return rc;
+	}
+      ohos_elf_close (&interp_img);
+      interp = &interp_img;
+    }
+
+  uintptr_t sp = ohos_build_stack (&main_img, interp, path, argv, envp);
+  if (!sp)
+    {
+      ohos_msg ("cannot build initial stack", path, 0);
+      return ENOMEM;
+    }
+  uintptr_t entry = interp ? interp->entry : main_img.entry;
+  ohos_jump (sp, entry);
+  return ENOEXEC;		/* not reached */
+}
+
 /* Read a #! line from PATH into INTERP and LINEARG.  Value is 1 when
    PATH is a script, 0 when it is not, -1 on error.  */
 static int
@@ -713,15 +1046,27 @@ ohos_bundled_program_p (const char *file, const char *cwd)
   int fd = open (path, O_RDONLY | O_CLOEXEC);
   if (fd < 0)
     return 0;
-  unsigned char buf[4];
+  unsigned char buf[16];
   ssize_t n = read (fd, buf, sizeof buf);
   close (fd);
   if (n < 2)
     return 0;
   if (buf[0] == '#' && buf[1] == '!')
     return 1;
-  return (n == 4 && buf[0] == 0x7f && buf[1] == 'E'
-	  && buf[2] == 'L' && buf[3] == 'F');
+  if (n >= 4 && buf[0] == 0x7f && buf[1] == 'E'
+      && buf[2] == 'L' && buf[3] == 'F')
+    return 1;
+  /* runtime/libexec stub pointing at a signed bundle library.  */
+  return (n >= 14 && memcmp (buf, "OHOS-BUNDLE/1\n", 14) == 0);
+}
+
+/* The anonymous-memory loader is a development aid only: release builds
+   must never rely on it.  It is enabled with EMACS_OHOS_ALLOW_ANON_EXEC=1.  */
+static int
+ohos_anon_exec_allowed (void)
+{
+  const char *v = getenv ("EMACS_OHOS_ALLOW_ANON_EXEC");
+  return v && v[0] == '1';
 }
 
 /* Execute the program in ARGV (resolved through exec-path, so ARGV[0]
@@ -734,6 +1079,10 @@ ohos_exec_bundled (char *const argv[], char *const envp[])
   int err = errno;
   if (err != EACCES && err != EPERM && err != ENOEXEC)
     return err;
+
+  char libname[128];
+  if (ohos_read_stub (argv[0], libname, sizeof libname))
+    return ohos_load_bundle_image (libname, argv, envp);
 
   char interp[OHOS_MAX_PATH];
   char linearg[256];
@@ -757,8 +1106,18 @@ ohos_exec_bundled (char *const argv[], char *const envp[])
       err = errno;
       if (err != EACCES && err != EPERM && err != ENOEXEC)
 	return err;
-      return ohos_load_bundled (interp, newargv, envp);
+      if (ohos_read_stub (interp, libname, sizeof libname))
+	return ohos_load_bundle_image (libname, newargv, envp);
+      if (ohos_anon_exec_allowed ())
+	return ohos_load_bundled (interp, newargv, envp);
+      ohos_msg ("anonymous executable memory disabled", interp, 0);
+      return err;
     }
 
-  return ohos_load_bundled (argv[0], argv, envp);
+  /* App-data ELF: only the debug opt-in may copy it into anonymous
+     executable memory; release builds must use a bundle stub.  */
+  if (ohos_anon_exec_allowed ())
+    return ohos_load_bundled (argv[0], argv, envp);
+  ohos_msg ("not a signed bundle stub", argv[0], 0);
+  return ENOEXEC;
 }
