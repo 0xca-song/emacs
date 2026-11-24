@@ -34,6 +34,7 @@
 
 (defvar ohos-bundled-elf-selftest--pass 0)
 (defvar ohos-bundled-elf-selftest--fail 0)
+(defvar ohos-bundled-elf-selftest--failed nil)
 
 (defun ohos-bundled-elf-selftest--write (fmt &rest args)
   (write-region (apply #'format fmt args) nil
@@ -53,7 +54,8 @@
          (setq ohos-bundled-elf-selftest--pass
                (1+ ohos-bundled-elf-selftest--pass))
        (setq ohos-bundled-elf-selftest--fail
-             (1+ ohos-bundled-elf-selftest--fail)))
+             (1+ ohos-bundled-elf-selftest--fail))
+       (push ,name ohos-bundled-elf-selftest--failed))
        (ohos-bundled-elf-selftest--write
         "%s %-26s expected=%S actual=%S\n"
         (if ok "PASS" "FAIL") ,name expected actual))))
@@ -86,7 +88,8 @@
   "Run the bundled ELF acceptance test and write its report."
   (interactive)
   (setq ohos-bundled-elf-selftest--pass 0
-        ohos-bundled-elf-selftest--fail 0)
+        ohos-bundled-elf-selftest--fail 0
+        ohos-bundled-elf-selftest--failed nil)
   (delete-file ohos-bundled-elf-selftest-file)
   ;; The report lives in the app sandbox.  Make it readable by hdc so the
   ;; release-mode baseline can be inspected even if the app dies during a
@@ -119,16 +122,90 @@
                       (ohos-bundled-elf-selftest--elf "hello")
                       '("arg one" "中文")))))))
   (ohos-bundled-elf-selftest--check "hello-static" 0
-    (car (ohos-bundled-elf-selftest--call (ohos-bundled-elf-selftest--elf "hello-static") '("static"))))
+    (car (ohos-bundled-elf-selftest--call
+          (ohos-bundled-elf-selftest--elf "hello-static") '("static"))))
   (ohos-bundled-elf-selftest--check "hello-pie" 0
-    (car (ohos-bundled-elf-selftest--call (ohos-bundled-elf-selftest--elf "hello-pie") '("pie"))))
+    (car (ohos-bundled-elf-selftest--call
+          (ohos-bundled-elf-selftest--elf "hello-pie") '("pie"))))
   (ohos-bundled-elf-selftest--check "cpphello" 0
-    (car (ohos-bundled-elf-selftest--call (ohos-bundled-elf-selftest--elf "cpphello") nil)))
+    (car (ohos-bundled-elf-selftest--call
+          (ohos-bundled-elf-selftest--elf "cpphello") nil)))
   (ohos-bundled-elf-selftest--check "cjk-file-name" 0
-    (car (ohos-bundled-elf-selftest--call (ohos-bundled-elf-selftest--elf "hello 中文") '("x"))))
+    (car (ohos-bundled-elf-selftest--call
+          (ohos-bundled-elf-selftest--elf "hello 中文") '("x"))))
   (ohos-bundled-elf-selftest--check "many-args" 0
     (car (ohos-bundled-elf-selftest--call
-          (ohos-bundled-elf-selftest--elf "hello") (append (make-list 60 "arg with space") '("last")))))
+          (ohos-bundled-elf-selftest--elf "hello")
+          (append (make-list 60 "arg with space") '("last")))))
+
+  ;; busybox (third_party): one signed static binary, one stub per applet.
+  (let* ((home (getenv "HOME"))
+         (bbdir (expand-file-name "selftest-bb" home))
+         (abcfile (expand-file-name "selftest-abc" home)))
+    (ignore-errors (delete-directory bbdir t))
+    (make-directory bbdir t)
+    (with-temp-file (expand-file-name "probe.txt" bbdir)
+      (insert "needle 42\nother\n"))
+    (with-temp-file abcfile (insert "abc"))
+    (ohos-bundled-elf-selftest--check "busybox-echo" "bb-ok\n"
+      (cdr (ohos-bundled-elf-selftest--call
+            (ohos-bundled-elf-selftest--elf "busybox") '("echo" "bb-ok"))))
+    (ohos-bundled-elf-selftest--check "busybox-cat-stdin" "line-1\nline-2\n"
+      (with-temp-buffer
+        (insert "line-1\nline-2\n")
+        (let ((rc (call-process-region (point-min) (point-max)
+                                       (ohos-bundled-elf-selftest--elf "busybox")
+                                       t t nil "cat")))
+          (if (eq rc 0) (buffer-string) (format "rc=%S" rc)))))
+    (ohos-bundled-elf-selftest--check "busybox-ls" t
+      (not (null (string-match-p
+                  "probe.txt"
+                  (cdr (ohos-bundled-elf-selftest--call
+                        (ohos-bundled-elf-selftest--elf "ls") (list bbdir)))))))
+    (ohos-bundled-elf-selftest--check "busybox-grep" "needle 42\n"
+      (cdr (ohos-bundled-elf-selftest--call
+            (ohos-bundled-elf-selftest--elf "grep")
+            (list "needle" (expand-file-name "probe.txt" bbdir)))))
+    (ohos-bundled-elf-selftest--check "busybox-awk" "42\n"
+      (cdr (ohos-bundled-elf-selftest--call
+            (ohos-bundled-elf-selftest--elf "awk")
+            (list "NR==1{print $2}" (expand-file-name "probe.txt" bbdir)))))
+    (ohos-bundled-elf-selftest--check "busybox-sed" t
+      (not (null (string-match-p
+                  "aBc"
+                  (cdr (ohos-bundled-elf-selftest--call
+                        (ohos-bundled-elf-selftest--elf "sed")
+                        (list "-n" "s/b/B/p" abcfile)))))))
+    (ohos-bundled-elf-selftest--check "busybox-sha256sum" t
+      (not (null (string-match-p
+                  "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+                  (cdr (ohos-bundled-elf-selftest--call
+                        (ohos-bundled-elf-selftest--elf "sha256sum")
+                        (list abcfile)))))))
+    (ohos-bundled-elf-selftest--check "busybox-ash" t
+      (let ((out (cdr (ohos-bundled-elf-selftest--call
+                       (ohos-bundled-elf-selftest--elf "ash")
+                       (list "-c"
+                             (format "echo ash-ok; ls %s/probe.txt"
+                                     bbdir))))))
+        (and (not (null (string-match-p "ash-ok" out)))
+             (not (null (string-match-p "probe.txt" out))))))
+    (ohos-bundled-elf-selftest--check "busybox-tar" t
+      (let* ((tarfile (expand-file-name "selftest-bb.tar" home))
+             (rc (car (ohos-bundled-elf-selftest--call
+                       (ohos-bundled-elf-selftest--elf "tar")
+                       (list "-cf" tarfile "-C" bbdir "probe.txt"))))
+             (out (cdr (ohos-bundled-elf-selftest--call
+                        (ohos-bundled-elf-selftest--elf "tar")
+                        (list "-tf" tarfile)))))
+        (and (eq rc 0)
+             (not (null (string-match-p "probe.txt" out))))))
+    (ohos-bundled-elf-selftest--check "busybox-find" t
+      (not (null (string-match-p
+                  "probe.txt"
+                  (cdr (ohos-bundled-elf-selftest--call
+                        (ohos-bundled-elf-selftest--elf "find")
+                        (list bbdir "-name" "probe.txt"))))))))
 
   ;; Environment and working directory.
   (ohos-bundled-elf-selftest--check "environment" t
@@ -244,6 +321,9 @@
   (ohos-bundled-elf-selftest--write
    "SUMMARY pass=%d fail=%d\n"
    ohos-bundled-elf-selftest--pass ohos-bundled-elf-selftest--fail)
+  (when ohos-bundled-elf-selftest--failed
+    (ohos-bundled-elf-selftest--write
+     "FAILED: %S\n" (nreverse ohos-bundled-elf-selftest--failed)))
   (message "bundled-elf selftest: %d passed, %d failed"
            ohos-bundled-elf-selftest--pass ohos-bundled-elf-selftest--fail)
   ;; Startup will select *scratch* after this eval; show the report once
@@ -253,7 +333,8 @@
    (lambda ()
      (ignore-errors
        (switch-to-buffer (find-file-noselect ohos-bundled-elf-selftest-file))
-       (goto-char (point-min))))))
+       (goto-char (point-max))
+       (recenter -1)))))
 
 (provide 'ohos-bundled-elf-selftest)
 ;;; ohos-bundled-elf-selftest.el ends here
