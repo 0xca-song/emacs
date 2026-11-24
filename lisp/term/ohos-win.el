@@ -322,5 +322,25 @@ Return the chosen command when it was executed."
 
 
 
+;; Prefer the bundled busybox ash as the default shell.  It is a signed HAP
+;; native lib reached through runtime/libexec/ash; the system /bin/sh only
+;; knows system programs.  Users can still override `shell-file-name' in
+;; their init file.
+(let* ((home (getenv "HOME"))
+       (libexec (and home
+                     (expand-file-name
+                      "libexec/"
+                      (file-name-directory (directory-file-name home)))))
+       (ash (and libexec (expand-file-name "ash" libexec))))
+  (when (and ash (file-executable-p ash))
+    (when (or (not (boundp 'shell-file-name))
+              (member shell-file-name '("/bin/sh" "/system/bin/sh")))
+      (setq shell-file-name ash))
+    ;; ash can only find the busybox applet stubs when libexec is on PATH.
+    ;; Append it after the system directories so system programs win.
+    (let ((path (or (getenv "PATH") "/system/bin:/system/xbin")))
+      (unless (member libexec (split-string path ":" t))
+        (setenv "PATH" (concat path ":" libexec))))))
+
 (provide 'ohos-win)
 ;;; ohos-win.el ends here

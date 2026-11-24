@@ -190,6 +190,35 @@
                                      bbdir))))))
         (and (not (null (string-match-p "ash-ok" out)))
              (not (null (string-match-p "probe.txt" out))))))
+    (ohos-bundled-elf-selftest--check "ash-busybox-applet" "bb-applet-ok\n"
+      (let* ((ash (ohos-bundled-elf-selftest--elf "ash"))
+             (libexec (file-name-directory ash))
+             (process-environment
+              (cons (concat "PATH=" libexec ":" (or (getenv "PATH") ""))
+                    process-environment)))
+        (cdr (ohos-bundled-elf-selftest--call
+              ash '("-c" "busybox echo bb-applet-ok")))))
+    (ohos-bundled-elf-selftest--check "default-shell-ash" t
+      (and (string-match-p "/libexec/ash\\'" shell-file-name)
+           (not (null (string-match-p
+                       "ash-default-ok"
+                       (shell-command-to-string "echo ash-default-ok"))))))
+    (ohos-bundled-elf-selftest--check "ash-pty" t
+      (let* ((buf (generate-new-buffer " *ash-pty*"))
+             (proc (make-process
+                    :name "ash-pty" :buffer buf
+                    :command (list (ohos-bundled-elf-selftest--elf "ash") "-i")
+                    :connection-type 'pty)))
+        (unwind-protect
+            (progn
+              (accept-process-output proc 1)
+              (process-send-string proc "echo ash-pty-ok\n")
+              (accept-process-output proc 2)
+              (with-current-buffer buf
+                (not (null (string-match-p
+                            "ash-pty-ok" (buffer-string))))))
+          (delete-process proc)
+          (kill-buffer buf))))
     (ohos-bundled-elf-selftest--check "busybox-tar" t
       (let* ((tarfile (expand-file-name "selftest-bb.tar" home))
              (rc (car (ohos-bundled-elf-selftest--call
